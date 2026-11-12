@@ -1,0 +1,82 @@
+{
+  "date_utc": "2026-11-12T07:47:20.022917+00:00",
+  "os": "Linux x86_64 cloud container",
+  "native_desktop_qualified": false,
+  "checks": [
+    {
+      "check": "format",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "log": "format.txt"
+    },
+    {
+      "check": "linux-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--workspace",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "log": "linux-clippy.txt"
+    },
+    {
+      "check": "linux-unit-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--lib",
+        "--",
+        "--skip",
+        "active_listener_cannot_be_replaced_but_stale_socket_can",
+        "--skip",
+        "disconnect_never_waits_for_a_full_gui_queue",
+        "--skip",
+        "incoming_large_frames_obey_the_byte_budget",
+        "--skip",
+        "local_round_trip_and_clean_disconnect"
+      ],
+      "exit_code": 0,
+      "log": "linux-unit-tests.txt"
+    },
+    {
+      "check": "linux-process-tests-compile",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--workspace",
+        "--no-run"
+      ],
+      "exit_code": 0,
+      "log": "linux-process-tests-compile.txt"
+    },
+    {
+      "check": "linux-build",
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "-p",
+        "ui4me-host"
+      ],
+      "exit_code": 0,
+      "log": "linux-build.txt"
+    }
+  ],
+  "excluded_runtime_tests": {
+    "count": 4,
+    "reason": "Cloud denies Unix listener creation with EPERM; tests are retained unchanged for local/CI execution."
+  }
+}

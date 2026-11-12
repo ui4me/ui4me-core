@@ -1,0 +1,23 @@
+test_creation_stamp_guards_real_tree_cleanup (test_fault_fixture.ProcessIdentityTests.test_creation_stamp_guards_real_tree_cleanup) ... ok
+test_bad_utf8_and_batch_rejected (test_reference_client.FramingTests.test_bad_utf8_and_batch_rejected) ... ok
+test_clean_eof (test_reference_client.FramingTests.test_clean_eof) ... ok
+test_duplicate_members_rejected (test_reference_client.FramingTests.test_duplicate_members_rejected) ... ok
+test_fragmented_unicode_uses_byte_count (test_reference_client.FramingTests.test_fragmented_unicode_uses_byte_count) ... ok
+test_oversize_rejected_before_reading_body (test_reference_client.FramingTests.test_oversize_rejected_before_reading_body) ... ok
+test_partial_writes (test_reference_client.FramingTests.test_partial_writes) ... ok
+test_truncated_body (test_reference_client.FramingTests.test_truncated_body) ... ok
+test_truncated_header (test_reference_client.FramingTests.test_truncated_header) ... ok
+test_callback_can_await_nested_host_call (test_reference_client.RpcTests.test_callback_can_await_nested_host_call) ... ok
+test_cancel_and_late_response_do_not_break_connection (test_reference_client.RpcTests.test_cancel_and_late_response_do_not_break_connection) ... ok
+test_connection_failure_fails_outstanding_requests (test_reference_client.RpcTests.test_connection_failure_fails_outstanding_requests) ... ok
+test_pending_limit_is_enforced (test_reference_client.RpcTests.test_pending_limit_is_enforced) ... ok
+test_responses_can_arrive_out_of_order (test_reference_client.RpcTests.test_responses_can_arrive_out_of_order) ... ok
+test_rpc_error_remains_distinct_from_disconnect (test_reference_client.RpcTests.test_rpc_error_remains_distinct_from_disconnect) ... ok
+test_unknown_host_method_receives_error (test_reference_client.RpcTests.test_unknown_host_method_receives_error) ... ok
+test_user_dialogs_have_no_implicit_deadline (test_reference_client.RpcTests.test_user_dialogs_have_no_implicit_deadline) ... ok
+test_real_named_pipe_unicode_and_cancellation_of_blocked_read (test_reference_client.WindowsNamedPipeTests.test_real_named_pipe_unicode_and_cancellation_of_blocked_read) ... skipped 'Real named-pipe transport requires Windows'
+
+----------------------------------------------------------------------
+Ran 18 tests in 1.804s
+
+OK (skipped=1)

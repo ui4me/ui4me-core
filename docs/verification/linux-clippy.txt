@@ -1,0 +1,6 @@
+$ cargo clippy --locked --workspace --all-targets -- -D warnings
+
+   Compiling ui4me-host v0.1.0 (/workspace/scratch/3c4bbc64a9f5/ui4me-core/crates/ui4me-host)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.04s
+
+Exit code: 0

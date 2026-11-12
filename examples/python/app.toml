@@ -1,0 +1,18 @@
+[app]
+id = "org.ui4me.HostReference"
+name = "UI4ME Host Reference"
+version = "0.1.0"
+icon = "{app_dir}/../../crates/ui4me-host/assets/ui4me.png"
+
+[backend]
+# Use tools/run_example.py for automatic selection of the active interpreter.
+# Change this to the intended Python executable when launching this file directly.
+program = "python3"
+args = ["{app_dir}/demo.py"]
+cwd = "{app_dir}"
+
+[host]
+startup_timeout_ms = 15000
+shutdown_timeout_ms = 5000
+max_windows = 16
+instance = "single"

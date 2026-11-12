@@ -1,0 +1,13 @@
+/target/
+/.local/
+/verification/
+*.local.json
+/evidence/local/
+/dist/
+__pycache__/
+*.py[cod]
+.venv/
+*.log
+*.secret
+*.credentials.json
+

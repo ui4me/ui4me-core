@@ -1,0 +1,9 @@
+$ cargo test --locked --workspace --no-run
+
+   Compiling ui4me-host v0.1.0 (/workspace/scratch/3c4bbc64a9f5/ui4me-core/crates/ui4me-host)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.44s
+  Executable unittests src/lib.rs (target/debug/deps/ui4me_host-7ab3839b1591f82b)
+  Executable unittests src/main.rs (target/debug/deps/ui4me_host-e6b260323c95a0cc)
+  Executable tests/host_integration.rs (target/debug/deps/host_integration-31f0f7ccb39d5fae)
+
+Exit code: 0
