@@ -130,6 +130,9 @@ impl AppConfig {
         let base_text = base
             .to_str()
             .context("Application directory must be representable as Unicode")?;
+        // Windows canonicalization yields a verbatim \\?\ path, in which
+        // `/` is not a separator: "{app_dir}/icon.png" was an invalid path.
+        let base_text = &without_verbatim_prefix(base_text);
 
         let program = self
             .backend
@@ -272,6 +275,20 @@ fn reserved_env(key: &str) -> bool {
         )
 }
 
+/// `\\?\C:\dir` -> `C:\dir`; `\\?\UNC\server\share` -> `\\server\share`.
+fn without_verbatim_prefix(path: &str) -> String {
+    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = path
+        .strip_prefix(r"\\?\")
+        .filter(|rest| rest.as_bytes().get(1) == Some(&b':'))
+    {
+        rest.to_owned()
+    } else {
+        path.to_owned()
+    }
+}
+
 fn expand(text: &str, base: &str) -> String {
     text.replace("{app_dir}", base)
 }
@@ -287,6 +304,38 @@ fn absolutize(base: &Path, path: &Path) -> PathBuf {
 mod tests {
     use super::*;
 
+    #[test]
+    fn verbatim_windows_prefix_is_removed_for_substitution() {
+        assert_eq!(
+            without_verbatim_prefix(r"\\?\C:\Apps\Demo"),
+            r"C:\Apps\Demo"
+        );
+        assert_eq!(
+            without_verbatim_prefix(r"\\?\UNC\server\share\app"),
+            r"\\server\share\app"
+        );
+        assert_eq!(without_verbatim_prefix("/home/user/app"), "/home/user/app");
+        assert_eq!(
+            without_verbatim_prefix(r"\\?\GLOBALROOT\x"),
+            r"\\?\GLOBALROOT\x"
+        );
+    }
+
+    #[test]
+    fn app_dir_paths_with_forward_slashes_resolve_on_every_platform() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("icon.png"), b"png").unwrap();
+        let config = AppConfig::from_toml(
+            "[app]\nid='org.ui4me.Probe'\nname='Probe'\nicon='{app_dir}/icon.png'\n[backend]\nprogram='python3'\nargs=['{app_dir}/backend.py']\n",
+            directory.path(),
+        )
+        .unwrap();
+        assert!(config.app.icon.unwrap().is_file());
+        let argument = &config.backend.args[0];
+        assert!(!argument.starts_with(r"\\?\"), "{argument}");
+        assert!(argument.ends_with("backend.py"));
+    }
+
     fn manifest() -> &'static str {
         "[app]\nid='org.ui4me.Probe'\nname='Host probe'\n[backend]\nprogram='python3'\nargs=['{app_dir}/backend.py', 'literal $HOME $(ignored)']\n"
     }
@@ -297,7 +346,9 @@ mod tests {
         let config = AppConfig::from_toml(manifest(), &base).unwrap();
         assert_eq!(config.backend.program, PathBuf::from("python3"));
         assert_eq!(config.backend.cwd, base);
-        assert!(config.backend.args[0].starts_with(base.to_str().unwrap()));
+        assert!(
+            config.backend.args[0].starts_with(&without_verbatim_prefix(base.to_str().unwrap()))
+        );
         assert_eq!(config.backend.args[1], "literal $HOME $(ignored)");
         assert_eq!(config.host.max_windows, 16);
         assert_eq!(config.host.instance, InstancePolicy::Single);

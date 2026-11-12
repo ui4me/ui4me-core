@@ -56,8 +56,11 @@ python3 tools/create_launcher.py uninstall --app-id org.example.MyApplication
 Use `--host /absolute/path/ui4me-host` if the installed binary is not on PATH.
 The manifest's `app.id` becomes the Linux desktop-file ID and the Windows shortcut
 AppUserModelID, matching the identity assigned to the native windows. Linux gets
-a per-user `.desktop` entry; Windows gets a per-user Start Menu shortcut whose
-AppUserModelID is written and read back through the Windows property store.
+a per-user `.desktop` entry; Windows gets a per-user Start Menu shortcut named
+after `app.name` (for example `UI4ME Host Reference.lnk`, because the Start Menu
+shows and searches shortcut file names) whose AppUserModelID is written and read
+back through the Windows property store. The ownership record remembers the
+shortcut path, so `uninstall --app-id` and a renamed application are handled.
 The command records ownership and refuses to overwrite an unrelated or modified
 launcher. Repeating installation updates its own unchanged entry; uninstall
 removes that entry and its ownership record, leaving application files intact.
@@ -98,7 +101,8 @@ python3 tools/windows_source_check.py
 ```
 
 It creates a temporary manifest using this repository's sources, dependency
-features and lockfile, and omits the Windows resource build script. This verifies
+features, lockfile and vendored `[patch.crates-io]` crates, and omits the Windows
+resource build script. This verifies
 Rust source/type/lint compatibility only. Use the real workspace on Windows to
 verify resources, linking and native execution.
 
@@ -167,6 +171,18 @@ stdout and stderr while requesting host services, then exits normally.
 `--unread-host-output` deliberately fills the host's downstream output pipe and
 does not drain it until the host exits. The same control calls and orderly exit
 must still complete; a logging sink must not block the GUI or shutdown path.
+
+## Resource measurements
+
+```sh
+python3 tools/measure_resources.py --host ~/.cargo/bin/ui4me-host --output measurements.json
+```
+
+Run it in the target desktop session. It launches the host with itself as the
+backend and reports startup-to-ready and first frame separately, idle CPU
+(Linux: per-thread schedstat runtime; Windows: process times), host+backend
+memory (Linux PSS/RSS/shared/private; Windows private bytes and working set)
+and memory across repeated window create/close cycles.
 
 ## Native acceptance evidence
 
@@ -243,7 +259,11 @@ powershell.exe -NoProfile -File tools/windows/start_interactive.ps1 -UserName Ui
 ```
 
 The job script should run native checks, save output and return a nonzero exit code
-on failure. This helper is not an RDP client and does not manufacture a desktop
+on failure. Add `-Hidden` for observation jobs (UI Automation queries,
+screenshots): the script then runs under `conhost.exe --headless` and does not
+take the foreground or keyboard focus from the application being observed.
+Completion is detected from the new task's result code rather than
+`LastRunTime`, which was observed stale on Windows Server 2022. This helper is not an RDP client and does not manufacture a desktop
 session. The GUI process, automation process and screenshot process must share
 the intended session ID.
 

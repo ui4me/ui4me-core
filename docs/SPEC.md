@@ -222,6 +222,14 @@ small CPU presentation target. ashpd is used for Wayland parent export; the
 file chooser request/cancellation is implemented against the portal protocol.
 Windows services call the public Windows APIs through the windows crates.
 
+Desktop qualification found three upstream defects in pinned dependencies.
+The exact releases are vendored under third_party/ with minimal patches and
+selected through `[patch.crates-io]`: winit-wayland (canonical UTF-8 text MIME
+type for GTK interoperability), softbuffer (no blocking wait for a Wayland
+buffer release on the GUI thread) and accesskit_atspi_common (unregister AT-SPI
+objects of destroyed windows). third_party/README.md records the evidence and
+when each patch can be dropped.
+
 The host does not embed the Tauri application runtime: that runtime's principal
 webview ownership assumptions do not match this renderer-independent host.
 Reusing focused upstream libraries keeps the ownership model explicit.

@@ -10,7 +10,8 @@ import threading
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "examples" / "python"))
+EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "python"
+sys.path.insert(0, str(EXAMPLES))
 from client import (DisconnectedError, MAX_FRAME_BYTES, MAX_PENDING, ProtocolError,
                     RpcClient, RpcError, SocketStream, NamedPipeStream, encode_frame, read_frame, write_all)
 
@@ -157,6 +158,18 @@ class RpcTests(unittest.TestCase):
             self.client.call("dialog.save_file", timeout=0.25)
             self.client.call("dialog.choose_folder", timeout=None)
         self.assertEqual(deadlines, [None, 15.0, 0.25, None])
+
+
+class Utf8StdioTests(unittest.TestCase):
+    def test_backend_output_is_utf8_even_with_an_ansi_pipe_encoding(self):
+        import subprocess
+        code = ("import sys; sys.path.insert(0, sys.argv[1]); import client; "
+                "client.use_utf8_stdio(); print('Příliš → 😀')")
+        env = dict(os.environ, PYTHONIOENCODING="cp1252")
+        result = subprocess.run([sys.executable, "-c", code, str(EXAMPLES)], env=env,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.decode("utf-8").strip(), "Příliš → 😀")
 
 
 @unittest.skipUnless(os.name == "nt", "Real named-pipe transport requires Windows")

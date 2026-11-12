@@ -14,6 +14,7 @@ import os
 import queue
 import socket
 import struct
+import sys
 import threading
 import time
 from typing import Any, Callable
@@ -270,6 +271,19 @@ def write_all(stream, frame: bytes) -> None:
         remaining = remaining[size:]
 
 
+def use_utf8_stdio() -> None:
+    """Write UTF-8 to stdout/stderr when they are the host's log pipes.
+
+    On Windows, Python encodes a piped stdout with the ANSI code page, so
+    printing text such as "→" or "😀" raised UnicodeEncodeError. The host
+    decodes backend output as UTF-8.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
 class RpcClient:
     def __init__(self, stream, *, workers: int = 4):
         self._stream = stream
@@ -299,6 +313,7 @@ class RpcClient:
 
     @classmethod
     def from_environment(cls):
+        use_utf8_stdio()
         client = cls(connect_stream(os.environ["UI4ME_ENDPOINT"]))
         try:
             client.hello = client.call("host.hello", {

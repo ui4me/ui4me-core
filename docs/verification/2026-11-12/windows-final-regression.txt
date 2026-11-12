@@ -1,0 +1,15 @@
+source tree: 8c5e1de44585cfe33276161ded81d2b6a2188ab1
+automated subset rc=0: PASS
+fault veto-close               rc=0 status=PASS exit=0 descendants=
+fault veto-quit                rc=0 status=PASS exit=0 descendants=
+fault freeze-close             rc=0 status=PASS exit=0 descendants=
+fault freeze-quit              rc=0 status=PASS exit=0 descendants=
+fault log-flood                rc=0 status=PASS exit=0 descendants=
+fault log-flood-unread         rc=0 status=PASS exit=0 descendants=
+fault managed-tree             rc=0 status=PASS exit=0 descendants=worker=alive:False,leaf=alive:False
+fault managed-tree-kill-host   rc=0 status=PASS exit=125 descendants=worker=alive:False,leaf=alive:False
+Start Menu launch (installed EAB6DCA29A2EF93A): windows=[('UI4ME — Unicode ✓', '60,83,540,360'), ('UI4ME host — Python reference', '34,57,900,560')]
+PowerShell -> UI4ME paste: PASS
+dialog: count=1 dialog='Open files' owner='UI4ME host — Python reference' owner_enabled=False
+ -> after F7 from second window: count=0
+quit: remaining UI4ME windows=0

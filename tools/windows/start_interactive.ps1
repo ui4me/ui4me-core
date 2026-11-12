@@ -3,7 +3,10 @@ param(
     [Parameter(Mandatory=$true)][string]$UserName,
     [Parameter(Mandatory=$true)][string]$ScriptPath,
     [int]$TimeoutSeconds = 180,
-    [switch]$KeepTask
+    [switch]$KeepTask,
+    # Run without a console window, so observation jobs do not take the
+    # foreground (and keyboard focus) from the application being observed.
+    [switch]$Hidden
 )
 # Invoke from administrative SSH after the development user has logged in by RDP.
 # The task uses that user's interactive token; an SSH logon is not a GUI session.
@@ -13,7 +16,13 @@ if ($resolved.Contains('"')) { throw 'Invalid script path' }
 $identity = if ($UserName.Contains('\') -or $UserName.Contains('@')) { $UserName } else { "$env:COMPUTERNAME\$UserName" }
 $taskName = 'UI4ME-Interactive-' + [guid]::NewGuid().ToString('N')
 $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -STA -File "' + $resolved + '"'
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments -WorkingDirectory (Split-Path -Parent $resolved)
+$executable = 'powershell.exe'
+if ($Hidden) {
+    # A headless console host creates no window that could take the foreground.
+    $arguments = '--headless powershell.exe ' + $arguments
+    $executable = 'conhost.exe'
+}
+$action = New-ScheduledTaskAction -Execute $executable -Argument $arguments -WorkingDirectory (Split-Path -Parent $resolved)
 $principal = New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds $TimeoutSeconds) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 try {

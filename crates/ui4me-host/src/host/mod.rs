@@ -108,6 +108,11 @@ pub struct Host {
     action_tx: mpsc::SyncSender<ActionEvent>,
     action_rx: mpsc::Receiver<ActionEvent>,
     transfers: HashMap<AsyncRequestSerial, PendingTransfer>,
+    /// Wayland selection id observed just before this host's last clipboard
+    /// write, and when it was written (see read_clipboard_now).
+    clipboard_written: Option<(Option<winit::data_transfer::DataTransferId>, Instant)>,
+    /// Clipboard reads waiting for the compositor to announce our selection.
+    deferred_clipboard_reads: Vec<TransferTarget>,
     exit_code: Arc<AtomicI32>,
     /// Set when a supervising launcher process has exited.
     launcher_gone: Option<Arc<AtomicBool>>,
@@ -322,6 +327,8 @@ impl Host {
             action_tx,
             action_rx,
             transfers: HashMap::new(),
+            clipboard_written: None,
+            deferred_clipboard_reads: Vec::new(),
             exit_code,
             launcher_gone,
             presentation: None,
@@ -475,6 +482,11 @@ impl Host {
             if !matches!(self.lifecycle.phase(), Phase::Quitting | Phase::Stopped) {
                 self.exit_code.store(1, Ordering::Relaxed);
                 self.begin_shutdown();
+            }
+        }
+        if let Some(event_loop) = event_loop {
+            for target in std::mem::take(&mut self.deferred_clipboard_reads) {
+                self.read_clipboard_now(event_loop, target);
             }
         }
         if let Some(backend) = &self.backend {
@@ -921,6 +933,12 @@ impl Host {
             | TransferTarget::DropText(parent) => parent != id,
             TransferTarget::Rpc(_) => true,
         });
+        self.deferred_clipboard_reads.retain(|target| match target {
+            TransferTarget::Paste(parent)
+            | TransferTarget::Drop(parent)
+            | TransferTarget::DropText(parent) => parent != id,
+            TransferTarget::Rpc(_) => true,
+        });
         if self
             .jobs
             .values()
@@ -1059,6 +1077,8 @@ mod tests {
             action_tx,
             action_rx,
             transfers: HashMap::new(),
+            clipboard_written: None,
+            deferred_clipboard_reads: Vec::new(),
             exit_code: Arc::new(AtomicI32::new(0)),
             launcher_gone: None,
             presentation: None,

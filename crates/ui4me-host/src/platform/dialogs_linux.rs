@@ -21,8 +21,16 @@ impl Cancellation {
     }
 }
 
+/// Wayland handles can be used from the dialog worker; nothing to capture.
+pub(super) struct CapturedParent;
+
+pub(super) fn capture_parent(_parent: &Arc<dyn Window>) -> anyhow::Result<CapturedParent> {
+    Ok(CapturedParent)
+}
+
 pub(super) fn run(
     parent: &Arc<dyn Window>,
+    _captured: CapturedParent,
     options: &DialogOptions,
     cancellation: &Arc<Cancellation>,
 ) -> DialogResult {

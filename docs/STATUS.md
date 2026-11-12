@@ -1,130 +1,210 @@
 # Implementation and verification status
 
-Prepared on **2026-11-12**.
+Qualified on **2026-11-12** on the two v0.1 target environments below.
 
-**Delivery state:** implemented source package, buildable/installable on the
-preparation Linux environment, with native desktop qualification still pending.
-This is not a claim that KDE or Windows RDP behavior has already passed.
+**Delivery state:** all automated gates and all fifteen mandatory native
+acceptance scenarios (N01–N15) pass on both targets with the final integration
+tree, installed for a normal user. The host is ready to use in these tested
+v0.1 environments. Physical Windows hardware, other Linux desktops, X11 and
+macOS were not tested (see limits).
 
-The repository contains one Cargo workspace member, ui4me-host. Its shared
-controller, Linux and Windows adapters, private protocol, supervision,
-cancellable native dialogs, input/accessibility probe, Python client, examples,
-fault fixtures, install/launcher tools and local finishing prompt are supplied
-as working source implementations. There are no intentional native-platform
-stubs or deferred method bodies for the declared v0.1 services.
+The supplied preparation report (cloud container, no desktop) is superseded;
+its files remain under `docs/verification/*.txt|json|png` for history.
 
-## Checks completed here
+## Target environments
 
-| Check | Result | Evidence |
+| | Linux | Windows |
 | --- | --- | --- |
-| Rust formatting | PASS | verification/format.txt |
-| Linux workspace/all-target Clippy, warnings denied | PASS | verification/linux-clippy.txt |
-| Runnable Rust library regression tests | **44 passed** | verification/linux-unit-tests.txt |
-| Four real Unix listener tests | BLOCKED by environment; explicitly filtered from the passing run | verification/cloud-ipc-environment.json |
-| Seven real host/backend process scenarios | Compiled; execution blocked by local endpoint restrictions | verification/linux-process-tests-compile.txt |
-| Linux host executable build | PASS | verification/linux-build.txt |
-| Source installation into an isolated prefix, with standalone Python example | PASS, debug profile | verification/installed-consumer.txt |
-| Installed executable diagnostic command | PASS | verification/doctor.txt |
-| Windows Rust source/type/lint check, warnings denied | PASS, with exclusions below | verification/windows-source-check.txt |
-| Python client/tool regressions | **17 passed, one Windows-only test skipped** | verification/python-tests.txt |
-| CPU probe rendering and visual inspection | PASS; no native window involved | verification/probe-render.png and probe-render.txt |
-| Python source compilation, Bash syntax, five PowerShell parser checks | PASS | tools/README.md |
-| Windows shortcut helper C# compilation | PASS; COM behavior not executed | tools/README.md |
-| Linux launcher validation, actual GIO launch, update and ownership-safe uninstall | PASS | tools/README.md |
+| Machine | Linux workstation, x86_64, 16 CPUs | VM `<windows-vm>` (Proxmox), x86_64, 12 vCPUs, 20 GB |
+| OS | Debian GNU/Linux 13 (trixie), kernel 6.12.116 | Windows Server 2022 Standard Evaluation 10.0.20348 (Desktop Experience) |
+| Desktop | KDE Plasma 6.3.6, KWin 6.3.6 native Wayland, HDMI-A-1 2048×1080@60 scale 1 | RDP session 2 of the dedicated normal user `ui4me_test` (member of Users and Remote Desktop Users only); xfreerdp3 3.15 from the Linux workstation, 1600×1000, desktop scale 100 % (150 % for N08), RDP clipboard redirection disabled |
+| Portals / IME | xdg-desktop-portal 1.20.3, xdg-desktop-portal-kde 6.3.5, fcitx5 5.1.12 pinyin (temporary) | Microsoft Pinyin (temporary for the test user) |
+| Toolchain | rustc/cargo 1.99.1 (pinned), Python 3.13.5 | rustc/cargo 1.99.1 (per-user rustup), MSVC Build Tools 17.14.44, Windows SDK 10.0.26100, Python 3.13.17 (all-users install) |
+| Workspace | this checkout | `F:\ui4me\src` (synced byte-exact from this tree; tree id recorded per run) |
 
-The Rust library tests cover framing and partial reads, escaped-message bounds,
-configuration validation, application lifecycle, close/quit transactions,
-duplicate-ID failure, startup cancellation, deferred dialog-parent handling,
-unreachable error-window fallback, Unicode editing/composition, accessibility
-selection, icon decoding, log backpressure, process cleanup/reaping, instance
-identity and namespace validation.
+Native GUI work on Windows ran inside the user's interactive RDP session
+through `tools/windows/start_interactive.ps1` (verified session 2, visible
+window station); input was real RDP keyboard/mouse input, observation used UI
+Automation and screenshots. The same username over SSH was used only for
+builds and headless tests.
 
-The seven binary scenarios are retained in the repository. They cover atomic
-quit veto and nested RPC, authentication/malformed requests, disconnection,
-backend crash, oversized frames, startup timeout and close before readiness.
-Their managed backend is a Rust test subprocess, so they do not require Python.
-The ignored fixture test is intentionally launched as that subprocess by the
-integration tests; it is not an omitted acceptance scenario.
+## Automated gates (final tree)
 
-### Why some tests could not execute
+| Check | Linux | Windows (as `ui4me_test`) |
+| --- | --- | --- |
+| `python3 tools/verify.py` (fmt, check, test, python, headless, faults) | PASS | PASS |
+| Rust library tests | 53 passed | 45 passed |
+| Real process/IPC integration tests (Unix socket / named pipe) | 8 passed (+1 fixture) | 8 passed (+1 fixture) |
+| Python tests (21) | 20 passed, 1 Windows-only skipped | 20 passed, 1 Linux-only skipped |
+| Headless reference application | PASS | PASS |
+| Headless fault fixtures (incl. Windows forced host kill) | 7 PASS | 8 PASS |
+| `cargo clippy --workspace --all-targets -- -D warnings` | PASS | PASS |
+| `python3 tools/windows_source_check.py` (cross-target lint) | PASS | — |
+| Vendored crate unit tests (accesskit_atspi_common, 8) | PASS | — |
 
-The preparation environment is a Linux cloud container that returns EPERM
-when creating pathname Unix socket endpoints. A private runtime directory does
-not remove that restriction. Socket-pair, pure controller and ordinary process
-tests can run; real listener tests and the actual host/backend launch cannot.
-An attempted native Wayland test setup was stopped after confirming this
-restriction. No fallback transport was substituted to manufacture a pass.
+Reports: `verification/final-linux/` (local), `verification/windows-vm/win-final/`
+(copied from the VM), summarized in `docs/verification/2026-11-12/`.
 
-An initial unrestricted library test run produced four failures at socket
-creation for this reason. The passing 44-test report explicitly names the four
-filtered listener tests. Default local/CI verification still runs those tests.
+## Native acceptance (both targets: 15/15 PASS)
 
-This environment also has no actual KDE Wayland desktop or Windows RDP session.
-No Windows VM or Proxmox recovery action was performed here.
+Ledgers: `docs/verification/2026-11-12/linux-acceptance.json` and
+`windows-acceptance.json` (written by `tools/native_acceptance.py` inside the
+interactive sessions, with evidence hashes). Per-scenario commands and
+observations: `*-evidence-summary.json`. Raw logs and screenshots stay in the
+git-ignored `verification/` tree.
 
-### What the Windows source check means
+| | Requirement | KDE Wayland | Windows RDP |
+| --- | --- | --- | --- |
+| N01 | Launch, identity, icon, grouping | Kickoff launch; `app_id`/desktop file `org.ui4me.HostReference`; one grouped task entry with icon | Start Menu launch; shortcut and process AppUserModelID `org.ui4me.HostReference`; one grouped taskbar button |
+| N02 | Second launch → one backend | while running and 3× simultaneous cold launches | same |
+| N03 | Window ownership/ops/close | resize, (un)maximize, minimize, fullscreen, retitle, close veto/allow; placement and un-minimize rejected | same plus positioning and un-minimize; real `WM_CLOSE` |
+| N04 | Clipboard with other apps | wl-clipboard, Klipper (Qt), GTK 3 both ways, Unicode; 2 MiB rejected (1 MiB bound) | PowerShell and Notepad both ways, Unicode; 2 MiB rejected |
+| N05 | Dialogs, cancel, races | portal open/save/folder, Esc, F7, parent close, quit | IFileDialog owned/modal, same matrix |
+| N06 | Real IME | fcitx5 pinyin: inline preedit, candidates at caret, commit, edit, cancel, selection | Microsoft Pinyin via RDP scancodes, same |
+| N07 | Accessibility | AT-SPI tree, Tab focus, AT-SPI focus/click/caret | UIA tree, Tab/Shift+Tab, SetFocus, Invoke, ValuePattern |
+| N08 | Scale change | 1 → 1.5 → 1 with re-render | RDP reconnect at 150 % |
+| N09 | Freeze/crash, local responsiveness | crash failure UI, typing, accessible Quit; held decision, typing, Ctrl+Shift+Q | same |
+| N10 | Child/grandchild cleanup | normal and forced host kill (systemd user service) | normal and forced host kill (Job Object) |
+| N11 | External app survives | Kate via portal OpenURI | Notepad via ShellExecute |
+| N12 | Installed normal-user launch | `~/.cargo/bin`, app in `~/.local/share/ui4me-reference`, desktop entry | `%USERPROFILE%\.cargo\bin`, app in `%LOCALAPPDATA%\ui4me-reference`, Start Menu shortcut |
+| N13 | Drag-and-drop | Dolphin file, KWrite text | Explorer file, WordPad text |
+| N14 | Session isolation | separate KWin realm has its own instance | RDP disconnect/reconnect continuity; SSH-logon launch does not forward into session 2 |
+| N15 | Performance | see below | see below |
 
-The checked sources are the actual repository library, executable, unit and
-integration tests, and diagnostic-render example. They were checked for
-x86_64-pc-windows-msvc with the same dependencies/features and lockfile.
+After the last code change both targets re-ran the automated native subset,
+all native fault fixtures and targeted re-checks (dialogs, clipboard,
+instance forwarding, installed launch): `linux-final-regression.txt`,
+`windows-final-regression.txt`.
 
-The check uses a temporary manifest that omits the build script because this
-environment lacks the Windows SDK/resource compiler. **It does not verify
-Windows resource compilation, executable linking, named-pipe security at
-runtime, Job Object cleanup at runtime, native dialogs, UI Automation or RDP.**
-The delivered repository retains the real build script, manifest and icon.
+## Measurements (final installed release builds, `tools/measure_resources.py`)
 
-The reproducible source-only command from a non-Windows host is:
+Files: `docs/verification/2026-11-12/linux-measurements.json` and
+`windows-measurements.json`, re-measured after the last code change (the N15
+ledger entries reference the earlier, equivalent runs).
 
-    rustup target add --toolchain 1.99.1 x86_64-pc-windows-msvc
-    python3 tools/windows_source_check.py
+| | KDE Wayland | Windows RDP |
+| --- | --- | --- |
+| Startup → backend `app.ready` (5 cold runs) | 114–129 ms (includes systemd-run bootstrap) | 98–106 ms |
+| First frame after host process start | 57–61 ms | 87–95 ms |
+| Idle CPU, host / backend (22 s) | 0.23 % / 0.28 % of one core (schedstat runtime) | below accounting resolution (<0.07 %) |
+| Memory after idle, host + backend | PSS 30.1 MB (summed RSS 40.4 MB double-counts 15.6 MB shared) | private 28.6 MB (working sets 47.3 MB) |
+| 400 window create/close cycles, host private | 15.6 → 16.6 MB, ~3.3 KiB/cycle (see limits) | flat (14.76 → 14.83 MB) |
+| Executable | 12.7 MB | 4.95 MB |
 
-The Windows local agent must use the actual workspace build and native tests,
-not substitute this source check for Windows qualification.
+Run-to-run variation on the shared desktop was about ±20 ms for startup.
 
-## Material limits and decisions
+## Defects found and fixed during qualification
 
-1. **Native qualification is required.** All mandatory N01–N15 observations
-   still need passing evidence on KDE Wayland and Windows Server 2022/RDP.
-   The acceptance tool keeps unexecuted work blocked.
-2. **winit is an exactly pinned prerelease.** Version 0.31.0-beta.4 supplies
-   the data-transfer and expanded IME APIs used here. This is a dependency
-   stabilization risk, not a reason to silently change the public contract.
-3. **Native transfer allocation is not a hard memory sandbox.** The host caps
-   accepted clipboard text and transfer payloads at 1 MiB, but the pinned
-   upstream Wayland backend may read/allocate native source data before the
-   host receives it. The host's IPC frame/queue limits do not bound that
-   upstream allocation. Test realistic large transfers and record this limit.
-4. **The probe is not a text/rendering engine.** It is a single-line editable
-   diagnostic surface with Unicode-safe storage and IME hooks. Noto Sans and
-   fontdue do not provide full script shaping or font fallback. These belong
-   to the future renderer.
-5. **Headless and unsupervised modes are explicit diagnostics.** Headless
-   windows are logical records. Linux process-group fallback cannot qualify
-   cleanup after abrupt host death; normal release tests must use the
-   systemd user-service path.
-6. **Focus and placement obey the OS.** Wayland top-level placement is
-   unsupported, and focus requests cannot override compositor policy.
-7. **Performance remains unmeasured on the target desktops.** No startup,
-   memory, idle-CPU or production binary-size result is fabricated here.
-   The isolated install test used the debug profile. Normal installation
-   builds the configured release profile locally.
-8. **Protocol v1 uses Unicode paths.** Non-Unicode native file selections
-   return unsupported; unusable file-drop paths are omitted. There is no
-   silent lossy filename conversion.
+Host (`crates/ui4me-host`)
+1. Killing or interrupting `ui4me-host run` on Linux (Ctrl+C, closed terminal,
+   SIGKILL) left the systemd-supervised application running orphaned. The
+   supervised host now watches its launcher (pidfd + start time) and shuts
+   down boundedly when it disappears, without approving pending decisions.
+2. Windows pipe `shutdown()` was not observed by the peer; the handle is now
+   closed once no overlapped operation uses it.
+3. A launch arriving while the primary instance was starting failed (exit 1)
+   and lost the activation; activations are accepted only after `app.ready`
+   and the secondary retries within the startup deadline.
+4. `window.set minimized:false` reported success on Wayland although nothing
+   can un-minimize there; it is now an explicit unsupported error.
+5. Windows native dialogs all failed ("handle not available") because winit
+   exposes Win32 handles only on the GUI thread; the owner HWND is now
+   captured there.
+6. Windows dialog cancellation (F7/`request.cancel`) left the dialog open; the
+   worker now also presses the dialog's own Cancel.
+7. `{app_dir}/…` manifest values were invalid on Windows (verbatim `\\?\`
+   prefix), so the installed reference app could not start.
+8. A Start Menu launch showed a console window of host logs and an extra
+   taskbar button; a console created solely for the host is now released.
+9. A clipboard read right after a write could return the previous Wayland
+   selection; such reads now wait (≤1 s) for the new selection.
+10. Idle polling reduced (500 ms when no deadline is pending; `poll()`-based
+    Linux accept instead of 20 ms sleeps): idle host CPU about 0.6 % → 0.23 %
+    (schedstat). `doctor` now reports the containment `run` uses; first
+    frames are logged.
 
-## Local completion
+Vendored dependency patches (exact pins, see `third_party/README.md`)
+11. winit-wayland: GTK applications could not paste UI4ME text and GTK text
+    arrived ASCII-escaped (`\u2192`); the canonical
+    `text/plain;charset=utf-8` type is now offered and accepted.
+12. softbuffer: redrawing a covered or minimized window blocked the GUI thread
+    forever (input, IPC and Ctrl+Shift+Q dead); buffer acquisition no longer
+    blocks.
+13. accesskit_atspi_common: AT-SPI objects of closed windows stayed
+    registered (12.7 KiB per window); now about 3.3–3.8 KiB.
 
-Execute docs/LOCAL_FINISH_PROMPT.md. The remaining task is to run the supplied
-implementation and scenarios in the real environments, correct any discovered
-defects, install it for normal-user use and make the local integration commit.
-No new feature architecture is assigned to the finishing agent.
+Tooling and reference client
+14. Python client named pipes were synchronous, so a pending read blocked the
+    `host.hello` write on Windows (every Python backend failed); overlapped
+    I/O now.
+15. Python backends crashed printing Unicode on Windows (ANSI pipe encoding);
+    the client writes UTF-8 to the host's log pipes.
+16. The native clipboard self-test now supplies the real input that Wayland
+    requires for clipboard ownership instead of racing it.
+17. `start_interactive.ps1` relied on `LastRunTime`, which was stale on this
+    server, and timed out on successful jobs; it also gained `-Hidden`
+    (headless console) so observation jobs do not steal focus.
+18. Windows shortcuts are named after the application (`UI4ME Host
+    Reference.lnk`) instead of the reverse-DNS id, so the Start Menu shows and
+    finds them; an older owned shortcut is retired safely.
+19. `windows_source_check.py` carries the workspace patches; new
+    `tools/measure_resources.py`.
 
-The prompt includes the existing authorization for administrator@<windows-vm>,
-the dedicated account and F: workspace, native work inside its actual RDP
-session, and verified recovery of only the windows-vm guest through root@<proxmox-host>.
+Regression tests were added for 1, 3, 4, 7, 13, 15 and 18 and the existing
+integration suite covers 2 and 14 on Windows. Native-only fixes (5, 6, 8, 9,
+11, 12) are covered by the recorded native scenarios and the scratch
+reproductions described in the evidence.
 
-After both targets pass, replace this preparation status with the actual target
-versions, commands, measured performance, native evidence and commit identity.
-Do not report release readiness while a mandatory native check is still
-unexecuted or failing.
+## Install and run
+
+    python3 tools/install.py --example-dir ~/.local/share/ui4me-reference
+    python3 tools/create_launcher.py install --app ~/.local/share/ui4me-reference/app.toml
+    ui4me-host run --app ~/.local/share/ui4me-reference/app.toml
+
+On Windows (as the normal user, Python 3.11+ on PATH):
+
+    python tools\install.py --example-dir %LOCALAPPDATA%\ui4me-reference
+    python tools\create_launcher.py install --app %LOCALAPPDATA%\ui4me-reference\app.toml
+    ui4me-host run --app %LOCALAPPDATA%\ui4me-reference\app.toml
+
+`--example-dir` refuses non-empty directories; to refresh an existing copy,
+copy `examples/python/client.py` and `demo.py` into it.
+
+## Remaining limits
+
+1. **Residual per-window memory on Linux:** ~3.3–3.8 KiB per closed window remains
+   in zbus 5.19, which never prunes the empty `/org/a11y/atspi/accessible/<n>`
+   object-path node and offers no API to do so.
+2. **KDE folder dialog parent:** the host sends `parent_window` and
+   `modal=true`, but xdg-desktop-portal-kde 6.3.5 shows its directory chooser
+   unparented. Open and save dialogs are parented.
+3. **`desktop.open_external` has no window** in protocol v1, so KDE's
+   application chooser is unparented.
+4. **AT-SPI application name** is the executable name (`ui4me-host`);
+   accesskit_unix has no setter. Window titles carry the app name. Screen
+   reader speech (Orca/Narrator) was not evaluated.
+5. **Wayland clipboard writes need an input serial:** a backend that writes
+   before any key/pointer input reaches its window gets an explicit error.
+6. **Probe text rendering** has no font fallback: emoji/CJK render as boxes in
+   the diagnostic surface although the text is stored and transferred intact.
+7. **Placement/focus obey the compositor;** Wayland placement and
+   un-minimize are rejected explicitly.
+8. **winit 0.31.0-beta.4** remains an exactly pinned prerelease, now with a
+   patched Wayland backend; drop the patches when upstream releases fix them.
+9. **Native transfer allocation** is still not a hard memory sandbox (a 2 MiB
+   transfer is rejected after it is read; RSS grew ~130 KiB).
+10. Windows Search on this Server Evaluation image returned no results, so the
+    Start Menu app list was used; physical Windows hardware, high-DPI
+    physical monitors, multi-monitor setups, X11 and macOS are untested.
+11. Linux per-instance `.lock` files persist in `$XDG_RUNTIME_DIR/ui4me-host`
+    (tmpfs, cleared at logout).
+
+## Lab notes for future runs
+
+- Per-user MSI installs are blocked by policy on the VM; Python 3.13.17 was
+  installed for all users by the administrator.
+- No Proxmox recovery action was needed; the VM stayed responsive.
+- Desktop settings changed for tests were restored: KWin input method,
+  fcitx5 profile, display scale, the user's clipboard, the test user's
+  language list. The user's broken AT-SPI bus socket (unlinked before this
+  session) was repaired by restarting `at-spi-dbus-bus.service`.

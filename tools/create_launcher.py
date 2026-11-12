@@ -80,9 +80,20 @@ def run_windows_helper(payload):
     return json.loads(result.stdout.strip().lstrip("\ufeff"))
 
 
-def launcher_path(app_id):
+def windows_shortcut_name(name):
+    """The Start Menu shows and searches shortcuts by file name: use the
+    application's display name, made safe as a Windows file name."""
+    cleaned = "".join("_" if c in '<>:"/\\|?*' or ord(c) < 32 else c for c in name).strip().rstrip(".")
+    if not cleaned or cleaned.split(".")[0].upper() in {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(10)),
+                                                         *(f"LPT{i}" for i in range(10))}:
+        cleaned = "_" + cleaned
+    return cleaned[:120] + ".lnk"
+
+
+def launcher_path(app_id, name=None):
     if os.name == "nt":
-        return Path(run_windows_helper({"action": "location", "app_id": app_id})["path"])
+        located = Path(run_windows_helper({"action": "location", "app_id": app_id})["path"])
+        return located.with_name(windows_shortcut_name(name)) if name else located
     return xdg_path("XDG_DATA_HOME", str(Path.home() / ".local/share")) / "applications" / (app_id + ".desktop")
 
 
@@ -143,10 +154,22 @@ def main():
                     icon = None
         else:
             app_id = validate_id(args.app_id)
-        destination = launcher_path(app_id)
         record_path = state_directory() / (app_id + ".json")
+        previous = None
+        if record_path.is_file():
+            previous = Path(json.loads(record_path.read_text(encoding="utf-8")).get("launcher", ""))
+        if args.action == "uninstall":
+            destination = previous or launcher_path(app_id)
+        else:
+            destination = launcher_path(app_id, name if os.name == "nt" else None)
         if destination.exists() or args.action == "uninstall":
             load_ownership(record_path, destination, app_id)
+        retired = None
+        if args.action == "install" and previous and previous.resolve() != destination.resolve():
+            # The display name changed: replace this tool's own previous
+            # shortcut only if it is still unmodified.
+            load_ownership(record_path, previous, app_id)
+            retired = previous
         if args.action == "uninstall":
             destination.unlink(missing_ok=True)
             record_path.unlink(missing_ok=True)
@@ -176,6 +199,8 @@ def main():
             json.dump(record, file, ensure_ascii=False, indent=2)
             file.write("\n")
         Path(temporary_name).replace(record_path)
+        if retired is not None:
+            retired.unlink(missing_ok=True)
         print(json.dumps({"status": "installed", "app_id": app_id, "launcher": str(destination),
                           "note": "Keep the host, manifest, backend and icon at their registered paths."}, ensure_ascii=False))
         return 0

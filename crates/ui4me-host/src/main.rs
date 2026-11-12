@@ -47,6 +47,8 @@ fn execute() -> Result<i32> {
     );
     if headless {
         std::env::set_var("UI4ME_TEST_MODE", "1");
+    } else if !matches!(cli.command, Command::Doctor) {
+        platform::detach_owned_console();
     }
     if unsupervised {
         std::env::set_var("UI4ME_ALLOW_UNSUPERVISED", "1");

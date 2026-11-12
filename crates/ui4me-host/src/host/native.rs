@@ -59,18 +59,23 @@ const COMPOSITOR_HOLDS_BUFFERS: &str = "Wayland compositor still holds every buf
 
 impl Host {
     pub(super) fn write_clipboard(
-        &self,
+        &mut self,
         event_loop: Option<&dyn ActiveEventLoop>,
         text: String,
     ) -> Result<(), RpcError> {
         let event_loop = event_loop
             .ok_or_else(|| RpcError::unsupported("Clipboard requires a native event loop"))?;
+        let before = event_loop.clipboard().ok().flatten();
         let data = DataTransferSendBuilder::new(text)
             .with_type(TypeHint::Plaintext, |text: &String, _| Some(text.clone()))
             .build();
         event_loop
             .set_clipboard(data)
-            .map_err(|e| RpcError::unavailable(format!("Clipboard write: {e}")))
+            .map_err(|e| RpcError::unavailable(format!("Clipboard write: {e}")))?;
+        if cfg!(target_os = "linux") {
+            self.clipboard_written = Some((before, Instant::now()));
+        }
+        Ok(())
     }
 
     pub(super) fn read_clipboard(
@@ -80,28 +85,57 @@ impl Host {
     ) -> Result<(), RpcError> {
         let event_loop = event_loop
             .ok_or_else(|| RpcError::unsupported("Clipboard requires a native event loop"))?;
-        if self.transfers.len() + self.jobs.len() >= protocol::MAX_PENDING {
+        if self.transfers.len() + self.jobs.len() + self.deferred_clipboard_reads.len()
+            >= protocol::MAX_PENDING
+        {
             return Err(RpcError::busy("Too many pending native requests"));
         }
-        let id = event_loop
-            .clipboard()
-            .map_err(|e| RpcError::unavailable(e.to_string()))?;
-        match id {
-            Some(id) => {
-                let serial = event_loop
-                    .fetch_data_transfer(id, &TypeHint::Plaintext)
-                    .map_err(|e| RpcError::unavailable(format!("Clipboard read: {e}")))?;
-                self.transfers.insert(
-                    serial,
-                    PendingTransfer {
-                        target,
-                        deadline: Instant::now() + Duration::from_secs(10),
-                    },
-                );
+        self.read_clipboard_now(event_loop, target);
+        Ok(())
+    }
+
+    /// Start a clipboard read; failures complete `target` with an error.
+    ///
+    /// Wayland announces a new selection, including this host's own, with an
+    /// asynchronous event. A read issued right after a write could therefore
+    /// return the previous selection. Until the selection id changes (bounded
+    /// to one second), defer such reads instead of returning stale data.
+    pub(super) fn read_clipboard_now(
+        &mut self,
+        event_loop: &dyn ActiveEventLoop,
+        target: TransferTarget,
+    ) {
+        let current = match event_loop.clipboard() {
+            Ok(current) => current,
+            Err(error) => {
+                return self.finish_transfer(target, Err(RpcError::unavailable(error.to_string())))
             }
+        };
+        if let Some((before, written)) = self.clipboard_written {
+            if current == before && written.elapsed() < Duration::from_secs(1) {
+                self.deferred_clipboard_reads.push(target);
+                return;
+            }
+            self.clipboard_written = None;
+        }
+        match current {
+            Some(id) => match event_loop.fetch_data_transfer(id, &TypeHint::Plaintext) {
+                Ok(serial) => {
+                    self.transfers.insert(
+                        serial,
+                        PendingTransfer {
+                            target,
+                            deadline: Instant::now() + Duration::from_secs(10),
+                        },
+                    );
+                }
+                Err(error) => self.finish_transfer(
+                    target,
+                    Err(RpcError::unavailable(format!("Clipboard read: {error}"))),
+                ),
+            },
             None => self.finish_transfer(target, Ok(String::new())),
         }
-        Ok(())
     }
 
     pub(super) fn finish_transfer(
@@ -432,6 +466,7 @@ impl ApplicationHandler for Host {
         // exists and back off when the application is simply idle.
         let deadlines_pending = self.lifecycle.phase() != Phase::Running
             || !self.transfers.is_empty()
+            || !self.deferred_clipboard_reads.is_empty()
             || !self.jobs.is_empty()
             || self.connected.keys().any(|id| Some(*id) != self.client);
         let interval = if deadlines_pending { 50 } else { 500 };

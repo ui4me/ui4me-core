@@ -1,0 +1,611 @@
+{
+ "N01": {
+  "scenario": "N01 cold launch from the Start Menu, hosted AppUserModelID, icon and taskbar grouping (Windows RDP)",
+  "outcome": "PASS",
+  "target": "windows-vm Windows Server 2022 Standard Evaluation 10.0.20348, ui4me_test RDP session 2",
+  "time_utc": "2026-11-12T10:59:29.617714+00:00",
+  "commands": [
+   "Start Menu click on 'UI4ME Host Reference' (shortcut created by create_launcher.py via the property-store helper)",
+   "shell property readback of the shortcut; SHGetPropertyStoreForWindow on each window; taskbar screenshot"
+  ],
+  "observations": {
+   "identity": "shortcut System.AppUserModel.ID=org.ui4me.HostReference; host calls SetCurrentProcessExplicitAppUserModelID(app id) for all its windows (no per-window override, vt=0), so windows group with the shortcut",
+   "icon": "Start Menu entry, title bars and taskbar show the embedded UI4ME icon (win-n01-start-menu.png, win-n01-launched.png)",
+   "grouping": "one taskbar button for both windows (win-n01-taskbar.png); no extra console button after the console fix"
+  }
+ },
+ "N02": {
+  "scenario": "N02 second and simultaneous launches forward to exactly one backend in the RDP session (Windows)",
+  "outcome": "PASS",
+  "target": "windows-vm Windows Server 2022 Standard Evaluation 10.0.20348, ui4me_test RDP session 2",
+  "time_utc": "2026-11-12T10:46:23.133762+00:00",
+  "commands": [
+   "in-session job: python tools\\run_example.py launched via Start-Process (once while running; 3 rounds of two concurrent cold launches); backend count via Win32_Process; Quit via UIA"
+  ],
+  "observations": {
+   "results": "N02 1 first instance: backends=1 hosts=1\r;N02 2 second launch while running: exit=0 after 1017 ms; backends=1 hosts=1; first instance received activation: 1\r;N02 3 quit: backends=0 hosts=0\r;N02 4.1 two simultaneous cold launches: backends=1 hosts=1; launchers exited: exit=; activations received: 1\r;N02 4.2 two simultaneous cold launches: backends=1 hosts=1; launchers exited: exit=; activations received: 1\r;N02 4.3 two simultaneous cold launches: backends=1 hosts=1; launchers exited: exit=; activations received: 1\r;N02 5 after all: backends=0 hosts=0\r;",
+   "note": "PowerShell Start-Process did not expose the secondary launchers' exit codes; forwarding is evidenced by the delivered 'Second launch' activation and exactly one host/backend"
+  }
+ },
+ "N03": {
+  "scenario": "N03 two native windows: resize, minimize/restore, maximize, fullscreen, position, retitle, close veto/allow (Windows RDP)",
+  "outcome": "PASS",
+  "target": "windows-vm Windows Server 2022 Standard Evaluation 10.0.20348, ui4me_test RDP session 2",
+  "time_utc": "2026-11-12T10:45:34.603974+00:00",
+  "commands": [
+   "F:\\ui4me\\src\\target\\debug\\ui4me-host.exe run --app F:\\ui4me\\jobs\\n03\\app.toml (interactive task, session 2) with backend win-n03-driver-backend.py: window.set steps; Win32 IsIconic/IsZoomed/GetWindowRect readback; PostMessage WM_CLOSE twice"
+  ],
+  "observations": {
+   "steps": "STEP {\"step\": \"initial\", \"result\": null, \"os\": {\"UI4ME N03 window B\": {\"iconic\": false, \"zoomed\": false, \"rect\": [78, 78, 516, 389]}, \"UI4ME N03 window A\": {\"iconic\": false, \"zoomed\": false, \"rect\": [52, 52, 716, 489]}}}\r;STEP {\"step\": \"resize_A_900x600\", \"result\": {\"width\": 900, \"height\": 600, \"title\": \"UI4ME N03 window A\"}, \"os\": {\"UI4ME N03 window B\": {\"iconic\": false, \"zoomed\": false, \"rect\": [78, 78, 516, 389]}, \"UI4ME N03 window A\": {\"iconic\": false, \"zoomed\": false, \"rect\": [52, 52, 916, 639]}}}\r;STEP {\"step\": \"maximize_A\", \"result\": {\"width\": 900, \"height\": 600, \"title\": \"UI4ME N03 window A\"}, \"os\": {\"UI4ME N03 window A\": {\"iconic\": false, \"zoomed\": true, \"rect\": [-8, -8, 1616, 976]}, \"UI4ME N03 window B\": {\"iconic\": false, \"zoomed\": false, \"rect\": [78, 78, 516, 389]}}}\r;STEP {\"step\": \"unmaximize_A\", \"result\": {\"width\": 1600, \"height\": 937, \"title\": \"UI4ME N03 window A\"}, \"os\": {\"UI4ME N03 window A\": {\"iconic\": false, \"zoomed\": false, \"rect\": [52, 52, 916, 639]}, \"UI4ME N03 window B\": {\"iconic\": false, \"zoomed\": false, \"rect\": [78, 78, 516, 389]}}}\r;STEP {\"step\": \"minimize_B\", \"result\": {\"width\": 500, \"height\": 350, \"title\": \"UI4ME N03 window B\"}, \"os\": {\"UI4ME N03 window A\": {\"iconic\": false, \"zoomed\": false, \"rect\": [52, 52, 916, 639]}, \"UI4ME N03 window B\": {\"iconic\": true, \"zoomed\": false, \"rect\": [-32000, -32000, 160, 28]}}}\r;STEP {\"step\": \"restore_B\", \"result\": {\"width\": 500, \"height\": 350, \"title\": \"UI4ME N03 window B\"}, \"os\": {\"UI4ME N03 window B\": {\"iconic\": false, \"zoomed\": false, \"rect\": [78, 78, 516, 389]}, \"UI4ME N03 window A\": {\"iconic\": false, \"zoomed\": false, \"rect\": [52, 52, 916, 639]}}}\r;STEP {\"step\": \"fullscreen_A\", \"result\": {\"width\": 900, \"height\": 600, \"title\": \"UI4ME N03 window A\"}, \"os\": {\"UI4ME N03 window A\": {\"iconic\": false, \"zoomed\": false, \"rect\": [0, 0, 1600, 1000]}, \"UI4ME N03 window B\": {\"iconic\": false, \"zoomed\": false, \"rect\": [78, 78, 516, 389]}}}\r;STEP {\"step\": \"unfullscreen_A\", \"result\": {\"width\": 1600, \"height\": 1000, \"title\": \"UI4ME N03 window A\"}, \"os\": {\"UI4ME N03 window A\": {\"iconic\": false, \"zoomed\": false, \"rect\": [52, 52, 916, 639]}, \"UI4ME N03 window B\": {\"iconic\": false, \"zoomed\": false, \"rect\": [78, 78, 516, 389]}}}\r;STEP {\"step\": \"title_B\", \"result\": {\"width\": 500, \"height\": 350, \"title\": \"UI4ME N03 window B ΓÇö retitled Γ£ô\"}, \"os\": {\"UI4ME N03 window A\": {\"iconic\": false, \"zoomed\": false, \"rect\": [52, 52, 916, 639]}, \"UI4ME N03 window B ΓÇö\": {\"iconic\": false, \"zoomed\": false, \"rect\": [78, 78, 516, 389]}}}\r;STEP {\"step\": \"position_A_120_80\", \"result\": {\"width\": 900, \"height\": 600, \"title\": \"UI4ME N03 window A\"}, \"os\": {\"UI4ME N03 window A\": {\"iconic\": false, \"zoomed\": false, \"rect\": [120, 80, 916, 639]}, \"UI4ME N03 window B ΓÇö\": {\"iconic\": false, \"zoomed\": false, \"rect\": [78, 78, 516, 389]}}}\r;STEP {\"step\": \"too_small_rejected\", \"result\": {\"rpc_error\": -32602, \"message\": \"Logical window size must be 160..8192 by 120..8192\"}, \"os\": {\"UI4ME N03 window A\": {\"iconic\": false, \"zoomed\": false, \"rect\": [120, 80, 916, 639]}, \"UI4ME N03 window B ΓÇö\": {\"iconic\": false, \"zoomed\": false, \"rect\": [78, 78, 516, 389]}}}\r;CLOSE {\"window_id\": \"w2\", \"allow\": false}\r;AFTERCLOSE {\"attempt\": 1, \"windows\": [\"UI4ME N03 window A\", \"UI4ME N03 window B ΓÇö retitled Γ£ô\"]}\r;CLOSE {\"window_id\": \"w2\", \"allow\": true}\r;AFTERCLOSE {\"attempt\": 2, \"windows\": [\"UI4ME N03 window A\"]}\r;LIST [\"UI4ME N03 window A\"]\r;host stopped\",\"exit_code\":0\r;",
+   "note": "the garbled em dash/check mark in the log is PowerShell *> redirection decoding UTF-8 with the OEM code page; window titles read through UI Automation are correct"
+  }
+ },
+ "N04": {
+  "scenario": "N04 native Windows clipboard exchange with other applications (PowerShell, Notepad)",
+  "outcome": "PASS",
+  "target": "windows-vm Windows Server 2022 Standard Evaluation 10.0.20348, ui4me_test RDP session 2 (xfreerdp3 3.15 from Linux, 1600x1000, scale-desktop 100)",
+  "time_utc": "2026-11-12T10:37:23.692781+00:00",
+  "commands": [
+   "python tools\\run_example.py in session 2; PowerShell Set-Clipboard/Get-Clipboard and Notepad in session 2; real RDP Ctrl+A/C/V via xfreerdp; UI Automation readback"
+  ],
+  "observations": {
+   "results": "1 PowerShell Set-Clipboard -> UI4ME (RDP Ctrl+V): PASS;formats: System.String,UnicodeText,Text\r;owner: ui4me-host\r;2 UI4ME (RDP Ctrl+C) -> PowerShell Get-Clipboard: PASS;4 Notepad (RDP Ctrl+C) -> UI4ME (RDP Ctrl+V): PASS;3 UI4ME (RDP Ctrl+C) -> Notepad (RDP Ctrl+V): PASS;5 2 MiB paste: editor chars 43 | status ['Read native data: Data transfer exceeds 1 MiB (RPC -32002)'];6 original clipboard restored (90 chars)\r;",
+   "rdp_clipboard_redirection": "disabled (xfreerdp3 -clipboard); only the session-local Windows clipboard was involved",
+   "defect_found_and_fixed": "the reference backend's notification handler raised UnicodeEncodeError on Windows when printing Unicode events (piped stdout used the ANSI code page); the Python client now writes UTF-8 to the host log pipes (Utf8StdioTests)"
+  }
+ },
+ "N05": {
+  "scenario": "N05 native Windows open/save/folder dialogs: select, cancel, protocol cancel, parent-close and quit races (RDP session)",
+  "outcome": "PASS",
+  "target": "windows-vm Windows Server 2022 Standard Evaluation 10.0.20348, ui4me_test RDP session 2 (xfreerdp3 3.15, 1600x1000, scale-desktop 100)",
+  "time_utc": "2026-11-12T10:44:12.816463+00:00",
+  "commands": [
+   "python tools\\run_example.py (session 2); F3/F4/F5 and typing via RDP keyboard; Select Folder via RDP pointer",
+   "F7 from the second window (focus set via UIA); WM_CLOSE posted to the dialog owner; UIA Invoke Quit on the remaining window",
+   "dlginfo.ps1: EnumWindows #32770 dialogs of ui4me-host with GetWindow(GW_OWNER) and IsWindowEnabled(owner)"
+  ],
+  "observations": {
+   "results": "a open select (typed path, Enter): dialog.open_files {'cancelled': False, 'paths': ['F:\\ui4me\\dialog-test\\sample.txt']} | owner was 'UI4ME host — Python reference', owner disabled while open;b open cancel (Esc): dialog.open_files {'cancelled': True, 'paths': []} | count=0\r;  save dialog: count=1 dialog='Save file' owner='UI4ME host — Python reference' owner_enabled=False\r;c save select: dialog.save_file {'cancelled': False, 'paths': ['F:\\ui4me\\dialog-test\\saved-by-ui4me.txt']} | count=0\r;  folder dialog: count=1 dialog='Choose folder' owner='UI4ME host — Python reference' owner_enabled=False\r;d folder (navigate by typed path, Select Folder): dialog.choose_folder {'cancelled': False, 'paths': ['F:\\ui4me\\dialog-test\\folder']} | count=0\r;e dialog open: count=1 dialog='Open files' owner='UI4ME host — Python reference' owner_enabled=False\r;e F7 from second window (protocol cancel): dialog.open_files client cancellation requested\"} | count=0\r;f save dialog open: count=1 dialog='Save file' owner='UI4ME host — Python reference' owner_enabled=False\r;f WM_CLOSE to the dialog's owner: backend Close accepted w1\"} / dialog.save_file host response: -32004: Dialog parent is closing\"} | count=0\r | windows: ['UI4ME — Unicode ✓'];g folder dialog open: count=1 dialog='Choose folder' owner='UI4ME — Unicode ✓' owner_enabled=False\r;g quit (UIA Invoke Quit) while dialog open: dialog.choose_folder host response: -32006: Application is shutting down\"} | count=0\r | windows left: 0;",
+   "defects_found_and_fixed": "(1) every native dialog failed with 'the underlying handle is not available': winit Win32 only returns window handles on the GUI thread and the worker requested it; the parent HWND is now captured on the GUI thread. (2) protocol cancellation (request.cancel / F7) left the dialog open because IFileDialog::Close from the helper window procedure did not dismiss it; cancellation now also posts IDCANCEL to the worker thread's dialog window."
+  }
+ },
+ "N06": {
+  "scenario": "N06 real keyboard input and IME composition (Microsoft Pinyin, Windows RDP)",
+  "outcome": "PASS",
+  "target": "windows-vm Windows Server 2022 Standard Evaluation 10.0.20348, ui4me_test RDP session 2",
+  "time_utc": "2026-11-12T11:05:02.467588+00:00",
+  "commands": [
+   "Set-WinUserLanguageList adds zh-CN (Microsoft Pinyin TIP 0804:{81D4E9C9-...}) for ui4me_test, restored afterwards",
+   "python tools\\run_example.py; RDP scancode key events (xdotool through xfreerdp, not RDP Unicode injection): Win+Space to Pinyin, n i h a o, Space, etc.; UIA ValuePattern readback"
+  ],
+  "observations": {
+   "results": "1 preedit ni'hao shown inline with Microsoft Pinyin candidates at the caret (win-n06-preedit.png); committed text before Space: 'IME test: ';2 Space commits candidate 1: 'IME test: 你好';3 preedit 'shijie' + 2x Backspace edits only the preedit: 'IME test: 你好';4 Esc cancels the preedit: 'IME test: 你好';5 'zhongwen' + candidate 2: 'IME test: 你好仲文';IME restored: en-US:0409:00000409 (original: en-US:0409:00000409)\r;",
+   "keyboard": "US layout scancodes from the RDP client; RDP also added client layouts (US-International, Czech, German) to the session's Win+Space cycle"
+  }
+ },
+ "N07": {
+  "scenario": "N07 UI Automation tree, focus and actions (AccessKit accesskit_windows 0.35.2, Windows RDP)",
+  "outcome": "PASS",
+  "target": "windows-vm Windows Server 2022 Standard Evaluation 10.0.20348, ui4me_test RDP session 2",
+  "time_utc": "2026-11-12T10:49:13.548060+00:00",
+  "commands": [
+   "python tools\\run_example.py; in-session uia.ps1 (UIAutomationClient): tree, FocusedElement, SetFocus, InvokePattern, ValuePattern.SetValue; real RDP Tab/Shift+Tab"
+  ],
+  "observations": {
+   "results": "1 UIA tree: Window 'UI4ME host — Python reference' > [('Edit', 'Editable input'), ('Button', 'Copy'), ('Button', 'Paste'), ('Button', 'Open file'), ('Button', 'Quit'), ('Text', 'org.ui4me.HostReference • windows • native desktop')];4 UIA Invoke('Open file') -> native dialog: count=1 dialog='Open files' owner='UI4ME host — Python reference' owner_enabled=False\r;  Esc -> count=0\r;5 UIA ValuePattern.SetValue on editor: {\"name\":\"Editable input\",\"type\":\"Edit\",\"focused\":true,\"value\":\"Set through UI Automation ✓\",\"rect\":\"136,235,852,58\",\"pid\":2104,\"class\":\"\"}\r;2 start: foreground='UI4ME host — Python reference' focused=Edit:'Editable input';  real Tab over RDP -> foreground='UI4ME host — Python reference' focused=Button:'Copy';  real Tab over RDP -> foreground='UI4ME host — Python reference' focused=Button:'Paste';  real Shift+Tab over RDP -> foreground='UI4ME host — Python reference' focused=Button:'Copy';3 UIA SetFocus('Open file') -> foreground='UI4ME host — Python reference' focused=Button:'Open file';  UIA SetFocus('Editable input') -> foreground='UI4ME host — Python reference' focused=Edit:'Editable input';",
+   "observer_fix": "observation jobs now run under conhost --headless (start_interactive.ps1 -Hidden) so they do not take the foreground from the app"
+  }
+ },
+ "N08": {
+  "scenario": "N08 DPI change and surface recreation via RDP reconnect at a different desktop scale (Windows)",
+  "outcome": "PASS",
+  "target": "windows-vm Windows Server 2022 Standard Evaluation 10.0.20348, ui4me_test RDP session 2",
+  "time_utc": "2026-11-12T11:01:32.214041+00:00",
+  "commands": [
+   "ui4me-host run --app F:\\ui4me\\jobs\\n08\\app.toml (scale-logging backend) in session 2; RDP connected with xfreerdp3 /scale-desktop:100",
+   "disconnect (client closed); reconnect with xfreerdp3 /size:1600x1000 /scale-desktop:150 -clipboard"
+  ],
+  "observations": {
+   "results": "1 RDP client disconnected; qwinsta:  ui4me_test 2 Disc \r;2 while disconnected: backend window.get calls continue (33 -> 38 in 5 s); last: GET {\"width\": 800, \"height\": 500, \"physical_size\": {\"height\": 500, \"width\": 800}, \"scale_factor\": 1.0}\"};3 reconnected with xfreerdp3 /scale-desktop:150: qwinsta  rdp-tcp#0 ui4me_test 2 Active \r;4 host events after reconnect: EVENT {\"data\": {\"scale_factor\": 1.5}, \"type\": \"scale_changed\", \"window_id\": \"w1\"};EVENT {\"data\": {\"physical_height\": 750, \"physical_width\": 1200, \"scale_factor\": 1.5}, \"type\": \"resized\", \"window_id\": \"w1\"};;  latest window.get: GET {\"width\": 800, \"height\": 500, \"physical_size\": {\"height\": 750, \"width\": 1200}, \"scale_factor\": 1.5}\"};  same host pid alive: [('UI4ME N08 scale', 5684, '25,48,800,500')];5 same app launched from ui4me_test's SSH logon: ssh session id: 0\r ssh-session launch alive after 6s: True\r {\"timestamp\":\"2026-11-12T11:01:13.096433Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"backend output\",\"source\":\"backend\",\"stream\":\"stdout\",\"text\":\"GET {\\\"width\\\": 800, \\\"height\\\": 500, \\\"physical_size\\\": {\\\"height\\\": 500, \\\"wid {\"timestamp\":\"2026-11-12T11:01:14.098566Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"backend output\",\"source\":\"backend\",\"stre;  session-2 instance received activation: 0 (expected 0);",
+   "rdp_settings": "1600x1000, desktop scale 100% then 150%, clipboard redirection disabled, xfreerdp3 3.15 from Linux"
+  }
+ },
+ "N09": {
+  "scenario": "N09 backend freeze/crash with host-local input, failure UI and emergency quit (Windows RDP)",
+  "outcome": "PASS",
+  "target": "windows-vm Windows Server 2022 Standard Evaluation 10.0.20348, ui4me_test RDP session 2 (xfreerdp3 3.15 from Linux, 1600x1000, scale-desktop 100, clipboard redirection off)",
+  "time_utc": "2026-11-12T10:28:57.486606+00:00",
+  "commands": [
+   "python tools\\run_faults.py crash-after-ready --duration 1 (interactive task in session 2); xdotool RDP keys End + text; uia.ps1 value + invoke Quit",
+   "python tools\\run_faults.py freeze-quit --duration 0; RDP keys typed during pending decision; RDP Ctrl+Shift+Q"
+  ],
+  "observations": {
+   "crash": "failure surface shown (win-crash-surface.png); UIA tree Edit/Copy/Paste/Open file/Quit/failure Text; RDP-typed text reached editor after backend death: sion. Typed over RDP after crash 42; UIA Invoke(Quit) ended host exit 1; runner PASS",
+   "freeze": "decision withheld (callback_blocked, host_control_responsive); typed: Local typing while quit decision pending; window alive >5 s (no implicit approval); RDP Ctrl+Shift+Q ended host (exit 1), no UI4ME windows left; runner BLOCKED by design for this indefinite fixture",
+   "fixtures": {
+    "crash-after-ready": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 1,
+     "descendants": [],
+     "events": [
+      "ready",
+      "intentional_crash"
+     ]
+    },
+    "freeze-close": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 0,
+     "descendants": [],
+     "events": [
+      "ready",
+      "callback_blocked",
+      "host_control_responsive",
+      "window_alive_after_veto",
+      "fixture_completed"
+     ]
+    },
+    "freeze-quit-held": {
+     "status": "BLOCKED",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 1,
+     "descendants": [],
+     "events": [
+      "ready",
+      "callback_blocked",
+      "host_control_responsive",
+      "awaiting_native_emergency_quit"
+     ]
+    },
+    "freeze-quit": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 0,
+     "descendants": [],
+     "events": [
+      "ready",
+      "callback_blocked",
+      "host_control_responsive",
+      "window_alive_after_veto",
+      "fixture_completed"
+     ]
+    },
+    "log-flood-unread": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 0,
+     "descendants": [],
+     "events": [
+      "ready",
+      "bounded_log_flood_completed",
+      "fixture_completed"
+     ]
+    },
+    "log-flood": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 0,
+     "descendants": [],
+     "events": [
+      "ready",
+      "bounded_log_flood_completed",
+      "fixture_completed"
+     ]
+    },
+    "managed-tree-kill-host": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 125,
+     "descendants": [
+      [
+       "worker",
+       false
+      ],
+      [
+       "leaf",
+       false
+      ]
+     ],
+     "events": [
+      "ready",
+      "managed_tree_ready"
+     ]
+    },
+    "managed-tree": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 0,
+     "descendants": [
+      [
+       "worker",
+       false
+      ],
+      [
+       "leaf",
+       false
+      ]
+     ],
+     "events": [
+      "ready",
+      "managed_tree_ready",
+      "fixture_completed"
+     ]
+    },
+    "veto-close": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 0,
+     "descendants": [],
+     "events": [
+      "ready",
+      "callback_veto",
+      "host_control_responsive",
+      "window_alive_after_veto",
+      "fixture_completed"
+     ]
+    },
+    "veto-quit": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 0,
+     "descendants": [],
+     "events": [
+      "ready",
+      "callback_veto",
+      "host_control_responsive",
+      "window_alive_after_veto",
+      "fixture_completed"
+     ]
+    }
+   }
+  }
+ },
+ "N10": {
+  "scenario": "N10 normal quit and forced host kill clean managed child and grandchild (Windows Job Object, RDP session)",
+  "outcome": "PASS",
+  "target": "windows-vm Windows Server 2022 Standard Evaluation 10.0.20348, ui4me_test RDP session 2 (xfreerdp3 3.15 from Linux, 1600x1000, scale-desktop 100, clipboard redirection off)",
+  "time_utc": "2026-11-12T10:28:57.521908+00:00",
+  "commands": [
+   "python tools\\run_faults.py managed-tree --duration 2; python tools\\run_faults.py managed-tree --kill-host --timeout 30 (interactive task, session 2)"
+  ],
+  "observations": {
+   "fixtures": {
+    "crash-after-ready": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 1,
+     "descendants": [],
+     "events": [
+      "ready",
+      "intentional_crash"
+     ]
+    },
+    "freeze-close": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 0,
+     "descendants": [],
+     "events": [
+      "ready",
+      "callback_blocked",
+      "host_control_responsive",
+      "window_alive_after_veto",
+      "fixture_completed"
+     ]
+    },
+    "freeze-quit-held": {
+     "status": "BLOCKED",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 1,
+     "descendants": [],
+     "events": [
+      "ready",
+      "callback_blocked",
+      "host_control_responsive",
+      "awaiting_native_emergency_quit"
+     ]
+    },
+    "freeze-quit": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 0,
+     "descendants": [],
+     "events": [
+      "ready",
+      "callback_blocked",
+      "host_control_responsive",
+      "window_alive_after_veto",
+      "fixture_completed"
+     ]
+    },
+    "log-flood-unread": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 0,
+     "descendants": [],
+     "events": [
+      "ready",
+      "bounded_log_flood_completed",
+      "fixture_completed"
+     ]
+    },
+    "log-flood": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 0,
+     "descendants": [],
+     "events": [
+      "ready",
+      "bounded_log_flood_completed",
+      "fixture_completed"
+     ]
+    },
+    "managed-tree-kill-host": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 125,
+     "descendants": [
+      [
+       "worker",
+       false
+      ],
+      [
+       "leaf",
+       false
+      ]
+     ],
+     "events": [
+      "ready",
+      "managed_tree_ready"
+     ]
+    },
+    "managed-tree": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 0,
+     "descendants": [
+      [
+       "worker",
+       false
+      ],
+      [
+       "leaf",
+       false
+      ]
+     ],
+     "events": [
+      "ready",
+      "managed_tree_ready",
+      "fixture_completed"
+     ]
+    },
+    "veto-close": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 0,
+     "descendants": [],
+     "events": [
+      "ready",
+      "callback_veto",
+      "host_control_responsive",
+      "window_alive_after_veto",
+      "fixture_completed"
+     ]
+    },
+    "veto-quit": {
+     "status": "PASS",
+     "containment": "Windows Job Object (backend assigned during creation)",
+     "host_exit_code": 0,
+     "descendants": [],
+     "events": [
+      "ready",
+      "callback_veto",
+      "host_control_responsive",
+      "window_alive_after_veto",
+      "fixture_completed"
+     ]
+    }
+   }
+  }
+ },
+ "N11": {
+  "scenario": "N11 externally opened application survives host exit (Windows RDP)",
+  "outcome": "PASS",
+  "target": "windows-vm Windows Server 2022 Standard Evaluation 10.0.20348, ui4me_test RDP session 2",
+  "time_utc": "2026-11-12T10:50:15.827414+00:00",
+  "commands": [
+   "python tools\\run_example.py --external-target F:\\ui4me\\dialog-test\\ui4me-external-test.txt; RDP F8 (desktop.open_external -> ShellExecute)",
+   "in-session Stop-Process -Force on the actual ui4me-host pid"
+  ],
+  "observations": {
+   "results": "1 F8: external_open_requested\\\", \\\"status\\\": \\\"PASS\\\", \\\"detail\\\": {\\\"target\\\": \\\"F:\\ui4me\\dialog-test\\ui4me-external-test.txt\\\", \\\"result\\\": {\\\"accepted\\\": true};N11 2 opened by: notepad pid=4516 parent=5880 cmd=\"C:\\Windows\\system32\\NOTEPAD.EXE\" F:\\ui4me\\dialog-test\\ui4me-external-test.txt | host pid=5880\r;N11 3 host killed (Stop-Process -Force): host alive=False; backend python demo.py alive=False; notepad alive=True title='ui4me-external-test - Notepad'\r;"
+  }
+ },
+ "N12": {
+  "scenario": "N12 installed normal-user launch outside the checkout (Windows RDP, ui4me_test)",
+  "outcome": "PASS",
+  "target": "windows-vm Windows Server 2022 Standard Evaluation 10.0.20348, ui4me_test RDP session 2",
+  "time_utc": "2026-11-12T10:59:29.584117+00:00",
+  "commands": [
+   "python tools\\install.py --jobs 2 --example-dir C:\\Users\\ui4me_test\\AppData\\Local\\ui4me-reference (cargo install --locked, release) as ui4me_test",
+   "cd %USERPROFILE% && ui4me-host doctor",
+   "python tools\\create_launcher.py install/uninstall (in session 2); Start Menu > Recently added > UI4ME Host Reference (RDP pointer)"
+  ],
+  "observations": {
+   "installed": "C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe (on the user PATH), release, 4.95 MB, sha256 B0C20DF3B1FB38B42B00B232264463BC26293750A84EB996F9D89025DC088A3B",
+   "results": "N12 1 launcher install: {\"status\": \"installed\", \"app_id\": \"org.ui4me.HostReference\", \"launcher\": \"C:\\\\Users\\\\ui4me_test\\\\AppData\\\\Roaming\\\\Microsoft\\\\Windows\\\\Start Menu\\\\Programs\\\\UI4ME Host Reference.lnk\", \"note\": \"Keep the host, manifest, backend and icon at their registered paths.\"}\r;N12   Start Menu entries: UI4ME Host Reference.lnk\r;N12   shortcut target=C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe args=run --app C:\\Users\\ui4me_test\\AppData\\Local\\ui4me-reference\\app.toml workdir=C:\\Users\\ui4me_test\\AppData\\Local\\ui4me-reference icon=C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe,0 AppUserModelID=org.ui4me.HostReference\r;N01 window 'UI4ME — Unicode ✓' AppUserModelID=(unset vt=0)\r;N01 window 'UI4ME host — Python reference' AppUserModelID=(unset vt=0)\r;N01 taskbar buttons:\r;N12 host: pid=5492 exe=C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe user=windows-vm\\ui4me_test session=2 | backend: python.exe \"\\\\?\\C:\\Program Files\\Python313\\python.exe\" \"C:\\Users\\ui4me_test\\AppData\\Local\\ui4me-reference\\demo.py\"\r;N01 taskbar running/pinned buttons:\r;N12 modified shortcut: install exit=1 (Launcher registration failed: Launcher no longer matches this tool's ownership record; inspect it before modifying it); uninstall exit=1 (Launcher registration failed: Launcher no longer matches this tool's ownership record; inspect it before modifying it); shortcut still present=True\r;N12 uninstall: exit=0 {\"status\": \"removed\", \"app_id\": \"org.ui4me.HostReference\", \"launcher\": \"C:\\\\Users\\\\ui4me_test\\\\AppData\\\\Roaming\\\\Microsoft\\\\Windows\\\\Start Menu\\\\Programs\\\\UI4ME Host Reference.lnk\"} | shortcut present=False | record present=False | app files kept=True\r;N12 reinstall: exit=0 shortcut present=True AppUserModelID=org.ui4me.HostReference\r;",
+   "defects_found_and_fixed": "(1) the installed reference manifest could not start: {app_dir} expanded to a verbatim \\\\?\\ path where '/' is invalid (os error 123); substitution now uses the plain path (+tests). (2) a Start Menu launch showed a console window full of host logs and a second taskbar button; a console created solely for the host is now released for run/probe. (3) the shortcut was named org.ui4me.HostReference.lnk, so the Start Menu showed and searched the reverse-DNS id; it is now named after the app (UI4ME Host Reference.lnk) with the same AppUserModelID; a previously owned shortcut is retired safely (+tests).",
+   "limitation": "Windows Search returned no results on this Server Evaluation image (panel stayed empty for any query); the Start Menu app list was used"
+  }
+ },
+ "N13": {
+  "scenario": "N13 file and text drag-and-drop from other applications (Windows RDP)",
+  "outcome": "PASS",
+  "target": "windows-vm Windows Server 2022 Standard Evaluation 10.0.20348, ui4me_test RDP session 2",
+  "time_utc": "2026-11-12T11:03:29.326334+00:00",
+  "commands": [
+   "python tools\\run_example.py; File Explorer at F:\\ui4me\\dialog-test; WordPad with a UTF-8 document; real RDP mouse drags (xdotool on the xfreerdp window)"
+  ],
+  "observations": {
+   "results": "1 Explorer file drag -> UI4ME: window.event {\"data\": {\"paths\": [\"F:\\\\ui4me\\\\dialog-test\\\\sample.txt\"]}, \"type\": \"dropped_files\", \"window_id\": \"w1\"};2 WordPad text drag -> UI4ME: window.event {\"data\": {\"text\": \"Dragged text: P┼Ö├¡li┼í ┼╛lu┼Ñou─ìk├╜ k┼»┼ê ΓÇö UI4ME DnD\"}, \"type\": \"dropped_text\", \"window_id\": \"w1\"}\r;decoded backend text: 'Dragged text: Příliš žluťoučký kůň — UI4ME DnD' | matches source: True;",
+   "note": "the garbled text in the captured log is PowerShell decoding the backend's UTF-8 as code page 437; reversing it gives the exact source string"
+  }
+ },
+ "N14": {
+  "scenario": "N14 RDP disconnect/reconnect continuity and per-session single-instance isolation (Windows)",
+  "outcome": "PASS",
+  "target": "windows-vm Windows Server 2022 Standard Evaluation 10.0.20348, ui4me_test RDP session 2",
+  "time_utc": "2026-11-12T11:01:32.250624+00:00",
+  "commands": [
+   "kill RDP client; qwinsta; observe backend RPC continue; reconnect",
+   "launch the same single-instance manifest as ui4me_test from an SSH logon (session 0)"
+  ],
+  "observations": {
+   "results": "1 RDP client disconnected; qwinsta:  ui4me_test 2 Disc \r;2 while disconnected: backend window.get calls continue (33 -> 38 in 5 s); last: GET {\"width\": 800, \"height\": 500, \"physical_size\": {\"height\": 500, \"width\": 800}, \"scale_factor\": 1.0}\"};3 reconnected with xfreerdp3 /scale-desktop:150: qwinsta  rdp-tcp#0 ui4me_test 2 Active \r;4 host events after reconnect: EVENT {\"data\": {\"scale_factor\": 1.5}, \"type\": \"scale_changed\", \"window_id\": \"w1\"};EVENT {\"data\": {\"physical_height\": 750, \"physical_width\": 1200, \"scale_factor\": 1.5}, \"type\": \"resized\", \"window_id\": \"w1\"};;  latest window.get: GET {\"width\": 800, \"height\": 500, \"physical_size\": {\"height\": 750, \"width\": 1200}, \"scale_factor\": 1.5}\"};  same host pid alive: [('UI4ME N08 scale', 5684, '25,48,800,500')];5 same app launched from ui4me_test's SSH logon: ssh session id: 0\r ssh-session launch alive after 6s: True\r {\"timestamp\":\"2026-11-12T11:01:13.096433Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"backend output\",\"source\":\"backend\",\"stream\":\"stdout\",\"text\":\"GET {\\\"width\\\": 800, \\\"height\\\": 500, \\\"physical_size\\\": {\\\"height\\\": 500, \\\"wid {\"timestamp\":\"2026-11-12T11:01:14.098566Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"backend output\",\"source\":\"backend\",\"stre;  session-2 instance received activation: 0 (expected 0);",
+   "mechanism": "instance mutex Local\\UI4ME-Host-<hash(app id, session id, logon SID)> and session-local pipe namespace"
+  }
+ },
+ "N15": {
+  "scenario": "N15 startup, first frame, idle CPU, host+backend memory, repeated window cycles, package size (Windows RDP, installed release build)",
+  "outcome": "PASS",
+  "target": "windows-vm Windows Server 2022 Standard Evaluation 10.0.20348, ui4me_test RDP session 2",
+  "time_utc": "2026-11-12T11:06:24.023670+00:00",
+  "commands": [
+   "cd %USERPROFILE% && python F:\\ui4me\\src\\tools\\measure_resources.py --host %USERPROFILE%\\.cargo\\bin\\ui4me-host.exe --cycles 400 --sample-every 100 (session 2)"
+  ],
+  "observations": {
+   "binary": "ui4me-host.exe release 4.95 MB (embedded icon/manifest), sha256 B0C20DF3B1FB38B42B00B232264463BC26293750A84EB996F9D89025DC088A3B",
+   "idle_cpu_note": "0.0% means no CPU time was accounted by GetProcessTimes over 22 s (resolution ~15.6 ms, i.e. below 0.07%)",
+   "window_cycles": "host private bytes 14.86 MB -> 14.93 MB over 400 create/close cycles (no AT-SPI equivalent growth on Windows)",
+   "measurements": {
+    "schema": 1,
+    "time_utc": "2026-11-12T11:05:11.529110+00:00",
+    "host": "C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe",
+    "platform": "Windows-2022Server-10.0.20348-SP0",
+    "python": "3.13.17",
+    "cpu_metric": "Windows: GetProcessTimes kernel+user time",
+    "memory_metric": "Windows: private bytes and working set (GetProcessMemoryInfo)",
+    "startup": [
+     {
+      "startup_to_ready_ms": 98.2,
+      "first_frame_ms": 96.4,
+      "first_frame_since_host_start_ms": 87,
+      "host_exit_code": 0
+     },
+     {
+      "startup_to_ready_ms": 101.7,
+      "first_frame_ms": 100.4,
+      "first_frame_since_host_start_ms": 90,
+      "host_exit_code": 0
+     },
+     {
+      "startup_to_ready_ms": 100.9,
+      "first_frame_ms": 99.6,
+      "first_frame_since_host_start_ms": 90,
+      "host_exit_code": 0
+     },
+     {
+      "startup_to_ready_ms": 99.8,
+      "first_frame_ms": 98.4,
+      "first_frame_since_host_start_ms": 88,
+      "host_exit_code": 0
+     },
+     {
+      "startup_to_ready_ms": 104.3,
+      "first_frame_ms": 102.5,
+      "first_frame_since_host_start_ms": 92,
+      "host_exit_code": 0
+     }
+    ],
+    "sustained": {
+     "startup_to_ready_ms": 99.4,
+     "idle": {
+      "seconds": 22.0,
+      "host_cpu_percent": 0.0,
+      "backend_cpu_percent": 0.0,
+      "memory_after_idle": {
+       "host": {
+        "private_kib": 14764,
+        "working_set_kib": 27540
+       },
+       "backend": {
+        "private_kib": 14064,
+        "working_set_kib": 19780
+       },
+       "combined": {
+        "private_kib": 28828,
+        "working_set_kib": 47320
+       }
+      }
+     },
+     "window_cycles": [
+      {
+       "cycles": 100,
+       "host": {
+        "private_kib": 14856,
+        "working_set_kib": 27772
+       },
+       "backend": {
+        "private_kib": 14064,
+        "working_set_kib": 19860
+       },
+       "combined": {
+        "private_kib": 28920,
+        "working_set_kib": 47632
+       }
+      },
+      {
+       "cycles": 200,
+       "host": {
+        "private_kib": 14860,
+        "working_set_kib": 27816
+       },
+       "backend": {
+        "private_kib": 14064,
+        "working_set_kib": 19864
+       },
+       "combined": {
+        "private_kib": 28924,
+        "working_set_kib": 47680
+       }
+      },
+      {
+       "cycles": 300,
+       "host": {
+        "private_kib": 14932,
+        "working_set_kib": 27844
+       },
+       "backend": {
+        "private_kib": 14064,
+        "working_set_kib": 19876
+       },
+       "combined": {
+        "private_kib": 28996,
+        "working_set_kib": 47720
+       }
+      },
+      {
+       "cycles": 400,
+       "host": {
+        "private_kib": 14932,
+        "working_set_kib": 27844
+       },
+       "backend": {
+        "private_kib": 14064,
+        "working_set_kib": 19876
+       },
+       "combined": {
+        "private_kib": 28996,
+        "working_set_kib": 47720
+       }
+      }
+     ],
+     "first_frame_ms": 97.8,
+     "first_frame_since_host_start_ms": 89,
+     "host_exit_code": 0
+    }
+   }
+  }
+ }
+}

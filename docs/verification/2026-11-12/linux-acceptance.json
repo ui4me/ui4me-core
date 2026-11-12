@@ -1,0 +1,331 @@
+{
+  "schema": 1,
+  "qualification": "PASS",
+  "checks": {
+    "N01": {
+      "requirement": "Cold launch, hosted app identity, icon and taskbar grouping",
+      "status": "PASS",
+      "evidence": "verification/native-linux/evidence/N01-identity.json",
+      "evidence_sha256": "dfa607a405fdc260f5b6e221169d4bf81a7dfe7ed1a271c7e0804ea96348f5e1",
+      "note": "Plasma Kickoff launch; desktopFileName/resourceClass org.ui4me.HostReference; app scope app-org.ui4me.HostReference@; one grouped task entry with UI4ME icon",
+      "context": {
+        "os": "Linux",
+        "release": "6.12.116+deb13-amd64",
+        "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+        "architecture": "x86_64",
+        "machine": "linux-workstation",
+        "desktop": "KDE",
+        "session_type": "wayland",
+        "wayland_display": "wayland-0",
+        "session_name": null,
+        "wayland_socket_exists": true
+      },
+      "recorded_utc": "2026-11-12T11:17:04.570336+00:00"
+    },
+    "N02": {
+      "requirement": "Simultaneous second launch forwards to exactly one backend in this desktop session",
+      "status": "PASS",
+      "evidence": "verification/native-linux/evidence/N02-instance.json",
+      "evidence_sha256": "06540c521018951874021dae3b2212d28b8583e0de6cfc1f3027defab714304c",
+      "note": "Launch while running and 3x simultaneous cold launches -> one backend; defect fixed: secondary failed during primary startup",
+      "context": {
+        "os": "Linux",
+        "release": "6.12.116+deb13-amd64",
+        "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+        "architecture": "x86_64",
+        "machine": "linux-workstation",
+        "desktop": "KDE",
+        "session_type": "wayland",
+        "wayland_display": "wayland-0",
+        "session_name": null,
+        "wayland_socket_exists": true
+      },
+      "recorded_utc": "2026-11-12T11:17:04.606484+00:00"
+    },
+    "N03": {
+      "requirement": "Two native windows: ownership, resize, minimize, maximize and close/save/cancel",
+      "status": "PASS",
+      "evidence": "verification/native-linux/evidence/N03-windows.json",
+      "evidence_sha256": "f3fe78f7c63f86d21cccc8e28c08d407dc099df6f5c7b2fed230b02c5e95a634",
+      "note": "resize/max/min/fullscreen/retitle/close veto+allow match KWin state; Wayland placement and unminimize rejected explicitly (fixed false success)",
+      "context": {
+        "os": "Linux",
+        "release": "6.12.116+deb13-amd64",
+        "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+        "architecture": "x86_64",
+        "machine": "linux-workstation",
+        "desktop": "KDE",
+        "session_type": "wayland",
+        "wayland_display": "wayland-0",
+        "session_name": null,
+        "wayland_socket_exists": true
+      },
+      "recorded_utc": "2026-11-12T11:17:04.642582+00:00"
+    },
+    "N04": {
+      "requirement": "Native clipboard exchange with another application; preserve its original content",
+      "status": "PASS",
+      "evidence": "verification/native-linux/evidence/N04-clipboard.json",
+      "evidence_sha256": "f659f21e8e55cab6b8f364d98c6bb1ee4ada41f094ee2976c889828179decc9e",
+      "note": "wl-clipboard, Klipper (Qt), GTK3 both directions with Unicode; GTK interop fixed (winit MIME patch); 1 MiB bound; GUI-thread freeze fixed (softbuffer patch)",
+      "context": {
+        "os": "Linux",
+        "release": "6.12.116+deb13-amd64",
+        "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+        "architecture": "x86_64",
+        "machine": "linux-workstation",
+        "desktop": "KDE",
+        "session_type": "wayland",
+        "wayland_display": "wayland-0",
+        "session_name": null,
+        "wayland_socket_exists": true
+      },
+      "recorded_utc": "2026-11-12T11:17:04.678324+00:00"
+    },
+    "N05": {
+      "requirement": "Native open/save/folder dialogs: select, cancel, parent-close and quit races",
+      "status": "PASS",
+      "evidence": "verification/native-linux/evidence/N05-dialogs.json",
+      "evidence_sha256": "89884a108f2ed7f6427a01d5740959608aa176671f2f244c15a1dada8accd36f",
+      "note": "Portal open/save/folder select+cancel, F7 protocol cancel, parent-close and quit races; folder dialog unparented by xdg-desktop-portal-kde 6.3.5 although parent_window is sent",
+      "context": {
+        "os": "Linux",
+        "release": "6.12.116+deb13-amd64",
+        "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+        "architecture": "x86_64",
+        "machine": "linux-workstation",
+        "desktop": "KDE",
+        "session_type": "wayland",
+        "wayland_display": "wayland-0",
+        "session_name": null,
+        "wayland_socket_exists": true
+      },
+      "recorded_utc": "2026-11-12T11:17:04.714267+00:00"
+    },
+    "N06": {
+      "requirement": "Real keyboard layout and IME composition, Unicode, caret and surrounding text",
+      "status": "PASS",
+      "evidence": "verification/native-linux/evidence/N06-ime.json",
+      "evidence_sha256": "9e1194d31c162e3779de628a2f15ec011a12e8ea5a30dc6732113c0fdc8da51e",
+      "note": "fcitx5 5.1.12 pinyin: inline preedit, candidates at caret, commit, preedit edit/cancel, candidate selection; surrounding-text capability; config restored",
+      "context": {
+        "os": "Linux",
+        "release": "6.12.116+deb13-amd64",
+        "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+        "architecture": "x86_64",
+        "machine": "linux-workstation",
+        "desktop": "KDE",
+        "session_type": "wayland",
+        "wayland_display": "wayland-0",
+        "session_name": null,
+        "wayland_socket_exists": true
+      },
+      "recorded_utc": "2026-11-12T11:17:04.749981+00:00"
+    },
+    "N07": {
+      "requirement": "Accessibility tree, focus and at least one action through native accessibility tooling",
+      "status": "PASS",
+      "evidence": "verification/native-linux/evidence/N07-accessibility.json",
+      "evidence_sha256": "8b0f6bc2db940f873030092e29ba59eb285e877e9232d8bec05dfffe824117e5",
+      "note": "AT-SPI tree, real Tab focus, AT-SPI focus/click/caret; AT-SPI bus was repaired; app name is executable name (accesskit_unix limit)",
+      "context": {
+        "os": "Linux",
+        "release": "6.12.116+deb13-amd64",
+        "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+        "architecture": "x86_64",
+        "machine": "linux-workstation",
+        "desktop": "KDE",
+        "session_type": "wayland",
+        "wayland_display": "wayland-0",
+        "session_name": null,
+        "wayland_socket_exists": true
+      },
+      "recorded_utc": "2026-11-12T11:17:04.788246+00:00"
+    },
+    "N08": {
+      "requirement": "Scale/display change and surface recreation; record actual display configuration",
+      "status": "PASS",
+      "evidence": "verification/native-linux/evidence/N08-scale.json",
+      "evidence_sha256": "1b44c8f80cf0db9ddfe5145cd02fe9b0bd1bd56a1d2e7fb93359fee105408d4f",
+      "note": "kscreen-doctor 1 -> 1.5 -> 1: scale_changed/resized events, crisp re-render, display restored identically",
+      "context": {
+        "os": "Linux",
+        "release": "6.12.116+deb13-amd64",
+        "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+        "architecture": "x86_64",
+        "machine": "linux-workstation",
+        "desktop": "KDE",
+        "session_type": "wayland",
+        "wayland_display": "wayland-0",
+        "session_name": null,
+        "wayland_socket_exists": true
+      },
+      "recorded_utc": "2026-11-12T11:17:04.825526+00:00"
+    },
+    "N09": {
+      "requirement": "Backend freeze/crash while host-local painting, input and failure UI remain usable",
+      "status": "PASS",
+      "evidence": "verification/native-linux/evidence/N09-combined.json",
+      "evidence_sha256": "b707bc80496ec9f15fef2a3808e99311ce277a310fe732b04de192e3ccbdb585",
+      "note": "crash-after-ready failure UI + local typing + AT-SPI Quit; held quit decision with local typing, no implicit approval, Ctrl+Shift+Q; final regression repeated",
+      "context": {
+        "os": "Linux",
+        "release": "6.12.116+deb13-amd64",
+        "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+        "architecture": "x86_64",
+        "machine": "linux-workstation",
+        "desktop": "KDE",
+        "session_type": "wayland",
+        "wayland_display": "wayland-0",
+        "session_name": null,
+        "wayland_socket_exists": true
+      },
+      "recorded_utc": "2026-11-12T11:17:04.860979+00:00"
+    },
+    "N10": {
+      "requirement": "Normal quit and forced host kill clean managed child and grandchild processes",
+      "status": "PASS",
+      "evidence": "verification/native-linux/evidence/N10-cleanup.json",
+      "evidence_sha256": "5bc6b0780bcf5c34299ba802d4d7ef80f5fb2d5c95cddab5bcfaca5910feb238",
+      "note": "managed-tree normal quit and forced host kill under systemd user service: child and grandchild gone; launcher kill now stops the unit",
+      "context": {
+        "os": "Linux",
+        "release": "6.12.116+deb13-amd64",
+        "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+        "architecture": "x86_64",
+        "machine": "linux-workstation",
+        "desktop": "KDE",
+        "session_type": "wayland",
+        "wayland_display": "wayland-0",
+        "session_name": null,
+        "wayland_socket_exists": true
+      },
+      "recorded_utc": "2026-11-12T11:17:04.900083+00:00"
+    },
+    "N11": {
+      "requirement": "An externally opened application survives host exit",
+      "status": "PASS",
+      "evidence": "verification/native-linux/evidence/N11-external.json",
+      "evidence_sha256": "eadcda5e0c1dce31bea3ea62159acf255d808bdf2298f21d27c20fe8cf50393d",
+      "note": "Kate opened via portal OpenURI (outside host unit) survived SIGKILL of the host",
+      "context": {
+        "os": "Linux",
+        "release": "6.12.116+deb13-amd64",
+        "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+        "architecture": "x86_64",
+        "machine": "linux-workstation",
+        "desktop": "KDE",
+        "session_type": "wayland",
+        "wayland_display": "wayland-0",
+        "session_name": null,
+        "wayland_socket_exists": true
+      },
+      "recorded_utc": "2026-11-12T11:17:04.937339+00:00"
+    },
+    "N12": {
+      "requirement": "Installed normal-user launch outside the checkout and build directory",
+      "status": "PASS",
+      "evidence": "verification/native-linux/evidence/N12-installed.json",
+      "evidence_sha256": "9886c6efb928d143c51687823ffcaeeb16f1e0ea80e6b08e13e78fab279ee7ca",
+      "note": "cargo install release to ~/.cargo/bin, standalone app in ~/.local/share/ui4me-reference, Kickoff + gio launch, launcher uninstall/reinstall/refusal",
+      "context": {
+        "os": "Linux",
+        "release": "6.12.116+deb13-amd64",
+        "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+        "architecture": "x86_64",
+        "machine": "linux-workstation",
+        "desktop": "KDE",
+        "session_type": "wayland",
+        "wayland_display": "wayland-0",
+        "session_name": null,
+        "wayland_socket_exists": true
+      },
+      "recorded_utc": "2026-11-12T11:17:04.974363+00:00"
+    },
+    "N13": {
+      "requirement": "File/text drag-and-drop in the actual native target session",
+      "status": "PASS",
+      "evidence": "verification/native-linux/evidence/N13-dnd.json",
+      "evidence_sha256": "cd9544d421869fbac2290f54c4dd0db1cc46546fbfad3ced01add2f1a3489003",
+      "note": "Dolphin file drop and KWrite Unicode text drop via real pointer drags",
+      "context": {
+        "os": "Linux",
+        "release": "6.12.116+deb13-amd64",
+        "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+        "architecture": "x86_64",
+        "machine": "linux-workstation",
+        "desktop": "KDE",
+        "session_type": "wayland",
+        "wayland_display": "wayland-0",
+        "session_name": null,
+        "wayland_socket_exists": true
+      },
+      "recorded_utc": "2026-11-12T11:17:05.011264+00:00"
+    },
+    "N14": {
+      "requirement": "Session isolation; Windows RDP disconnect/reconnect where applicable",
+      "status": "PASS",
+      "evidence": "verification/native-linux/evidence/N14-isolation.json",
+      "evidence_sha256": "0ce5a3452a1ad9cadffe1cf268e45af0ae2ac65b2074fdec72bae5d3f3da805d",
+      "note": "Separate nested KWin realm gets its own instance; second launches forward only within their realm",
+      "context": {
+        "os": "Linux",
+        "release": "6.12.116+deb13-amd64",
+        "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+        "architecture": "x86_64",
+        "machine": "linux-workstation",
+        "desktop": "KDE",
+        "session_type": "wayland",
+        "wayland_display": "wayland-0",
+        "session_name": null,
+        "wayland_socket_exists": true
+      },
+      "recorded_utc": "2026-11-12T11:17:05.048163+00:00"
+    },
+    "N15": {
+      "requirement": "Startup, idle CPU, host/backend memory and repeated window cycles measured",
+      "status": "PASS",
+      "evidence": "verification/native-linux/evidence/N15-performance.json",
+      "evidence_sha256": "6988d8b098e4feced6f538c42d1704f91883f4e15cd0a2ab6b5ce146a5506ca5",
+      "note": "startup-to-ready 83-112 ms, first frame ~38 ms after host start, idle CPU 0.23%/0.29%, combined PSS 30.1 MB; per-window growth reduced 12.7 -> 3.8 KiB (residual zbus)",
+      "context": {
+        "os": "Linux",
+        "release": "6.12.116+deb13-amd64",
+        "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+        "architecture": "x86_64",
+        "machine": "linux-workstation",
+        "desktop": "KDE",
+        "session_type": "wayland",
+        "wayland_display": "wayland-0",
+        "session_name": null,
+        "wayland_socket_exists": true
+      },
+      "recorded_utc": "2026-11-12T11:17:05.084674+00:00"
+    }
+  },
+  "environment": {
+    "os": "Linux",
+    "release": "6.12.116+deb13-amd64",
+    "architecture": "x86_64",
+    "machine": "linux-workstation"
+  },
+  "last_context": {
+    "os": "Linux",
+    "release": "6.12.116+deb13-amd64",
+    "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+    "architecture": "x86_64",
+    "machine": "linux-workstation",
+    "desktop": "KDE",
+    "session_type": "wayland",
+    "wayland_display": "wayland-0",
+    "session_name": null,
+    "wayland_socket_exists": true
+  },
+  "updated_utc": "2026-11-12T11:17:05.084674+00:00",
+  "automated_subset": {
+    "status": "PASS",
+    "exit_code": 0,
+    "log": "automated.log",
+    "scope": "Window creation, protocol, clipboard self-round-trip and quit only; no inferred desktop qualification"
+  }
+}

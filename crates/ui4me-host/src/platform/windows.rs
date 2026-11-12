@@ -586,6 +586,39 @@ fn wait_pending(
 pub fn bootstrap_supervised(_args: &[OsString]) -> Result<Option<i32>> {
     Ok(None)
 }
+/// A GUI launch from Explorer or the Start Menu gives this console program a
+/// console window of its own, shown next to the application windows and on the
+/// taskbar. Release it when no other process shares it. Consoles inherited
+/// from a terminal, and redirected output, are left untouched.
+pub fn detach_owned_console() {
+    use windows_sys::Win32::Storage::FileSystem::{GetFileType, FILE_TYPE_CHAR};
+    use windows_sys::Win32::System::Console::{
+        FreeConsole, GetConsoleProcessList, GetStdHandle, SetStdHandle, STD_ERROR_HANDLE,
+        STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+    };
+    let mut processes = [0_u32; 2];
+    if unsafe { GetConsoleProcessList(processes.as_mut_ptr(), processes.len() as u32) } != 1 {
+        return;
+    }
+    let console_streams: Vec<_> = [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE]
+        .into_iter()
+        .filter(|&stream| {
+            let handle = unsafe { GetStdHandle(stream) };
+            !handle.is_null()
+                && handle != INVALID_HANDLE_VALUE
+                && unsafe { GetFileType(handle) } == FILE_TYPE_CHAR
+        })
+        .collect();
+    if unsafe { FreeConsole() } != 0 {
+        // Writes to a null standard handle are discarded by std.
+        for stream in console_streams {
+            unsafe {
+                SetStdHandle(stream, null_mut());
+            }
+        }
+    }
+}
+
 /// Windows hosts are not re-launched under a separate supervisor; the
 /// launcher is the host itself, so there is nothing to watch.
 pub fn watch_launcher(

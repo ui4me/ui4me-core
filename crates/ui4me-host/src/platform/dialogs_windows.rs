@@ -20,10 +20,12 @@ use windows::Win32::UI::Shell::{
     FOS_NOCHANGEDIR, FOS_NOREADONLYRETURN, FOS_OVERWRITEPROMPT, FOS_PATHMUSTEXIST, FOS_PICKFOLDERS,
     SIGDN_FILESYSPATH,
 };
+use windows_sys::core::BOOL;
 use windows_sys::Win32::Foundation::{
     GetLastError, ERROR_CLASS_ALREADY_EXISTS, HWND, LPARAM, LRESULT, WPARAM,
 };
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows_sys::Win32::System::Threading::GetCurrentThreadId;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 use winit::window::Window;
 
@@ -73,12 +75,36 @@ unsafe extern "system" fn procedure(
         if !pointer.is_null() {
             let state = unsafe { &*pointer };
             if state.cancellation.requested() {
+                // IFileDialog::Close is only documented for use from dialog
+                // event callbacks and did not dismiss the modal dialog when
+                // called from this procedure. Also press the dialog's own
+                // Cancel: its window belongs to this thread.
                 let _ = unsafe { state.dialog.Close(CANCELLED) };
+                unsafe {
+                    EnumThreadWindows(GetCurrentThreadId(), Some(cancel_dialog_window), 0);
+                }
             }
         }
         return 0;
     }
     unsafe { DefWindowProcW(hwnd, message, wparam, lparam) }
+}
+
+/// Post IDCANCEL to the visible standard dialog window(s) of this thread,
+/// which is the file dialog shown by this worker's Show call.
+unsafe extern "system" fn cancel_dialog_window(hwnd: HWND, _: LPARAM) -> BOOL {
+    let mut class = [0_u16; 16];
+    let length = unsafe { GetClassNameW(hwnd, class.as_mut_ptr(), class.len() as i32) };
+    let dialog_class: Vec<u16> = "#32770".encode_utf16().collect();
+    if length as usize == dialog_class.len()
+        && class[..dialog_class.len()] == dialog_class[..]
+        && unsafe { IsWindowVisible(hwnd) } != 0
+    {
+        unsafe {
+            PostMessageW(hwnd, WM_COMMAND, IDCANCEL as WPARAM, 0);
+        }
+    }
+    1
 }
 
 struct MessageWindow {
@@ -178,18 +204,28 @@ fn item_path(item: IShellItem) -> Result<PathBuf> {
     Ok(path)
 }
 
+/// The owner HWND, read on the GUI thread: winit refuses to expose a Win32
+/// window handle from other threads.
+pub(super) struct CapturedParent(isize);
+
+pub(super) fn capture_parent(parent: &Arc<dyn Window>) -> anyhow::Result<CapturedParent> {
+    match parent.window_handle()?.as_raw() {
+        RawWindowHandle::Win32(handle) => Ok(CapturedParent(handle.hwnd.get())),
+        _ => bail!("Windows file dialog requires a Win32 parent window"),
+    }
+}
+
 pub(super) fn run(
-    parent: &Arc<dyn Window>,
+    // Held by the caller for the whole call, so the captured HWND stays valid.
+    _parent: &Arc<dyn Window>,
+    captured: CapturedParent,
     options: &DialogOptions,
     cancellation: &Arc<Cancellation>,
 ) -> DialogResult {
     if cancellation.requested() {
         return Ok(None);
     }
-    let owner = match parent.window_handle()?.as_raw() {
-        RawWindowHandle::Win32(handle) => ComHwnd(handle.hwnd.get() as *mut _),
-        _ => bail!("Windows file dialog requires a Win32 parent window"),
-    };
+    let owner = ComHwnd(captured.0 as *mut _);
     unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) }
         .ok()
         .context("initialize file dialog STA")?;

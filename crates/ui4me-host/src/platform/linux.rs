@@ -560,6 +560,9 @@ pub fn is_systemd_managed() -> bool {
         .unwrap_or(false)
 }
 
+/// Only Windows creates a console window for a GUI launch.
+pub fn detach_owned_console() {}
+
 /// What `run` uses, independent of how this diagnostic process was started.
 pub fn run_containment_description() -> &'static str {
     "systemd-user-service via systemd-run --user (required; --allow-unsupervised is an explicit diagnostic)"

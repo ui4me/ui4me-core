@@ -1,0 +1,14 @@
+fmt PASS [0]
+check PASS [0]
+test PASS [0]
+python PASS [0]
+headless PASS [0, 0]
+faults PASS [0, 0, 0, 0, 0, 0, 0, 0, 0]
+test result: ok. 45 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.67s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 3.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Ran 21 tests in 2.031s
+OK (skipped=1)
+   Compiling ui4me-host v0.1.0 (F:\ui4me\src\crates\ui4me-host)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.80s

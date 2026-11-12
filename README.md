@@ -151,7 +151,8 @@ not a claim that a full text engine exists.
     python tools/native_acceptance.py --automated
 
 The first command runs format, build/type checks, Rust and Python tests, and a
-headless protocol application. The second runs only an automated desktop smoke
+headless protocol application. `python tools/measure_resources.py` measures
+startup, first frame, idle CPU and memory in a desktop session. The second runs only an automated desktop smoke
 subset. Neither silently converts untested native scenarios into passing ones.
 The native acceptance ledger retains separate Linux and Windows evidence.
 
@@ -183,7 +184,9 @@ after abrupt host death.
 | examples/python/ | Standard-library-only reference language client and app |
 | tools/ | Build/install/verification and authorized local-lab helpers |
 | docs/ | Architecture, protocol, verification status and finishing task |
+| third_party/ | Exactly pinned dependencies with minimal documented patches |
 
 The repository uses existing libraries as dependencies instead of copying an
-application framework wholesale. Key choices are documented in
+application framework wholesale. Three pinned dependencies carry small,
+documented fixes found during desktop qualification (third_party/README.md). Key choices are documented in
 [SPEC](docs/SPEC.md) and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md).

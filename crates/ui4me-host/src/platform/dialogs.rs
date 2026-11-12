@@ -113,6 +113,9 @@ pub fn start(
     completion: Box<dyn FnOnce(DialogResult) + Send>,
 ) -> Result<DialogHandle> {
     options.validate()?;
+    // Some platforms (Win32 in winit) only expose the parent's handle on the
+    // GUI thread, which is where this function runs.
+    let captured = native::capture_parent(&parent)?;
     let state = Arc::new(native::Cancellation::default());
     let worker_state = Arc::clone(&state);
     std::thread::Builder::new()
@@ -121,7 +124,7 @@ pub fn start(
             // The Arc also makes raw window/display handles valid throughout the
             // platform call, including exporting/unexporting a Wayland surface.
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                native::run(&parent, &options, &worker_state)
+                native::run(&parent, captured, &options, &worker_state)
             }))
             .unwrap_or_else(|_| Err(anyhow::anyhow!("native dialog worker panicked")));
             completion(result);
