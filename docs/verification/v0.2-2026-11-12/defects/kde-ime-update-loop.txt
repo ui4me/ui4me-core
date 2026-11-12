@@ -1,0 +1,4 @@
+KDE: probe text-event storm with fcitx5 (keyboard-us-intl dead key pending)
+Before fix (installed m4 host 0c216689): a single dead-key press produced 9365 'text' window events; the host closed the backend ('peer cannot receive bounded output ... sending on a full channel').
+Document path, same condition: host CPU 98 -> 326 ticks/3 s (USER_HZ 100) while the dead key was pending.
+After fix (IME state deduplicated): dead key +2 events; renderer CPU with pending dead key equal to the focused baseline (115 vs 114 ticks/3 s on m4, 37.3% vs 37.3% on m5 with the CSS pulse animating).

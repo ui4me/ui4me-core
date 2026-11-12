@@ -1,0 +1,4 @@
+debug build of patched tree 
+compose 'wo' in Notes, mouse click Name: window=UI4ME — Desktop workspace state={"Name": "A useful desktop tool", "Notes": "wo", "Estimate": "3"} Edit:Name
+compose 'nihao' in Name, UIA SetFocus Notes: window=UI4ME — Desktop workspace state={"Name": "A useful desktop toolnihao", "Notes": "wo", "Estimate": "3"} Edit:Notes
+compose 'shijie' in Notes, Tab: window=UI4ME — Desktop workspace state={"Name": "A useful desktop toolnihao", "Notes": "woshijie", "Estimate": "3"} Spinner:Estimate

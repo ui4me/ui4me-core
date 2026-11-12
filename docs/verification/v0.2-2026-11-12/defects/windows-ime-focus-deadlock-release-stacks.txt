@@ -1,0 +1,333 @@
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.031 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 30
+
+Microsoft (R) Windows Debugger Version 10.0.26100.7705 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+*** wait with pending attach
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+Deferred                                       srv*F:\ui4me\symcache*https://msdl.microsoft.com/download/symbols
+Symbol search path is: srv*F:\ui4me\symcache*https://msdl.microsoft.com/download/symbols
+Executable search path is: 
+WARNING: Process 5368 is not attached as a debuggee
+         The process can be examined but debug events will not be received
+................................................................
+............................
+Loading unloaded module list
+..........
+(14f8.1388): Wake debugger - code 80000007 (first chance)
+ntdll!NtWaitForAlertByThreadId+0x14:
+00007fff`37c03e64 c3              ret
+0:000> cdb: Reading initial command '~*kc 40; q'
+
+.  0  Id: 14f8.1388 Suspend: 1 Teb: 000000bb`6eda6000 Unfrozen "main"
+Call Site
+ntdll!NtWaitForAlertByThreadId
+ntdll!RtlpWaitOnAddressWithTimeout
+ntdll!RtlpWaitOnAddress
+ntdll!RtlWaitOnAddress
+*** WARNING: Unable to verify checksum for C:\Users\ui4me_test\.cargo\bin\ui4me-host.exe
+KERNELBASE!WaitOnAddress
+ui4me_host
+ui4me_host
+ui4me_host
+user32!UserCallWinProcCheckWow
+user32!CallWindowProcW
+ui4me_host
+user32!UserCallWinProcCheckWow
+user32!SendMessageWorker
+user32!SendMessageW
+imm32!CtfImmGenerateMessage
+MSCTF!CicInputContext::GenerateMessage
+MSCTF!CEditSessionCompositionComplete::CompComplete
+MSCTF!CEditSessionObject::DoEditSession
+textinputframework!CInputContext::_DoEditSession
+textinputframework!CInputContext::_EditSessionQiCallback
+textinputframework!CInputContext::OnLockGranted
+textinputframework!CACPWrap::OnLockGranted
+MSCTF!CTextStoreImpl::RequestLock
+textinputframework!CInputContext::_QueueItem
+textinputframework!CInputContext::RequestEditSession
+MSCTF!CEditSessionObject::RequestEditSession
+MSCTF!EscbCompComplete
+MSCTF!CicBridge::Notify
+MSCTF!_NotifyIME
+imm32!ImmNotifyIME
+MSCTF!ImeSetActiveContext
+imm32!ImmSetActiveContext
+imm32!ImmAssociateContextEx
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+user32!UserCallWinProcCheckWow
+user32!DispatchMessageWorker
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+   1  Id: 14f8.c40 Suspend: 1 Teb: 000000bb`6edac000 Unfrozen "ui4me-log-writer"
+Call Site
+ntdll!NtWaitForAlertByThreadId
+ntdll!RtlpWaitOnAddressWithTimeout
+ntdll!RtlpWaitOnAddress
+ntdll!RtlWaitOnAddress
+KERNELBASE!WaitOnAddress
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+   2  Id: 14f8.19b0 Suspend: 1 Teb: 000000bb`6edae000 Unfrozen "ui4me-ipc-terminal"
+Call Site
+ntdll!NtWaitForAlertByThreadId
+ntdll!RtlpWaitOnAddressWithTimeout
+ntdll!RtlpWaitOnAddress
+ntdll!RtlWaitOnAddress
+KERNELBASE!WaitOnAddress
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+   3  Id: 14f8.cfc Suspend: 1 Teb: 000000bb`6edb0000 Unfrozen "ui4me-ipc-accept"
+Call Site
+ntdll!NtWaitForSingleObject
+KERNELBASE!WaitForSingleObjectEx
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+   4  Id: 14f8.1bd8 Suspend: 1 Teb: 000000bb`6edb2000 Unfrozen "ui4me-backend-stdout"
+Call Site
+ntdll!NtReadFile
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+   5  Id: 14f8.185c Suspend: 1 Teb: 000000bb`6edb4000 Unfrozen "ui4me-backend-stderr"
+Call Site
+ntdll!NtReadFile
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+   6  Id: 14f8.878 Suspend: 1 Teb: 000000bb`6edb6000 Unfrozen "ui4me-ipc-write-1"
+Call Site
+ntdll!NtWaitForAlertByThreadId
+ntdll!RtlpWaitOnAddressWithTimeout
+ntdll!RtlpWaitOnAddress
+ntdll!RtlWaitOnAddress
+KERNELBASE!WaitOnAddress
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+   7  Id: 14f8.1324 Suspend: 1 Teb: 000000bb`6edb8000 Unfrozen "ui4me-ipc-read-1"
+Call Site
+ntdll!NtWaitForSingleObject
+KERNELBASE!WaitForSingleObjectEx
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+   8  Id: 14f8.1bc0 Suspend: 1 Teb: 000000bb`6edc0000 Unfrozen "softbuffer_0.4.8_dc_allocator"
+Call Site
+ntdll!NtWaitForAlertByThreadId
+ntdll!RtlpWaitOnAddressWithTimeout
+ntdll!RtlpWaitOnAddress
+ntdll!RtlWaitOnAddress
+KERNELBASE!WaitOnAddress
+ui4me_host
+ui4me_host
+ui4me_host
+ui4me_host
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+   9  Id: 14f8.148 Suspend: 1 Teb: 000000bb`6edc4000 Unfrozen "ui4me-assets-0"
+Call Site
+ntdll!NtWaitForAlertByThreadId
+ntdll!RtlpWaitOnAddressWithTimeout
+ntdll!RtlpWaitOnAddress
+ntdll!RtlWaitOnAddress
+KERNELBASE!WaitOnAddress
+ui4me_host
+ui4me_host
+ui4me_host
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+  10  Id: 14f8.884 Suspend: 1 Teb: 000000bb`6edc6000 Unfrozen "ui4me-assets-1"
+Call Site
+ntdll!NtWaitForAlertByThreadId
+ntdll!RtlpWaitOnAddressWithTimeout
+ntdll!RtlpWaitOnAddress
+ntdll!RtlWaitOnAddress
+KERNELBASE!WaitOnAddress
+ui4me_host
+ui4me_host
+ui4me_host
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+  11  Id: 14f8.14dc Suspend: 1 Teb: 000000bb`6edc8000 Unfrozen
+Call Site
+ntdll!NtWaitForMultipleObjects
+KERNELBASE!WaitForMultipleObjectsEx
+KERNELBASE!WaitForMultipleObjects
+uiautomationcore!OverlappedIOManager::IoThreadProc
+uiautomationcore!OverlappedIOManager::StaticIoThreadProc
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+  12  Id: 14f8.1468 Suspend: 1 Teb: 000000bb`6edca000 Unfrozen
+Call Site
+ntdll!NtWaitForWorkViaWorkerFactory
+ntdll!TppWorkerThread
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+  13  Id: 14f8.e8 Suspend: 1 Teb: 000000bb`6edd4000 Unfrozen
+Call Site
+ntdll!NtWaitForMultipleObjects
+KERNELBASE!WaitForMultipleObjectsEx
+combase!WaitCoalesced
+combase!CRpcThread::WorkerLoop
+combase!CRpcThreadCache::RpcWorkerThreadEntry
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+  14  Id: 14f8.ab8 Suspend: 1 Teb: 000000bb`6edf0000 Unfrozen
+Call Site
+win32u!NtUserMsgWaitForMultipleObjectsEx
+user32!RealMsgWaitForMultipleObjectsEx
+DUser!CoreSC::xwProcessNL
+DUser!MphProcessMessage
+user32!_ClientGetMessageMPH
+ntdll!KiUserCallbackDispatcherContinue
+win32u!NtUserGetMessage
+user32!GetMessageW
+DUI70!StartMessagePump
+msctfuimanager!CCommandingUI::_UIThreadProc
+msctfuimanager!CCommandingUI::UIThreadProc
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+  15  Id: 14f8.7d0 Suspend: 1 Teb: 000000bb`6edf2000 Unfrozen
+Call Site
+win32u!NtUserMsgWaitForMultipleObjectsEx
+user32!RealMsgWaitForMultipleObjectsEx
+DUser!CoreSC::xwProcessNL
+DUser!GetMessageExA
+DUser!ResourceManager::SharedThreadProc
+msvcrt!_callthreadstartex
+msvcrt!_threadstartex
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+  16  Id: 14f8.a48 Suspend: 1 Teb: 000000bb`6edf6000 Unfrozen
+Call Site
+win32u!NtUserMsgWaitForMultipleObjectsEx
+user32!RealMsgWaitForMultipleObjectsEx
+DUser!CoreSC::xwProcessNL
+DUser!MphProcessMessage
+user32!_ClientGetMessageMPH
+ntdll!KiUserCallbackDispatcherContinue
+win32u!NtUserGetMessage
+user32!GetMessageW
+msctfuimanager!CCandidateWindow::_UIThreadProc
+msctfuimanager!CCandidateWindow::s_UIThreadProc
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+  17  Id: 14f8.13dc Suspend: 1 Teb: 000000bb`6edfc000 Unfrozen
+Call Site
+ntdll!NtWaitForWorkViaWorkerFactory
+ntdll!TppWorkerThread
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+
+  18  Id: 14f8.928 Suspend: 1 Teb: 000000bb`6edfe000 Unfrozen "DManip Delegate Thread"
+Call Site
+win32u!NtUserMsgWaitForMultipleObjectsEx
+user32!RealMsgWaitForMultipleObjectsEx
+user32!MsgWaitForMultipleObjects
+directmanipulation!CManagerImpl::_RunDelegateThread
+directmanipulation!CManagerImpl::_DelegateThreadProc
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+quit:
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'

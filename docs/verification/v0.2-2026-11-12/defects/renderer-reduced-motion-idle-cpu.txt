@@ -1,0 +1,4 @@
+Reduced motion ignored after environment change (renderer)
+Before fix: measured idle host CPU 26.7% with set_environment(reduced_motion=reduce); removing the animated element dropped it to 0.2%.
+Root cause: a media-environment change rebuilds the stylist and adopts running animations without comparing against the previous style, so an animation removed by the new rules (animation: none) kept ticking.
+After fix: idle host CPU 0.23% (release, measure_resources --renderer); regression test reduced_motion_media_query_stops_animation_wakeups.

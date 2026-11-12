@@ -1,0 +1,136 @@
+
+************* Preparing the environment for Debugger Extensions Gallery repositories **************
+   ExtensionRepository : Implicit
+   UseExperimentalFeatureForNugetShare : true
+   AllowNugetExeUpdate : true
+   NonInteractiveNuget : true
+   AllowNugetMSCredentialProviderInstall : true
+   AllowParallelInitializationOfLocalRepositories : true
+
+   EnableRedirectToV8JsProvider : false
+
+   -- Configuring repositories
+      ----> Repository : LocalInstalled, Enabled: true
+      ----> Repository : UserExtensions, Enabled: true
+
+>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.000 seconds
+
+************* Waiting for Debugger Extensions Gallery to Initialize **************
+
+>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.047 seconds
+   ----> Repository : UserExtensions, Enabled: true, Packages count: 0
+   ----> Repository : LocalInstalled, Enabled: true, Packages count: 30
+
+Microsoft (R) Windows Debugger Version 10.0.26100.7705 AMD64
+Copyright (c) Microsoft Corporation. All rights reserved.
+
+*** wait with pending attach
+
+************* Path validation summary **************
+Response                         Time (ms)     Location
+OK                                             F:\ui4me\src\target\debug
+Deferred                                       srv*F:\ui4me\symcache*https://msdl.microsoft.com/download/symbols
+Symbol search path is: F:\ui4me\src\target\debug;srv*F:\ui4me\symcache*https://msdl.microsoft.com/download/symbols
+Executable search path is: 
+WARNING: Process 4544 is not attached as a debuggee
+         The process can be examined but debug events will not be received
+......................................................
+Loading unloaded module list
+...
+(11c0.f68): Wake debugger - code 80000007 (first chance)
+ntdll!NtWaitForAlertByThreadId+0x14:
+00007fff`37c03e64 c3              ret
+0:000> cdb: Reading initial command '~0kc 80; q'
+Call Site
+ntdll!NtWaitForAlertByThreadId
+ntdll!RtlpWaitOnAddressWithTimeout
+ntdll!RtlpWaitOnAddress
+ntdll!RtlWaitOnAddress
+*** WARNING: Unable to verify checksum for F:\ui4me\src\target\debug\ui4me-host.exe
+KERNELBASE!WaitOnAddress
+ui4me_host!std::sys::sync::futex::windows::wait_on_address
+ui4me_host!std::sys::sync::futex::windows::futex_wait
+ui4me_host!std::sys::sync::mutex::futex::Mutex::lock_contended
+ui4me_host!RNCNvNtCs3feKsEUMYEN_11winit_win3210event_loop28public_window_callback_inners2_0B5_.llvm.12509741913930008333
+ui4me_host!RINvMs1_NtNtCs3feKsEUMYEN_11winit_win3210event_loop6runnerNtB6_15EventLoopRunner12catch_unwinduNCNvB8_28public_window_callback_inners2_0EBa_
+ui4me_host!RNvNtCs3feKsEUMYEN_11winit_win3210event_loop22public_window_callback
+user32!UserCallWinProcCheckWow
+user32!CallWindowProcW
+ui4me_host!RNvMs2_NtCsg1aDjJ6Ud3l_5alloc7raw_vecNtB5_11RawVecInner16shrink_uncheckedCs9ETaOExLZwa_17accesskit_windows
+user32!UserCallWinProcCheckWow
+user32!SendMessageWorker
+user32!SendMessageW
+imm32!CtfImmGenerateMessage
+MSCTF!CicInputContext::GenerateMessage
+MSCTF!CEditSessionCompositionComplete::CompComplete
+MSCTF!CEditSessionObject::DoEditSession
+textinputframework!CInputContext::_DoEditSession
+textinputframework!CInputContext::_EditSessionQiCallback
+textinputframework!CInputContext::OnLockGranted
+textinputframework!CACPWrap::OnLockGranted
+MSCTF!CTextStoreImpl::RequestLock
+textinputframework!CInputContext::_QueueItem
+textinputframework!CInputContext::RequestEditSession
+MSCTF!CEditSessionObject::RequestEditSession
+MSCTF!EscbCompComplete
+MSCTF!CicBridge::Notify
+MSCTF!_NotifyIME
+imm32!ImmNotifyIME
+MSCTF!ImeSetActiveContext
+imm32!ImmSetActiveContext
+imm32!ImmAssociateContextEx
+ui4me_host!RNCNvXs5_NtCs3feKsEUMYEN_11winit_win326windowNtB7_6WindowNtNtCs1vpJAmxjyBG_10winit_core6window6Window18request_ime_update0B9_.llvm.3569729696061708312
+ui4me_host!RINvMsf_NtCs3feKsEUMYEN_11winit_win3210event_loopNtB6_23EventLoopThreadExecutor17execute_in_threadNCNvXs5_NtB8_6windowNtB1G_6WindowNtNtCs1vpJAmxjyBG_10winit_core6window6Window18request_ime_update0EB8_
+ui4me_host!RNvXs5_NtCs3feKsEUMYEN_11winit_win326windowNtB5_6WindowNtNtCs1vpJAmxjyBG_10winit_core6window6Window18request_ime_update
+ui4me_host!ui4me_host::host::document_native::update_ime
+ui4me_host!ui4me_host::host::document_native::impl$0::refresh_document::closure$0
+ui4me_host!ui4me_host::host::Host::refresh_document
+ui4me_host!ui4me_host::host::Host::refresh
+ui4me_host!ui4me_host::host::Host::document_changed
+ui4me_host!ui4me_host::host::Host::document_input
+ui4me_host!ui4me_host::host::Host::document_window_event
+ui4me_host!ui4me_host::host::native::impl$1::window_event
+ui4me_host!winit_core::application::impl$0::window_event<ui4me_host::host::Host>
+ui4me_host!RNvMs2_NtNtCs3feKsEUMYEN_11winit_win3210event_loop6runnerNtB5_15EventLoopRunner15call_new_events.llvm.12509741913930008333
+ui4me_host!RNvMs2_NtNtCs3feKsEUMYEN_11winit_win3210event_loop6runnerNtB5_15EventLoopRunner10send_event
+ui4me_host!RNCNvNtCs3feKsEUMYEN_11winit_win3210event_loop28public_window_callback_inners2_0B5_.llvm.12509741913930008333
+ui4me_host!RINvMs1_NtNtCs3feKsEUMYEN_11winit_win3210event_loop6runnerNtB6_15EventLoopRunner12catch_unwinduNCNvB8_28public_window_callback_inners2_0EBa_
+ui4me_host!RNvNtCs3feKsEUMYEN_11winit_win3210event_loop22public_window_callback
+user32!UserCallWinProcCheckWow
+user32!CallWindowProcW
+ui4me_host!RNvMs2_NtCsg1aDjJ6Ud3l_5alloc7raw_vecNtB5_11RawVecInner16shrink_uncheckedCs9ETaOExLZwa_17accesskit_windows
+user32!UserCallWinProcCheckWow
+user32!DispatchMessageWorker
+ui4me_host!RNvMs6_NtCs3feKsEUMYEN_11winit_win3210event_loopNtB5_9EventLoop24dispatch_peeked_messages
+ui4me_host!winit_win32::event_loop::EventLoop::run_app_on_demand<ref_mut$<ui4me_host::host::Host> >
+ui4me_host!winit_win32::event_loop::impl$9::run_app<ui4me_host::host::Host>
+ui4me_host!winit::event_loop::EventLoop::run_app<ui4me_host::host::Host>
+ui4me_host!ui4me_host::host::run
+ui4me_host!ui4me_host::execute
+ui4me_host!ui4me_host::main
+ui4me_host!core::ops::function::FnOnce::call_once<void (*)(),tuple$<> >
+ui4me_host!std::sys::backtrace::__rust_begin_short_backtrace<void (*)(),tuple$<> >
+ui4me_host!std::rt::lang_start::closure$0<tuple$<> >
+ui4me_host!std::rt::lang_start_internal::closure$0
+ui4me_host!std::panicking::catch_unwind::do_call
+ui4me_host!std::panicking::catch_unwind
+ui4me_host!std::panic::catch_unwind
+ui4me_host!std::rt::lang_start_internal
+ui4me_host!std::rt::lang_start<tuple$<> >
+ui4me_host!main
+ui4me_host!invoke_main
+ui4me_host!__scrt_common_main_seh
+KERNEL32!BaseThreadInitThunk
+ntdll!RtlUserThreadStart
+quit:
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\atlmfc.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\ObjectiveC.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\concurrency.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\cpp_rest.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\stl.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Data.Json.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Geolocation.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Devices.Sensors.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\Windows.Media.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\windows.natvis'
+NatVis script unloaded from 'C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\Visualizers\winrt.natvis'

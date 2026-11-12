@@ -1,0 +1,193 @@
+{
+  "schema": 1,
+  "time_utc": "2026-11-12T21:06:20.029332+00:00",
+  "host": "C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe",
+  "source_sha256": "7f009efe6ab04caf9d1b91306cf8c637260f3d5ceb441043823cfbef61119e27",
+  "surface": "probe",
+  "first_frame_scope": "First native window frame; not proof that asynchronous document resources are visible",
+  "readiness_scope": "Probe created",
+  "platform": "Windows-2022Server-10.0.20348-SP0",
+  "python": "3.13.17",
+  "cpu_metric": "Windows: GetProcessTimes kernel+user time",
+  "memory_metric": "Windows: private bytes and working set (GetProcessMemoryInfo)",
+  "raw_directory": "F:\\ui4me\\verification\\m6-probe-measurements-raw-c73ff916",
+  "startup": [
+    {
+      "startup_to_ready_ms": 104.1,
+      "first_frame_ms": 103.0,
+      "first_frame_since_host_start_ms": 93,
+      "host_exit_code": 0
+    },
+    {
+      "startup_to_ready_ms": 116.4,
+      "first_frame_ms": 114.8,
+      "first_frame_since_host_start_ms": 96,
+      "host_exit_code": 0
+    },
+    {
+      "startup_to_ready_ms": 105.6,
+      "first_frame_ms": 104.5,
+      "first_frame_since_host_start_ms": 95,
+      "host_exit_code": 0
+    },
+    {
+      "startup_to_ready_ms": 104.9,
+      "first_frame_ms": 104.0,
+      "first_frame_since_host_start_ms": 94,
+      "host_exit_code": 0
+    },
+    {
+      "startup_to_ready_ms": 104.5,
+      "first_frame_ms": 103.2,
+      "first_frame_since_host_start_ms": 91,
+      "host_exit_code": 0
+    }
+  ],
+  "sustained": {
+    "startup_to_ready_ms": 117.8,
+    "idle": {
+      "seconds": 27.0,
+      "host_cpu_percent": 0.0,
+      "backend_cpu_percent": 0.058,
+      "memory_after_idle": {
+        "host": {
+          "private_kib": 14644,
+          "working_set_kib": 27764
+        },
+        "backend": {
+          "private_kib": 14780,
+          "working_set_kib": 22184
+        },
+        "combined": {
+          "private_kib": 29424,
+          "working_set_kib": 49948
+        }
+      }
+    },
+    "window_cycles": [
+      {
+        "cycles": 50,
+        "host": {
+          "private_kib": 14808,
+          "working_set_kib": 28024
+        },
+        "backend": {
+          "private_kib": 14780,
+          "working_set_kib": 22264
+        },
+        "combined": {
+          "private_kib": 29588,
+          "working_set_kib": 50288
+        }
+      },
+      {
+        "cycles": 100,
+        "host": {
+          "private_kib": 14808,
+          "working_set_kib": 28032
+        },
+        "backend": {
+          "private_kib": 14780,
+          "working_set_kib": 22276
+        },
+        "combined": {
+          "private_kib": 29588,
+          "working_set_kib": 50308
+        }
+      },
+      {
+        "cycles": 150,
+        "host": {
+          "private_kib": 14808,
+          "working_set_kib": 28036
+        },
+        "backend": {
+          "private_kib": 14780,
+          "working_set_kib": 22284
+        },
+        "combined": {
+          "private_kib": 29588,
+          "working_set_kib": 50320
+        }
+      },
+      {
+        "cycles": 200,
+        "host": {
+          "private_kib": 14808,
+          "working_set_kib": 28048
+        },
+        "backend": {
+          "private_kib": 14780,
+          "working_set_kib": 22284
+        },
+        "combined": {
+          "private_kib": 29588,
+          "working_set_kib": 50332
+        }
+      },
+      {
+        "cycles": 250,
+        "host": {
+          "private_kib": 14812,
+          "working_set_kib": 28056
+        },
+        "backend": {
+          "private_kib": 14780,
+          "working_set_kib": 22284
+        },
+        "combined": {
+          "private_kib": 29592,
+          "working_set_kib": 50340
+        }
+      },
+      {
+        "cycles": 300,
+        "host": {
+          "private_kib": 14812,
+          "working_set_kib": 28072
+        },
+        "backend": {
+          "private_kib": 14780,
+          "working_set_kib": 22288
+        },
+        "combined": {
+          "private_kib": 29592,
+          "working_set_kib": 50360
+        }
+      },
+      {
+        "cycles": 350,
+        "host": {
+          "private_kib": 14812,
+          "working_set_kib": 28072
+        },
+        "backend": {
+          "private_kib": 14780,
+          "working_set_kib": 22288
+        },
+        "combined": {
+          "private_kib": 29592,
+          "working_set_kib": 50360
+        }
+      },
+      {
+        "cycles": 400,
+        "host": {
+          "private_kib": 14736,
+          "working_set_kib": 28036
+        },
+        "backend": {
+          "private_kib": 14720,
+          "working_set_kib": 22260
+        },
+        "combined": {
+          "private_kib": 29456,
+          "working_set_kib": 50296
+        }
+      }
+    ],
+    "first_frame_ms": 116.8,
+    "first_frame_since_host_start_ms": 93,
+    "host_exit_code": 0
+  }
+}

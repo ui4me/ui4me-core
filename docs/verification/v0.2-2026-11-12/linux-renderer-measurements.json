@@ -1,0 +1,585 @@
+{
+  "schema": 1,
+  "time_utc": "2026-11-12T20:11:15.085478+00:00",
+  "host": "~/.cargo/bin/ui4me-host",
+  "source_sha256": "fd7fdfcb0718a123a2a7eb3db09d084762fad6af5b78b04ab214ec601819cb4f",
+  "surface": "renderer",
+  "first_frame_scope": "First native window frame; not proof that asynchronous document resources are visible",
+  "readiness_scope": "HTML loaded and resources settled, reduced motion enabled",
+  "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+  "python": "3.13.5",
+  "cpu_metric": "Linux: summed per-thread schedstat runtime",
+  "memory_metric": "Linux: PSS/RSS/shared/private from smaps_rollup",
+  "raw_directory": "~/projects/ui4me-core/verification/v0.2/linux/m5/renderer-measurements-raw-edada21a",
+  "startup": [
+    {
+      "startup_to_ready_ms": 526.6,
+      "first_frame_ms": 98.6,
+      "first_frame_since_host_start_ms": 40,
+      "host_exit_code": 0
+    },
+    {
+      "startup_to_ready_ms": 533.7,
+      "first_frame_ms": 104.4,
+      "first_frame_since_host_start_ms": 41,
+      "host_exit_code": 0
+    },
+    {
+      "startup_to_ready_ms": 525.4,
+      "first_frame_ms": 93.3,
+      "first_frame_since_host_start_ms": 43,
+      "host_exit_code": 0
+    },
+    {
+      "startup_to_ready_ms": 532.9,
+      "first_frame_ms": 104.6,
+      "first_frame_since_host_start_ms": 42,
+      "host_exit_code": 0
+    },
+    {
+      "startup_to_ready_ms": 511.5,
+      "first_frame_ms": 89.7,
+      "first_frame_since_host_start_ms": 40,
+      "host_exit_code": 0
+    }
+  ],
+  "sustained": {
+    "startup_to_ready_ms": 537.8,
+    "idle": {
+      "seconds": 27.0,
+      "host_cpu_percent": 0.234,
+      "backend_cpu_percent": 0.275,
+      "memory_after_idle": {
+        "host": {
+          "rss_kib": 60012,
+          "pss_kib": 47434,
+          "shared_kib": 16956,
+          "private_kib": 43056
+        },
+        "backend": {
+          "rss_kib": 22108,
+          "pss_kib": 12684,
+          "shared_kib": 11424,
+          "private_kib": 10684
+        },
+        "combined": {
+          "rss_kib": 82120,
+          "pss_kib": 60118,
+          "shared_kib": 28380,
+          "private_kib": 53740
+        }
+      }
+    },
+    "window_cycles": [
+      {
+        "cycles": 50,
+        "host": {
+          "rss_kib": 71200,
+          "pss_kib": 58622,
+          "shared_kib": 16956,
+          "private_kib": 54244
+        },
+        "backend": {
+          "rss_kib": 22156,
+          "pss_kib": 12733,
+          "shared_kib": 11424,
+          "private_kib": 10732
+        },
+        "combined": {
+          "rss_kib": 93356,
+          "pss_kib": 71355,
+          "shared_kib": 28380,
+          "private_kib": 64976
+        }
+      },
+      {
+        "cycles": 100,
+        "host": {
+          "rss_kib": 72376,
+          "pss_kib": 59798,
+          "shared_kib": 16956,
+          "private_kib": 55420
+        },
+        "backend": {
+          "rss_kib": 22156,
+          "pss_kib": 13348,
+          "shared_kib": 11424,
+          "private_kib": 10732
+        },
+        "combined": {
+          "rss_kib": 94532,
+          "pss_kib": 73146,
+          "shared_kib": 28380,
+          "private_kib": 66152
+        }
+      },
+      {
+        "cycles": 150,
+        "host": {
+          "rss_kib": 73224,
+          "pss_kib": 60647,
+          "shared_kib": 16956,
+          "private_kib": 56268
+        },
+        "backend": {
+          "rss_kib": 22156,
+          "pss_kib": 13349,
+          "shared_kib": 11424,
+          "private_kib": 10732
+        },
+        "combined": {
+          "rss_kib": 95380,
+          "pss_kib": 73996,
+          "shared_kib": 28380,
+          "private_kib": 67000
+        }
+      },
+      {
+        "cycles": 200,
+        "host": {
+          "rss_kib": 74064,
+          "pss_kib": 61487,
+          "shared_kib": 16956,
+          "private_kib": 57108
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13376,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 96224,
+          "pss_kib": 74863,
+          "shared_kib": 28380,
+          "private_kib": 67844
+        }
+      },
+      {
+        "cycles": 250,
+        "host": {
+          "rss_kib": 74912,
+          "pss_kib": 62335,
+          "shared_kib": 16956,
+          "private_kib": 57956
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13376,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 97072,
+          "pss_kib": 75711,
+          "shared_kib": 28380,
+          "private_kib": 68692
+        }
+      },
+      {
+        "cycles": 300,
+        "host": {
+          "rss_kib": 75724,
+          "pss_kib": 63147,
+          "shared_kib": 16956,
+          "private_kib": 58768
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13375,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 97884,
+          "pss_kib": 76522,
+          "shared_kib": 28380,
+          "private_kib": 69504
+        }
+      },
+      {
+        "cycles": 350,
+        "host": {
+          "rss_kib": 76900,
+          "pss_kib": 64323,
+          "shared_kib": 16956,
+          "private_kib": 59944
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13375,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 99060,
+          "pss_kib": 77698,
+          "shared_kib": 28380,
+          "private_kib": 70680
+        }
+      },
+      {
+        "cycles": 400,
+        "host": {
+          "rss_kib": 77716,
+          "pss_kib": 65139,
+          "shared_kib": 16956,
+          "private_kib": 60760
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13375,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 99876,
+          "pss_kib": 78514,
+          "shared_kib": 28380,
+          "private_kib": 71496
+        }
+      }
+    ],
+    "dom_cycles": [
+      {
+        "dom_cycles": 50,
+        "host": {
+          "rss_kib": 77888,
+          "pss_kib": 65311,
+          "shared_kib": 16956,
+          "private_kib": 60932
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13375,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 100048,
+          "pss_kib": 78686,
+          "shared_kib": 28380,
+          "private_kib": 71668
+        }
+      },
+      {
+        "dom_cycles": 100,
+        "host": {
+          "rss_kib": 77888,
+          "pss_kib": 65311,
+          "shared_kib": 16956,
+          "private_kib": 60932
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13375,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 100048,
+          "pss_kib": 78686,
+          "shared_kib": 28380,
+          "private_kib": 71668
+        }
+      },
+      {
+        "dom_cycles": 150,
+        "host": {
+          "rss_kib": 77892,
+          "pss_kib": 65315,
+          "shared_kib": 16956,
+          "private_kib": 60936
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13375,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 100052,
+          "pss_kib": 78690,
+          "shared_kib": 28380,
+          "private_kib": 71672
+        }
+      },
+      {
+        "dom_cycles": 200,
+        "host": {
+          "rss_kib": 77896,
+          "pss_kib": 65319,
+          "shared_kib": 16956,
+          "private_kib": 60940
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13375,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 100056,
+          "pss_kib": 78694,
+          "shared_kib": 28380,
+          "private_kib": 71676
+        }
+      },
+      {
+        "dom_cycles": 250,
+        "host": {
+          "rss_kib": 77896,
+          "pss_kib": 65318,
+          "shared_kib": 16956,
+          "private_kib": 60940
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13352,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 100056,
+          "pss_kib": 78670,
+          "shared_kib": 28380,
+          "private_kib": 71676
+        }
+      },
+      {
+        "dom_cycles": 300,
+        "host": {
+          "rss_kib": 77896,
+          "pss_kib": 65318,
+          "shared_kib": 16956,
+          "private_kib": 60940
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13352,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 100056,
+          "pss_kib": 78670,
+          "shared_kib": 28380,
+          "private_kib": 71676
+        }
+      },
+      {
+        "dom_cycles": 350,
+        "host": {
+          "rss_kib": 77896,
+          "pss_kib": 65319,
+          "shared_kib": 16956,
+          "private_kib": 60940
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13376,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 100056,
+          "pss_kib": 78695,
+          "shared_kib": 28380,
+          "private_kib": 71676
+        }
+      },
+      {
+        "dom_cycles": 400,
+        "host": {
+          "rss_kib": 77896,
+          "pss_kib": 65319,
+          "shared_kib": 16956,
+          "private_kib": 60940
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13376,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 100056,
+          "pss_kib": 78695,
+          "shared_kib": 28380,
+          "private_kib": 71676
+        }
+      },
+      {
+        "dom_cycles": 450,
+        "host": {
+          "rss_kib": 77896,
+          "pss_kib": 65319,
+          "shared_kib": 16956,
+          "private_kib": 60940
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13376,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 100056,
+          "pss_kib": 78695,
+          "shared_kib": 28380,
+          "private_kib": 71676
+        }
+      },
+      {
+        "dom_cycles": 500,
+        "host": {
+          "rss_kib": 77900,
+          "pss_kib": 65323,
+          "shared_kib": 16956,
+          "private_kib": 60944
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13376,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 100060,
+          "pss_kib": 78699,
+          "shared_kib": 28380,
+          "private_kib": 71680
+        }
+      },
+      {
+        "dom_cycles": 550,
+        "host": {
+          "rss_kib": 77900,
+          "pss_kib": 65323,
+          "shared_kib": 16956,
+          "private_kib": 60944
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13376,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 100060,
+          "pss_kib": 78699,
+          "shared_kib": 28380,
+          "private_kib": 71680
+        }
+      },
+      {
+        "dom_cycles": 600,
+        "host": {
+          "rss_kib": 77900,
+          "pss_kib": 65323,
+          "shared_kib": 16956,
+          "private_kib": 60944
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13376,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 100060,
+          "pss_kib": 78699,
+          "shared_kib": 28380,
+          "private_kib": 71680
+        }
+      },
+      {
+        "dom_cycles": 650,
+        "host": {
+          "rss_kib": 77900,
+          "pss_kib": 65323,
+          "shared_kib": 16956,
+          "private_kib": 60944
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13376,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 100060,
+          "pss_kib": 78699,
+          "shared_kib": 28380,
+          "private_kib": 71680
+        }
+      },
+      {
+        "dom_cycles": 700,
+        "host": {
+          "rss_kib": 77900,
+          "pss_kib": 65323,
+          "shared_kib": 16956,
+          "private_kib": 60944
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13375,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 100060,
+          "pss_kib": 78698,
+          "shared_kib": 28380,
+          "private_kib": 71680
+        }
+      },
+      {
+        "dom_cycles": 750,
+        "host": {
+          "rss_kib": 77900,
+          "pss_kib": 65323,
+          "shared_kib": 16956,
+          "private_kib": 60944
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13375,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 100060,
+          "pss_kib": 78698,
+          "shared_kib": 28380,
+          "private_kib": 71680
+        }
+      },
+      {
+        "dom_cycles": 800,
+        "host": {
+          "rss_kib": 77900,
+          "pss_kib": 65323,
+          "shared_kib": 16956,
+          "private_kib": 60944
+        },
+        "backend": {
+          "rss_kib": 22160,
+          "pss_kib": 13375,
+          "shared_kib": 11424,
+          "private_kib": 10736
+        },
+        "combined": {
+          "rss_kib": 100060,
+          "pss_kib": 78698,
+          "shared_kib": 28380,
+          "private_kib": 71680
+        }
+      }
+    ],
+    "first_frame_ms": 99.1,
+    "first_frame_since_host_start_ms": 41,
+    "host_exit_code": 0
+  }
+}

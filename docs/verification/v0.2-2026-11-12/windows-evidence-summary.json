@@ -1,0 +1,417 @@
+{
+ "schema": 1,
+ "platform": "windows",
+ "note": "Summary of the per-check evidence records referenced by the acceptance ledgers; raw logs/screenshots stay in the git-ignored verification/ tree (hashes listed).",
+ "checks": {
+  "N01": {
+   "outcome": "PASS",
+   "actions": [
+    "Launch 'UI4ME Desktop Workspace' from the Start Menu (Recently added)"
+   ],
+   "expected": "Hosted identity, icon, taskbar, no extra console",
+   "observed": "Launched by explorer.exe; backend python.exe child of the host; backend conhost has no window; taskbar 'U' icon",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "R11-start-menu-entries.png": "3ed4664601a9c7f7a0f3bab496810e6b39e6160021db06abe56418b2861eecad",
+    "R11-processes.txt": "938c1d51d4eddaaabadd2a4f7f9d48e18ed98b8c77cd9ed4c5637f6a853e31c2",
+    "R11-rdp-after-launch.png": "2666c409b4bdaf9634502f6a77974798dd372baaf35caffeae579dc774fffa38"
+   }
+  },
+  "N02": {
+   "outcome": "PASS",
+   "actions": [
+    "Probe started in a session job; second launch from the Start Menu 'UI4ME Host Reference' entry"
+   ],
+   "expected": "Second launch forwarded to the running instance",
+   "observed": "Running backend logged 'Second launch:' (app.activated); still one host and one backend",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "N02-N03-N04-N06-N07.txt": "a09480ea93e78a6108c8a588f16ebca9d7813c0e3f5faa7bc736c074cd36de52",
+    "N05-wprobe-host-output.log": "71d412c518837705959dc245ebbb0f973fe6361dc101eab66844c4d552d5450d"
+   }
+  },
+  "N03": {
+   "outcome": "PASS",
+   "actions": [
+    "Probe second window: MoveWindow resize, maximize, restore, minimize, restore, WM_CLOSE"
+   ],
+   "expected": "Window operations and asynchronous close decision",
+   "observed": "All operations reflected; WM_CLOSE -> backend 'Close accepted w2'",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "N02-N03-N04-N06-N07.txt": "a09480ea93e78a6108c8a588f16ebca9d7813c0e3f5faa7bc736c074cd36de52"
+   }
+  },
+  "N04": {
+   "outcome": "PASS",
+   "actions": [
+    "Probe <-> Notepad copy/paste with real Ctrl+C/V; renderer Notes <-> Notepad with Unicode; 2.2 MB clipboard text"
+   ],
+   "expected": "Bidirectional clipboard with another local app; oversized rejected",
+   "observed": "Probe->Notepad 'Probe to Notepad', Notepad->probe, Notepad->UI4ME Unicode text exact; 2.2 MB paste rejected ('Data transfer exceeds 1 MiB')",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "N02-N03-N04-N06-N07.txt": "a09480ea93e78a6108c8a588f16ebca9d7813c0e3f5faa7bc736c074cd36de52",
+    "R03.txt": "5172d6bc83f2a04e9cc742db404d2462272a8db0f2047cc09ffb26f40768f714"
+   }
+  },
+  "N05": {
+   "outcome": "PASS",
+   "actions": [
+    "Probe F3/F4/F5 with Escape; F3 select Unicode file; F4 save typed name; F5 select folder; F7 from second window; WM_CLOSE parent with dialog open; Ctrl+Q from second window with save dialog open"
+   ],
+   "expected": "IFileDialog owned/modal, cancellation and races",
+   "observed": "Dialogs owned by the probe window with owner disabled; results correct; F7 'client cancellation requested'; parent close and quit closed the dialogs and exited",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "N05.txt": "e585442ef94786eb313a91548c0575c3b36e0f9900afd0c0a6a2b693a68365b7",
+    "N05-open-dialog-rdp.png": "e9672e1b539d4ca980727a936d776a5ad89e5de0ee89b3d4732cd7feda9cef70",
+    "N05-folder-dialog-rdp.png": "c513d18544f21eb3060529267ac9e0a7b7cc4f22e1276409cbd23bbc1407128b",
+    "N05-wprobe2-host-output.log": "37b91400c05138c4b5f1ac057edf9adba9f0d9983599e7fb31148918f4e6e987",
+    "N05-wprobe3-host-output.log": "e590d4f95f40d6b431d9161c7aa26e956cdc8726bad5a01bd8e037b34bddcbb9"
+   }
+  },
+  "N06": {
+   "outcome": "PASS",
+   "actions": [
+    "Microsoft Pinyin in probe: preedit, commit, Escape cancel, selection replacement, Tab during composition"
+   ],
+   "expected": "Real IME composition, Unicode, caret; no hang on focus change",
+   "observed": "Commit 你好/世界 correct; Tab during composition left the window responsive. A GUI deadlock on focus change during composition was found and fixed (vendored winit-win32 patch); before/after evidence in m5",
+   "limitations": [
+    "Probe font lacks CJK glyphs (boxes); the HTML renderer uses system fallback"
+   ],
+   "evidence_files_sha256": {
+    "N02-N03-N04-N06-N07.txt": "a09480ea93e78a6108c8a588f16ebca9d7813c0e3f5faa7bc736c074cd36de52",
+    "N06-probe-pinyin-rdp.png": "62828eef6e12004b3c591ee642f362d28a120bdc33d806569e48f6fbd8c87a4a",
+    "R03-hang-release-stacks.txt": "35c224ff6b8fd8b196b1a51011edf19894f38d703f1240eb25275b0b3c60b0cc",
+    "R03-ime-focus-deadlock-fix.txt": "f57bc7219e49befb27c5851d6d1f19d3515b71af3f56351d319cee925c42b91f"
+   }
+  },
+  "N07": {
+   "outcome": "PASS",
+   "actions": [
+    "UIA tree of the probe; Tab focus; UIA InvokePattern on Copy"
+   ],
+   "expected": "UIA tree, focus and an action",
+   "observed": "Tab focus Copy/Paste/Open file; Invoke(Copy) placed the editor text on the clipboard",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "N07-probe-uia-tree.json": "1a81abad0df78b8894a033a0cc02a2bc8d24179ddb9195b54861f092d8d71681",
+    "N02-N03-N04-N06-N07.txt": "a09480ea93e78a6108c8a588f16ebca9d7813c0e3f5faa7bc736c074cd36de52"
+   }
+  },
+  "N08": {
+   "outcome": "PASS",
+   "actions": [
+    "RDP reconnect at /scale-desktop:150 with the app open; pointer and IME checks; reconnect at 100%"
+   ],
+   "expected": "DPI change re-render, correct pointer/IME, restored",
+   "observed": "App re-rendered at 150%; physical clicks hit Name/Notes; Pinyin committed; back at 100% with document state intact",
+   "limitations": [
+    "At 150% the window was clamped to the 1600x1000 work area, so it returned smaller at 100%"
+   ],
+   "evidence_files_sha256": {
+    "R06.txt": "4036c472fa0d8ff4030cd3edc03278d2b1450466cb054e4796d058a4cb9048b8",
+    "R06-150pct-rdp.png": "fc8782a328bee647718e931f645f3a5b56fe4dcac9e3e1f5741e127e016b55cc",
+    "R06-ime-150pct-rdp.png": "be65a2a76fb1769163f908c02ecce76f32fea47692ed69d84e0ed9ecf699b416",
+    "R06-150pct-insession.png": "1922656c17afd38fb96f59cb58f462256120fb56be2c5fd731a61494688303f9"
+   }
+  },
+  "N09": {
+   "outcome": "PASS",
+   "actions": [
+    "Native fault fixtures (freeze-close, freeze-quit, crash-after-ready with failure-UI Quit, freeze-quit --duration 0 with typing and Ctrl+Shift+Q); renderer --hold-callback and --crash-after-ready"
+   ],
+   "expected": "Responsive host-local UI and failure UI",
+   "observed": "All fixtures PASS (pending one BLOCKED by design after observation); typing while decision withheld; Ctrl+Shift+Q exits; failure surface with working Quit",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "faults.txt": "cf1643b9256859f0e2929d80cd2e3cdf1e981dfb05a54ff88a892d16c15ec54a",
+    "crash-native-report.json": "3484513fd2a9141a2c118ac9ba6673109fa22a8bff5b49d22174b60a798e564d",
+    "freeze-pending-report.json": "79ab4ca24a95cbe29594ac9e8fd9fb89257d70fbc71dcd982700d0ebb893ba83",
+    "faults-freeze-pending-rdp.png": "a325f8fd92352925ff375e846083dfa28a4d0fc81296569f1185d1ab9fbaf821",
+    "faults-crash-native2-rdp.png": "d227b601fc2f4594f755386744d78b9c940cc652ad9ca27d5b5691f2656e87b9",
+    "R09-crash-failure-ui-insession.png": "d2b34cb864ff22a85e71c0627e67cae9cd9c03883fbc7a0cf627b6d23a054d36"
+   }
+  },
+  "N10": {
+   "outcome": "PASS",
+   "actions": [
+    "run_faults managed-tree and managed-tree --kill-host with Windows Job Object containment"
+   ],
+   "expected": "Descendants cleaned after quit and forced host kill",
+   "observed": "Both PASS, containment 'Windows Job Object (backend assigned during creation)', 0 survivors",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "managed-tree-report.json": "1016005d5f1b62c3f40f3960acfa36edbf175b0dae76c1705851bd0cfcb53de0",
+    "managed-tree-kill-host-report.json": "aaca39e72f4089b8dea1688ec010d7a6bb72cca9f21508fb5dfc7e9cee9b7334"
+   }
+  },
+  "N11": {
+   "outcome": "PASS",
+   "actions": [
+    "run_example --external-target F:\\ui4me\\jobs\\n11-target.txt, F8, then Ctrl+Q; repeat with Stop-Process -Force on the host"
+   ],
+   "expected": "External app survives host exit",
+   "observed": "Notepad opened via desktop.open_external survived orderly quit and forced kill",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "N11.txt": "503a73481c46115a53916a8fb02fc89012b57a871dbb60d350ac037ed7706e93"
+   }
+  },
+  "N12": {
+   "outcome": "PASS",
+   "actions": [
+    "Installed renderer app and probe (%LOCALAPPDATA%) launched via Start Menu shortcuts"
+   ],
+   "expected": "Installed launch outside checkout/build directory",
+   "observed": "Host from %USERPROFILE%\\.cargo\\bin started by explorer.exe; backend and assets from the install directories",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "R11-processes.txt": "938c1d51d4eddaaabadd2a4f7f9d48e18ed98b8c77cd9ed4c5637f6a853e31c2",
+    "R11-start-menu-entries.png": "3ed4664601a9c7f7a0f3bab496810e6b39e6160021db06abe56418b2861eecad"
+   }
+  },
+  "N13": {
+   "outcome": "PASS",
+   "actions": [
+    "Drag a Unicode-named file from Explorer and text from WordPad into the probe with the real pointer"
+   ],
+   "expected": "File and text drops delivered",
+   "observed": "dropped_files ...\\dnd src\\drag-ž.txt and dropped_text 'Dragged text: Příliš'",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "N13.txt": "ab45c1b7d948e441c1f8709ef4a60be8f8b12d66561b85ca11f06be1be6760f0",
+    "N13-after-file-drop-rdp.png": "e1c13dd2c48b79c1004db9f2e61d20e310b7cb85cd758ed9cc814ac15d330547",
+    "N13-after-text-drop-rdp.png": "775ff61ebf611a8bde003b1883e893322a9a0e60ef79619f9bde1c35097382b2",
+    "N13-host-output.log": "f946fac6a5c14d2dc9f5561cd5be3c1a1b015d1ca5c6666fb4458b9856926627"
+   }
+  },
+  "N14": {
+   "outcome": "PASS",
+   "actions": [
+    "Kill the RDP client (session Disc) for ~28 s with the app running; reconnect; type; second Start Menu launch; Quit"
+   ],
+   "expected": "App survives RDP disconnect/reconnect, stays usable, single instance",
+   "observed": "Same host pid before/after; Name text preserved; typing works after reconnect; second launch forwarded; Quit exits",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "N14.txt": "002af54c94e95cd0aca7b196ddac47cb285d17d0267d223b94556c9bb0cb1eb3",
+    "N14-after-reconnect-rdp.png": "3d415c7e3490f16e31254bd6618945ed5c35d48137d668212abbe1037f05158a"
+   }
+  },
+  "N15": {
+   "outcome": "PASS",
+   "actions": [
+    "measure_resources.py (probe) --startup-runs 5 --idle 30 --cycles 400 --sample-every 50"
+   ],
+   "expected": "Measured startup/idle/memory/window cycles",
+   "observed": "startup-to-ready median 105 ms; idle CPU 0.00% (GetProcessTimes); host private 14.6 MB; window-cycle private bytes flat (-0.2 KiB/cycle)",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "probe-measurements.json": "2157517b0862ee4cc7b3e5040271ada91cb691c2677b4009de9bd267a49c3af3"
+   }
+  },
+  "R01": {
+   "outcome": "PASS",
+   "actions": [
+    "Start Menu launch; in-session GDI capture and UIA tree"
+   ],
+   "expected": "Local HTML/CSS/assets render natively without browser/network",
+   "observed": "Full styled document; no browser or HTTP processes in the session tree",
+   "limitations": [
+    "RDP-client screenshots show lossy codec tiles; in-session captures are the fidelity reference"
+   ],
+   "evidence_files_sha256": {
+    "R01-desktop-insession.png": "465de9fd3db9b91117469a97dc2faaf9d3974fd3320c0041d3851147e75f00d7",
+    "R01-uia-tree.json": "87b0dd8ebdef4f8e3ed3bfe20b4a1b96429c342064ffe8df8d515842b380cb52",
+    "R11-processes.txt": "938c1d51d4eddaaabadd2a4f7f9d48e18ed98b8c77cd9ed4c5637f6a853e31c2"
+   }
+  },
+  "R02": {
+   "outcome": "PASS",
+   "actions": [
+    "Real input over RDP with English input active: Name '<tag> & value', select, checkbox, radio, number, range, Add row, palette"
+   ],
+   "expected": "Literal text, one transaction per row, state reflected",
+   "observed": "Row 03 '<tag> & value'/High/No; status/count updated; palettes switch",
+   "limitations": [
+    "Two earlier runs with Pinyin unintentionally active are kept as R02-R04-invalid-ime-active*.txt and not used"
+   ],
+   "evidence_files_sha256": {
+    "R02-R04.txt": "8d5afd0ccf91354873eb80eb8138c0498b3cc9a625075475c09b8c9e6ea7c1cc",
+    "R02-select-open-rdp.png": "6201c9f915571a78564b32a8f3bd6865c86b1c73e06a44486dfb35ae014c5565",
+    "R02-light-palette-rdp.png": "fa099d304e1dede914e3d6c28c985d0f1909795bf892b98aee712a9ff3b1d86f",
+    "R02-input-indicator-before.png": "190180770622e975cb973139ce373caaabd32d5bca0347b6f8ae32cc31db90a0"
+   }
+  },
+  "R03": {
+   "outcome": "PASS",
+   "actions": [
+    "Notepad <-> UI4ME clipboard; Microsoft Pinyin preedit/commit/cancel/replace; focus change during composition by mouse click, UIA SetFocus and Tab"
+   ],
+   "expected": "Real IME and cross-app clipboard; no hang",
+   "observed": "All values correct; window never 'Not Responding' (regression for the fixed winit-win32 deadlock)",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "R03.txt": "5172d6bc83f2a04e9cc742db404d2462272a8db0f2047cc09ffb26f40768f714",
+    "R03-pinyin-preedit-textarea-rdp.png": "db1540aee70135e77c571fa2b8c6a8e7abc839fe2f558d016940d785e7add08b",
+    "R03-pinyin-preedit-input-rdp.png": "d6e2df58c457800d07ba7621c7a3e0a4d7289f219009598c732ef740d0897f5a",
+    "R03-hang-release-stacks.txt": "35c224ff6b8fd8b196b1a51011edf19894f38d703f1240eb25275b0b3c60b0cc",
+    "R03-hang-debug-stack.txt": "f3a391c0e1fe9f2f928a3ac5b69cca53ed926df507dac541525260f73368a950",
+    "R03-ime-focus-deadlock-fix.txt": "f57bc7219e49befb27c5851d6d1f19d3515b71af3f56351d319cee925c42b91f"
+   }
+  },
+  "R04": {
+   "outcome": "PASS",
+   "actions": [
+    "Tab order, Space/Enter activation, implicit submission, required validation, drag selection/cut/undo/redo, wheel over table"
+   ],
+   "expected": "Keyboard, default actions, hit testing and scrolling",
+   "observed": "Identical results to KDE",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "R02-R04.txt": "8d5afd0ccf91354873eb80eb8138c0498b3cc9a625075475c09b8c9e6ea7c1cc"
+   }
+  },
+  "R05": {
+   "outcome": "FAIL",
+   "actions": [
+    "UIA tree; ValuePattern.SetValue; TogglePattern; RangeValuePattern; InvokePattern(Add row); TextPattern range Select/GetSelection; NVDA 2026.3.1 portable keyboard journey with IO log"
+   ],
+   "expected": "Roles, values, states, actions and selection through UIA; real screen-reader speech",
+   "observed": "Tree/Value/Toggle/RangeValue/Invoke work and NVDA spoke labels, roles, values (incl. combobox 'High'), states and the live status; BUT an out-of-process UIA client calling ITextRangeProvider.Select() or ITextProvider.GetSelection() on a text field intermittently never returns (host stays responsive)",
+   "limitations": [
+    "Unresolved defect: UIA TextPattern Select/GetSelection client stall (see repro)"
+   ],
+   "evidence_files_sha256": {
+    "R05.txt": "b9d359d35009b0ec60b28b39ae9380388fb35d4b785b1789e71fbaac1fa06c3a",
+    "R05-uia-ops.txt": "cb0282e182d0ee8d08df2147009fc2b8081bcbc32fbecd62b6a6a3eb7f1de24d",
+    "R05-nvda-speech.txt": "f77e605730798532036f6d3ca306ec128f397e97fb655ae1dbe795ceff99cfd8",
+    "R05-nvda.log": "33e9e45c9c6e68187c0f0fcfd17a63a51f8293e965b86a0c5428feeface6b636",
+    "R05-uia-textpattern-stall.txt": "84af9790da17999266536dbed65324faf942150494ad2f69d9fdb09235ac5c77",
+    "R05-uia-textpattern-stall-debug-stacks.txt": "7993306a0d0a7b51d2cc76a10bfc9070c0ddaa869bd900d368efaf5eb95bb984",
+    "R05-uia-textpattern-repro.ps1": "0c4336f7d79fc176244a1970752c9b7a261973b25e0bc7bdf32a7d0009c26c8e"
+   }
+  },
+  "R06": {
+   "outcome": "PASS",
+   "actions": [
+    "Second document independence, maximize/minimize/restore/resize, WM_CLOSE and HTML close, narrow responsive layout, 150% via RDP reconnect"
+   ],
+   "expected": "Independent documents, correct geometry/focus at sizes/scales",
+   "observed": "All as expected",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "R06.txt": "4036c472fa0d8ff4030cd3edc03278d2b1450466cb054e4796d058a4cb9048b8",
+    "R06-main-narrow-rdp.png": "3988653afee140e4914fa456349de4a0fd133756d811254dc57e154c72663976",
+    "R06-second-small-rdp.png": "048275f9f6068c087599a90c5dd1ff1bc6d46d1d8274b201f4f9ffdaa816632b",
+    "R06-150pct-rdp.png": "fc8782a328bee647718e931f645f3a5b56fe4dcac9e3e1f5741e127e016b55cc"
+   }
+  },
+  "R07": {
+   "outcome": "PASS",
+   "actions": [
+    "Workspace tests in tools/verify.py on Windows (asset/document/renderer policy suites)",
+    "Copy of installed app with missing image and corrupt font: CPU render and native run with 8 rapid reopen cycles"
+   ],
+   "expected": "Bounded diagnosed failures, no hang",
+   "observed": "FILE_NOT_FOUND/DECODE_FAILED diagnostics, nothing pending; app usable",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "R07-native.txt": "86c0e91d0be8f32f1f79e067b3a9e0ecf93812b07ee0d7281164c6213270b38f",
+    "R07-broken-render.json": "f060382f7b1f50810092532d4172761431b01313a88a47643b1ffe16376c0e92",
+    "R07-broken-native-rdp.png": "2ffcea7f4d013f34ed5e98bc200939f64062937f090834cd1961888a1ff05f50",
+    "final6-automated.txt": "be07fa3883a42a4199aba10d3845ee3a34e29c61a34336b17499c8d688f582d9"
+   }
+  },
+  "R08": {
+   "outcome": "PASS",
+   "actions": [
+    "Choose a file Escape/Unicode select; Attachment input; HTML dialog/popover; WM_CLOSE parent with picker open"
+   ],
+   "expected": "Owned cancellable picker, overlays, focus",
+   "observed": "Dialogs owned with owner disabled; correct results; focus restored; parent close dismissed dialog and exited",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "R08.txt": "3f3fe7e68696bfbcc387633b619b5b50fe7919d1b6f16396e450599718957080",
+    "R08-file-dialog-rdp.png": "52cf0600a809bc4ad19d334c825df48de7a85578d68c1903c90f4e4c3653766e",
+    "R08-html-dialog-rdp.png": "948efda1d3c312446fbd4a00009fc2481745bdfe1f5baa8ab969d60fb3e446bf",
+    "R08-popover-rdp.png": "84daec68f1e911993c9987c7dde9dc4d44e3049a1b042d30e35a8bccb565ba27"
+   }
+  },
+  "R09": {
+   "outcome": "PASS",
+   "actions": [
+    "--updates 0.25: main fully covered by Notepad ~34 s, minimized ~34 s, editing the second window; restore; Ctrl+Shift+Q",
+    "--hold-callback: edit, resize, WM_CLOSE; Ctrl+Shift+Q",
+    "--crash-after-ready: failure UI Quit"
+   ],
+   "expected": "Updates continue, responsive host, latest state, emergency quit",
+   "observed": "Updates 80->440; second-window edits applied; restored status current; clean exits",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "R09.txt": "50b797c1f48755a49e925dd05477b12db6448ede4f922b71a39d147fee18ab68",
+    "R09-main-fully-covered-rdp.png": "22330bca66cbd7493a0108a857d88446543429ef3f3e8ae05cb3933d392e90ec",
+    "R09-restored-rdp.png": "4c0d06002700ca36385e7796c9de8595ee7e69931450e983ee6bf65108fd9134",
+    "R09-hold-resized-rdp.png": "359b92f79cdc140e839e0e321c7438344de319667dad0aa14a1bcce5c142db8a",
+    "R09-crash-failure-ui-insession.png": "d2b34cb864ff22a85e71c0627e67cae9cd9c03883fbc7a0cf627b6d23a054d36",
+    "R09-run1-harness-issues.txt": "8ef0545a7c3aa1a08057c99f53c1f0a80e162dbe5a6938f64dc126601add83fc"
+   }
+  },
+  "R10": {
+   "outcome": "PASS",
+   "actions": [
+    "measure_resources.py --renderer --startup-runs 5 --idle 30 --cycles 400 --dom-cycles 800 --sample-every 50"
+   ],
+   "expected": "Measured startup/idle/memory/growth",
+   "observed": "startup-to-ready median 133 ms; idle CPU 0.00%; host private 25.8 MB, combined 40.9 MB; DOM churn flat; window-cycle private bytes bimodal 30.2-37.7 MB (non-monotonic)",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "renderer-measurements.json": "c0db87effa046b7788c07219239f146d9a5b29c3b649c5e5257d1875dd31e8a5"
+   }
+  },
+  "R11": {
+   "outcome": "PASS",
+   "actions": [
+    "install.py --example-dir %LOCALAPPDATA%\\ui4me-renderer-reference; create_launcher (exe icon); Start Menu launch; second launch; Quit"
+   ],
+   "expected": "Installed app via Start Menu, no console, assets, forwarding, shutdown",
+   "observed": "As expected",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "R11-processes.txt": "938c1d51d4eddaaabadd2a4f7f9d48e18ed98b8c77cd9ed4c5637f6a853e31c2",
+    "R11-start-menu-entries.png": "3ed4664601a9c7f7a0f3bab496810e6b39e6160021db06abe56418b2861eecad",
+    "R11-N01.txt": "9227c35bac70044a68b4aa06811bd37f6156e5765fa1e7ebe310750a4917cba6"
+   }
+  },
+  "R12": {
+   "outcome": "PASS",
+   "actions": [
+    "browser_reference.py --host installed (Playwright 1.65.1, Chromium headless shell 158.0.8127.18, separate QA venv on F:)"
+   ],
+   "expected": "Four fixtures within tolerances, images reviewed",
+   "observed": "B01 MAE 0.044, B02 identical, B03 MAE 1.549 (ClearType-style antialiasing only, same line breaks), B04 MAE 0.036",
+   "limitations": [],
+   "evidence_files_sha256": {
+    "report.json": "37c05faa345c6b792643eb5d85cc84c5e2bed73db46a2e47f531fb76d82774cf"
+   }
+  }
+ },
+ "common": {
+  "platform": "Windows Server 2022 Standard Evaluation 10.0.20348 (Desktop Experience), VM with 12 vCPU / 20 GB",
+  "session": "Interactive RDP session 2 of normal user ui4me_test (Users + Remote Desktop Users; not elevated); xfreerdp3 from the Linux workstation, 1600x1000, desktop scale 100% (150% for scale test), RDP clipboard redirection disabled",
+  "tested_host": {
+   "path": "%USERPROFILE%\\.cargo\\bin\\ui4me-host.exe",
+   "sha256": "196946ea4b41b039fa0e592c6bc26422bfd9450c14b67a2b365f050b69645ce3",
+   "size": 29067776,
+   "build": "python tools\\install.py --jobs 2 --example-dir %LOCALAPPDATA%\\ui4me-renderer-reference (cargo install --locked, release, thin LTO) in the RDP session"
+  },
+  "source": {
+   "ledger_source_sha256": "7f009efe6ab04caf (final tree, identical to the Linux ledger identity)"
+  },
+  "input": "Real keyboard/pointer input through the RDP client (xdotool on the client display); observation via UI Automation, in-session GDI captures, RDP screenshots, Win32 window/dialog queries and the backend logs",
+  "ime": "Microsoft Pinyin (zh-CN) added temporarily to ui4me_test, removed afterwards"
+ }
+}
