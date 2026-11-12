@@ -1,0 +1,25 @@
+{
+ "schema_version": 1,
+ "suite": "resource-bombs",
+ "title": "Resource bombs: every one is rejected with a canonical code, within 1 s, without exceeding the configured budget (US5, SC-005, U4T-223)",
+ "note": "Bytes are built by the test runner from these recipes (tests/limits.rs, tests/support/bombs.rs); nothing large is stored in the repository.",
+ "cases": [
+  {"id": "png-declares-50000x50000", "recipe": {"png_declared": {"w": 50000, "h": 50000, "file_bytes": 102400}}, "kind": "image", "expect": "SIZE_LIMIT", "enforced_at": "header probe, before allocation"},
+  {"id": "png-declares-65536x1000", "recipe": {"png_declared": {"w": 65536, "h": 1000, "file_bytes": 4096}}, "kind": "image", "policy": {"max_decoded_pixels": 10000000}, "expect": "SIZE_LIMIT", "enforced_at": "header probe"},
+  {"id": "png-declares-4294967295x4294967295", "recipe": {"png_declared": {"w": 4294967295, "h": 4294967295, "file_bytes": 2048}}, "kind": "image", "expect": "SIZE_LIMIT", "enforced_at": "header probe (no u32 overflow)"},
+  {"id": "jpeg-declares-65535x65535", "recipe": {"jpeg_declared": {"w": 65535, "h": 65535}}, "kind": "image", "expect": "SIZE_LIMIT", "enforced_at": "header probe"},
+  {"id": "gif-declares-65535x65535", "recipe": {"gif_declared": {"w": 65535, "h": 65535}}, "kind": "image", "expect": "SIZE_LIMIT", "enforced_at": "header probe"},
+  {"id": "bmp-declares-100000x100000", "recipe": {"bmp_declared": {"w": 100000, "h": 100000}}, "kind": "image", "expect": "SIZE_LIMIT", "enforced_at": "header probe"},
+  {"id": "image-over-encoded-limit", "recipe": {"sparse": {"bytes": 104857600}}, "kind": "image", "expect": "SIZE_LIMIT", "enforced_at": "stat, before reading"},
+  {"id": "svg-over-encoded-limit", "recipe": {"sparse": {"bytes": 20971520}}, "name": "big.svg", "kind": "image", "expect": "SIZE_LIMIT", "enforced_at": "stat, before reading"},
+  {"id": "zero-byte", "recipe": {"bytes": {"hex": ""}}, "kind": "image", "expect": "UNSUPPORTED_MEDIA_TYPE", "enforced_at": "sniff"},
+  {"id": "truncated-png-header", "recipe": {"png_declared": {"w": 10, "h": 10, "file_bytes": 20}}, "kind": "image", "expect": "DECODE_FAILED", "enforced_at": "header probe"},
+  {"id": "truncated-jpeg", "recipe": {"bytes": {"hex": "ffd8ffe000104a46494600"}}, "kind": "image", "expect": "DECODE_FAILED", "enforced_at": "header probe"},
+  {"id": "zero-dimension-png", "recipe": {"png_declared": {"w": 0, "h": 5, "file_bytes": 64}}, "kind": "image", "expect": "DECODE_FAILED", "enforced_at": "header probe"},
+  {"id": "fake-over-pixel-budget", "recipe": {"fake": {"w": 9000, "h": 9000}}, "kind": "image", "policy": {"max_decoded_pixels": 1000000}, "expect": "SIZE_LIMIT", "enforced_at": "header probe"},
+  {"id": "fake-over-memory-budget", "recipe": {"fake": {"w": 4096, "h": 4096}}, "kind": "image", "runtime_policy": {"decoded_memory_budget": 16777216}, "expect": "BUDGET_EXCEEDED", "enforced_at": "before the decode is scheduled"},
+  {"id": "fake-slow-job-hits-deadline", "recipe": {"fake": {"w": 4, "h": 4, "delay_ms": 400}}, "kind": "image", "deadline_override_ms": 100, "expect": "BUDGET_EXCEEDED", "enforced_at": "decode deadline", "within_ms": 1500},
+  {"id": "oversized-font", "recipe": {"sparse": {"bytes": 35651584}}, "kind": "font", "expect": "SIZE_LIMIT", "enforced_at": "stat, before reading"},
+  {"id": "deeply-nested-data-svg", "recipe": {"nested_svg": {"depth": 64}}, "kind": "image", "name": "bomb.svg", "expect": "SIZE_LIMIT", "enforced_at": "nesting counter"}
+ ]
+}

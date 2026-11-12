@@ -1,0 +1,20 @@
+# owner: 001-vertical-slice — created by 001 slice (R-28)
+[package]
+name = "ui4me-engine-types"
+description = "Shared identities, geometry, status, diagnostics record types (no upstream types)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[lib]
+name = "ui4me_engine_types"

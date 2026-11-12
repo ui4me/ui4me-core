@@ -1,0 +1,48 @@
+$ python3 -m unittest discover -s tools -p test_*.py -v
+test_batch_does_not_expand_into_non_atomic_multiple_calls (test_application.FacadeTests.test_batch_does_not_expand_into_non_atomic_multiple_calls) ... ok
+test_callback_limit_is_bounded_and_reclaimable (test_application.FacadeTests.test_callback_limit_is_bounded_and_reclaimable) ... ok
+test_closed_window_retires_facade_and_only_that_window (test_application.FacadeTests.test_closed_window_retires_facade_and_only_that_window) ... ok
+test_commands_carry_window_and_current_document_identity (test_application.FacadeTests.test_commands_carry_window_and_current_document_identity) ... ok
+test_delegation_unsubscribe_and_nonmatching_event (test_application.FacadeTests.test_delegation_unsubscribe_and_nonmatching_event) ... ok
+test_document_native_errors_are_visible_and_generation_scoped (test_application.FacadeTests.test_document_native_errors_are_visible_and_generation_scoped) ... ok
+test_environment_constructor_selects_ordered_notifications (test_application.FacadeTests.test_environment_constructor_selects_ordered_notifications) ... ok
+test_failed_reload_keeps_live_document_and_callbacks (test_application.FacadeTests.test_failed_reload_keeps_live_document_and_callbacks) ... ok
+test_fatal_error_handler_can_install_a_replacement_document (test_application.FacadeTests.test_fatal_error_handler_can_install_a_replacement_document) ... ok
+test_fatal_error_retires_document_even_if_handler_fails (test_application.FacadeTests.test_fatal_error_retires_document_even_if_handler_fails) ... ok
+test_successful_reload_retires_old_commands_and_notifications (test_application.FacadeTests.test_successful_reload_retires_old_commands_and_notifications) ... ok
+test_unload_prevents_late_callbacks_and_local_writes (test_application.FacadeTests.test_unload_prevents_late_callbacks_and_local_writes) ... ok
+test_blocked_full_event_queue_does_not_block_lifecycle_or_shutdown (test_application.OrderedTransportTests.test_blocked_full_event_queue_does_not_block_lifecycle_or_shutdown) ... ok
+test_single_worker_preserves_notifications_during_nested_rpc (test_application.OrderedTransportTests.test_single_worker_preserves_notifications_during_nested_rpc) ... ok
+test_install_refuses_modified_entry_and_uninstall_removes_only_its_own (test_create_launcher.LinuxLauncherTests.test_install_refuses_modified_entry_and_uninstall_removes_only_its_own) ... ok
+test_windows_shortcut_uses_a_safe_display_name (test_create_launcher.ShortcutNameTests.test_windows_shortcut_uses_a_safe_display_name) ... ok
+test_creation_stamp_guards_real_tree_cleanup (test_fault_fixture.ProcessIdentityTests.test_creation_stamp_guards_real_tree_cleanup) ... ok
+test_bad_utf8_and_batch_rejected (test_reference_client.FramingTests.test_bad_utf8_and_batch_rejected) ... ok
+test_clean_eof (test_reference_client.FramingTests.test_clean_eof) ... ok
+test_duplicate_members_rejected (test_reference_client.FramingTests.test_duplicate_members_rejected) ... ok
+test_fragmented_unicode_uses_byte_count (test_reference_client.FramingTests.test_fragmented_unicode_uses_byte_count) ... ok
+test_oversize_rejected_before_reading_body (test_reference_client.FramingTests.test_oversize_rejected_before_reading_body) ... ok
+test_partial_writes (test_reference_client.FramingTests.test_partial_writes) ... ok
+test_truncated_body (test_reference_client.FramingTests.test_truncated_body) ... ok
+test_truncated_header (test_reference_client.FramingTests.test_truncated_header) ... ok
+test_callback_can_await_nested_host_call (test_reference_client.RpcTests.test_callback_can_await_nested_host_call) ... ok
+test_cancel_and_late_response_do_not_break_connection (test_reference_client.RpcTests.test_cancel_and_late_response_do_not_break_connection) ... ok
+test_connection_failure_fails_outstanding_requests (test_reference_client.RpcTests.test_connection_failure_fails_outstanding_requests) ... ok
+test_pending_limit_is_enforced (test_reference_client.RpcTests.test_pending_limit_is_enforced) ... ok
+test_responses_can_arrive_out_of_order (test_reference_client.RpcTests.test_responses_can_arrive_out_of_order) ... ok
+test_rpc_error_remains_distinct_from_disconnect (test_reference_client.RpcTests.test_rpc_error_remains_distinct_from_disconnect) ... ok
+test_unknown_host_method_receives_error (test_reference_client.RpcTests.test_unknown_host_method_receives_error) ... ok
+test_user_dialogs_have_no_implicit_deadline (test_reference_client.RpcTests.test_user_dialogs_have_no_implicit_deadline) ... ok
+test_backend_output_is_utf8_even_with_an_ansi_pipe_encoding (test_reference_client.Utf8StdioTests.test_backend_output_is_utf8_even_with_an_ansi_pipe_encoding) ... ok
+test_real_named_pipe_unicode_and_cancellation_of_blocked_read (test_reference_client.WindowsNamedPipeTests.test_real_named_pipe_unicode_and_cancellation_of_blocked_read) ... skipped 'Real named-pipe transport requires Windows'
+test_difference_metrics_and_thresholds_cannot_mask_size_mismatch (test_renderer_tools.ImageComparisonTests.test_difference_metrics_and_thresholds_cannot_mask_size_mismatch) ... ok
+test_copy_never_overwrites_existing_app (test_renderer_tools.PackageTests.test_copy_never_overwrites_existing_app) ... ok
+test_host_probe_remains_separately_installable (test_renderer_tools.PackageTests.test_host_probe_remains_separately_installable) ... ok
+test_renderer_copy_is_complete_and_pins_real_interpreter (test_renderer_tools.PackageTests.test_renderer_copy_is_complete_and_pins_real_interpreter) ... ok
+test_native_qualification_cannot_ignore_failed_or_missing_smoke (test_renderer_tools.SourceIdentityTests.test_native_qualification_cannot_ignore_failed_or_missing_smoke) ... ok
+test_reports_do_not_change_identity_but_source_and_lockfile_do (test_renderer_tools.SourceIdentityTests.test_reports_do_not_change_identity_but_source_and_lockfile_do) ... ok
+test_windows_mirror_preserves_all_workspace_members_and_patches (test_renderer_tools.SourceIdentityTests.test_windows_mirror_preserves_all_workspace_members_and_patches) ... ok
+
+----------------------------------------------------------------------
+Ran 42 tests in 2.518s
+
+OK (skipped=1)

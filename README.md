@@ -1,192 +1,168 @@
-# UI4ME Core 0.1
+# UI4ME Core 0.2
 
-A native desktop application host with a Rust-owned event loop and a separate
-application backend. This repository contains **one Cargo package,
-ui4me-host**, with a library and executable. A Python example demonstrates the
-language-neutral local protocol.
+Build native desktop applications from **HTML, CSS and a separate language
+backend**. Rust owns the native event loop, windows, rendering, input and desktop
+services. Python is the supplied reference backend; it owns application logic.
+There is no embedded browser, JavaScript runtime, Qt, HTTP server or Python
+interpreter in the host.
 
-This is the foundation for UI4ME's future HTML/CSS application system. The
-included editable CPU surface is a native integration probe. An HTML/CSS
-renderer is deliberately outside this version.
+This version combines the locally qualified 0.1 host with the existing UI4ME
+HTML/CSS engine. It adds a typed document protocol, a small Python facade and a
+complete application example. **Source delivery is not desktop qualification.**
+See [STATUS](docs/STATUS.md) for checks performed during preparation and the
+remaining Linux/Windows release gate. The 0.1 desktop results are preserved as
+historical evidence and are not claimed as 0.2 results.
 
-**Targets:** Debian/KDE on native Wayland, and Windows Server 2022 Desktop
-Experience in an interactive RDP session. X11 and macOS are outside v0.1.
-Implementation and verification are separate: read [STATUS](docs/STATUS.md)
-for exactly what has run and what still needs a real desktop.
+**Targets:** Debian/KDE Plasma on native Wayland, and Windows Server 2022
+Desktop Experience in a normal user's interactive RDP session. macOS, X11 and
+physical Windows hardware qualification remain later work.
 
-## Start here
+## Build and run
 
-Requirements: Python 3.11 or newer, the Rust toolchain pinned by
-rust-toolchain.toml, and native C/C++ build tools. Python is only required for
-the example and developer tooling; the host itself does not embed Python.
+Prerequisites: Python 3.11+, the Rust toolchain pinned in
+`rust-toolchain.toml`, and native build tools. The supplied scripts use the
+selected Python interpreter, including an absolute path in installed manifests.
 
 ### Debian / KDE Wayland
 
-From a terminal in your logged-in desktop:
+```sh
+bash tools/bootstrap_linux.sh --install-system
+python3 tools/run_renderer.py
+```
 
-    bash tools/bootstrap_linux.sh --install-system
-    python3 tools/run_example.py
-
-The bootstrap installs build prerequisites and builds the host. Its
---install-system option uses administrative package installation; omit it when
-the prerequisites are already installed. Normal application execution uses a
-systemd **user** transient service for process containment. No root process runs
-the application.
-
-Your KDE desktop needs its normal session D-Bus, xdg-desktop-portal and the KDE
-portal implementation. The host uses native Wayland windows and native portal
-file dialogs. There is no X11 fallback.
-
-To exercise the host without Python:
-
-    cargo run --locked -p ui4me-host -- probe
+Omit `--install-system` when build prerequisites are already installed.
+Applications run as the logged-in user, contained in a systemd user service.
+Use the session's D-Bus and KDE desktop portals. There is no automatic X11 or
+unsupervised fallback.
 
 ### Windows Server 2022
 
-Use **Desktop Experience** and a logged-in interactive desktop. Install/build
-from PowerShell:
+From PowerShell in the test user's interactive desktop:
 
-    powershell -ExecutionPolicy Bypass -File tools/bootstrap_windows.ps1 -InstallBuildTools
-    python tools/run_example.py
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/bootstrap_windows.ps1
+python tools/run_renderer.py
+```
 
-The bootstrap can install the toolchain and MSVC Build Tools when invoked with
-the required local administrative rights. An SSH shell is useful for building,
-but it is not a substitute for the interactive RDP desktop when testing GUI
-behavior. The supplied Windows helpers launch work in the correct interactive
-user session.
+If build tools are missing, run the bootstrap separately with `-InstallBuildTools`
+from an administrative provisioning session.
+The installed application runs as a normal user. SSH alone does not qualify
+GUI behavior; use the supplied interactive-session helpers and observe RDP.
 
-## Install the executable
+### Install a standalone example
 
-From either platform:
+Linux:
 
-    python tools/install.py
-    ui4me-host doctor
+```sh
+python3 tools/install.py --example-dir ~/.local/share/ui4me-renderer
+python3 tools/create_launcher.py install --app ~/.local/share/ui4me-renderer/app.toml
+ui4me-host run --app ~/.local/share/ui4me-renderer/app.toml
+```
 
-The equivalent direct command is:
+Windows PowerShell:
 
-    cargo install --locked --path crates/ui4me-host
+```powershell
+python tools/install.py --example-dir "$env:LOCALAPPDATA\ui4me-renderer"
+python tools/create_launcher.py install --app "$env:LOCALAPPDATA\ui4me-renderer\app.toml"
+ui4me-host run --app "$env:LOCALAPPDATA\ui4me-renderer\app.toml"
+```
 
-The executable is installed under Cargo's normal installation root. Ensure its
-bin directory is on PATH. The source package is not a prebuilt Windows installer
-and does not bundle a Python interpreter.
+`tools/install.py` installs the release host through Cargo and copies the
+HTML/CSS/Python/assets into the chosen application directory. Cargo dependencies
+and build tools require an initial download; this ZIP is complete project source,
+not a prebuilt installer or an offline mirror of all upstream dependencies.
 
-To install a standalone copy of the reference application outside this checkout:
+## What 0.2 includes
 
-    python tools/install.py --example-dir /absolute/path/to/ui4me-reference
+- HTML parsing, a retained DOM, selector queries and generation-checked nodes.
+- The migrated screen CSS pipeline: cascade, inherited styles, block/flex/grid/
+  table layout, fonts, overflow, transforms, supported transitions and animations.
+- CPU painting, Unicode shaping and fallback, local raster images, local fonts
+  and static SVG. The precise implemented CSS table is queryable at runtime.
+- Inputs, textareas, buttons, checkboxes/radios, selects, range controls, file
+  inputs, validation, focus/Tab traversal, selection, scrolling and ordinary
+  document dialogs/popovers supported by the engine.
+- Native keyboard/pointer input, IME, plain-text clipboard, file pickers,
+  accessibility trees/actions and incoming OS file/text drops.
+- DOM/style updates over private JSON-RPC, transactional mutation batches,
+  asynchronous event notifications and pre-registered default-action rules.
+- Multiple native windows/documents; independent Python app logic; the qualified
+  host supervision, lifecycle, native dialog and launcher behavior.
+- A complete two-window application and both automated and real-desktop
+  acceptance tooling.
 
-The generated manifest records the current Python interpreter's absolute path.
-Use tools/create_launcher.py to register a per-user desktop entry or Windows
-Start Menu shortcut; see [the tooling guide](tools/README.md) for exact commands.
+This is a **defined desktop HTML/CSS subset**, not a claim that every web page
+renders identically to Chromium. Browser reference fixtures compare shared
+HTML/CSS where semantics overlap. Printing/PDF/pagination, rich contenteditable,
+HTML clipboard, advanced SVG shape interaction, browser JavaScript/networking,
+GPU rendering and extra desktop services are not public 0.2 capabilities.
 
-## Run your own backend
+## Minimal application logic
 
-Write an application manifest:
+Keep `client.py` and `application.py` from `examples/python` alongside your
+backend. A host-launched backend can use:
 
-    [app]
-    id = "org.example.MyApplication"
-    name = "My application"
-    version = "0.1.0"
-    # Optional PNG, resolved relative to this manifest:
-    # icon = "icon.png"
+```python
+from pathlib import Path
+from application import Application
 
-    [backend]
-    program = "/absolute/path/to/python3"
-    args = ["{app_dir}/application.py"]
-    cwd = "{app_dir}"
+with Application.from_environment() as app:
+    window = app.open_file(Path(__file__).parent / "index.html", title="My app")
+    document = window.document
+    document.on("click", lambda event: document.set_text("status", "Clicked"),
+                element="save")
+    app.run()
+```
 
-    [host]
-    instance = "single"
-    max_windows = 16
-    startup_timeout_ms = 15000
-    shutdown_timeout_ms = 5000
+An `index.html` with a `save` button and a `status` element provides the UI.
+Use a manifest like `examples/python/renderer-app.toml`; it names the backend
+executable, working directory and application identity. The host launches the
+backend. Running the Python file directly does not create a native event loop.
 
-Use an actual Python executable path on Windows, for example
-C:/Users/your-user/AppData/Local/Programs/Python/Python312/python.exe.
-The example launcher discovers sys.executable automatically and generates
-an appropriate manifest, so its checked-in example is portable.
+Native editing and drawing remain responsive while Python handles callbacks.
+Callbacks can issue RPCs because the transport reader is independent. To
+suppress a supported default action, register `document.prevent_default(...)`
+in advance. A callback arriving after input cannot retroactively prevent it.
 
-Launch it with:
+## Verification and diagnostics
 
-    ui4me-host run --app /absolute/path/to/app.toml
+```sh
+python3 tools/verify.py
+cargo clippy --workspace --all-targets --locked -- -D warnings
+python3 tools/run_renderer.py --headless
+ui4me-host render --html examples/python/ui/index.html --output verification/screen.png
+ui4me-host doctor
+```
 
-In the backend, import RpcClient from the supplied
-examples/python/client.py, connect with RpcClient.from_environment(),
-create a window, register close/quit callbacks and call app.ready.
-The host passes a private endpoint and one-time credential in the child
-environment. Do not put those values in source, command-line arguments or logs.
-See the complete [Python application](examples/python/demo.py) and the
-[protocol reference](docs/PROTOCOL.md).
+The PNG command uses a CSS viewport of 900×600 by default; `--scale` controls
+physical output pixels. It waits for local resources with a bounded deadline
+and reports diagnostics. It requires no display or backend. It is not a print
+or export service in the application protocol.
 
-The normal flow is:
-
-1. The native host starts and owns the application lifetime.
-2. It starts one managed backend process.
-3. The backend authenticates and creates its windows through local RPC.
-4. Native input, IME, rendering of the probe and accessibility remain responsive
-   independently of a blocked backend callback.
-5. Close and application quit requests wait asynchronously for allow/cancel.
-6. Shutdown closes the backend and its managed descendants.
-
-## What is implemented
-
-| Area | Implementation |
-| --- | --- |
-| Native windows | Shared controller, multiple windows, visibility, title, sizing, focus requests, minimize/maximize/fullscreen |
-| Application lifetime | Startup deadline, authenticated ready handshake, asynchronous close/quit veto, bounded shutdown, backend failure diagnostics |
-| Local protocol | Framed JSON-RPC 2.0 over a private Unix socket or Windows named pipe, bounded messages/queues, string IDs |
-| Process management | systemd user-service containment on Linux; Windows Job Object assignment at child creation |
-| Desktop services | Text clipboard, file/folder/save dialogs with real parents and cancellation, external open, application paths, application icons and per-user launcher tooling |
-| Native input probe | Keyboard, selection, Unicode-safe editing, IME composition and surrounding text, file drop, DPI-aware CPU presentation |
-| Accessibility | Host-owned AccessKit tree, AT-SPI on Linux and UI Automation on Windows, focus/value/selection/button actions |
-| Development | Python reference client, regression tests, verification reports, Linux/Windows CI, RDP/VM tooling and autonomous finishing instructions |
-
-The probe has a single-line editor. It preserves Unicode text; keyboard movement
-and unselected deletion use grapheme boundaries. Its diagnostic font rasterizer does not implement complex
-script shaping or a production font fallback system. This is a renderer boundary,
-not a claim that a full text engine exists.
-
-## Verify
-
-    python tools/verify.py
-    python tools/native_acceptance.py --automated
-
-The first command runs format, build/type checks, Rust and Python tests, and a
-headless protocol application. `python tools/measure_resources.py` measures
-startup, first frame, idle CPU and memory in a desktop session. The second runs only an automated desktop smoke
-subset. Neither silently converts untested native scenarios into passing ones.
-The native acceptance ledger retains separate Linux and Windows evidence.
-
-The actual CPU probe can also be rendered to a PNG without opening a window:
-
-    cargo run --locked --example render_probe -- probe.png
-
-This checks the diagnostic surface's pixels, not native desktop integration.
-
-The real socket and process integration tests require permission to create local
-IPC endpoints. A locked-down cloud container may compile the code while blocking
-those tests. The test failures should be fixed locally when caused by code;
-environment denials must be reported explicitly.
-
---headless is for protocol/lifecycle tests and reports native capabilities as
-unavailable. --allow-unsupervised is an explicit Linux diagnostic escape hatch
-when a systemd user manager is unavailable. It does **not** qualify containment
-after abrupt host death.
+The existing `ui4me-host probe` and `python3 tools/run_example.py` remain host
+isolation tools. New native qualification must rerun N01–N15 plus the renderer
+scenarios in [RENDERER_ACCEPTANCE](docs/RENDERER_ACCEPTANCE.md), on both targets.
 
 ## Repository map
 
-| Path | Purpose |
+| Path | Responsibility |
 | --- | --- |
-| crates/ui4me-host/src/host/ | Shared controller, RPC dispatch and native event handling |
-| src/config.rs, src/lifecycle.rs, src/protocol.rs inside the crate | Manifest, policy and wire contracts |
-| src/platform/, src/transport.rs, src/backend.rs inside the crate | OS adapters, bounded local transport and backend supervision |
-| src/presentation.rs, src/accessibility.rs inside the crate | Integration probe and accessibility adapter |
-| crates/ui4me-host/tests/ | Real binary/process regression tests |
-| examples/python/ | Standard-library-only reference language client and app |
-| tools/ | Build/install/verification and authorized local-lab helpers |
-| docs/ | Architecture, protocol, verification status and finishing task |
-| third_party/ | Exactly pinned dependencies with minimal documented patches |
+| `crates/ui4me-host` | Process/native ownership, typed protocol, document integration |
+| `crates/ui4me-document` | HTML tree, parsing, control and DOM semantics |
+| `crates/ui4me-renderer` | Style, layout, text, CPU paint, interaction and semantics |
+| `crates/ui4me-assets` | Bounded local image/font/SVG resources |
+| `crates/ui4me-engine-types` | Internal identities and shared engine contracts |
+| `examples/python` | Transport client, small application facade and runnable examples |
+| `tools` | Build/install, verification, browser references and lab helpers |
+| `patches`, `third_party` | Pinned upstream source patches with provenance |
 
-The repository uses existing libraries as dependencies instead of copying an
-application framework wholesale. Three pinned dependencies carry small,
-documented fixes found during desktop qualification (third_party/README.md). Key choices are documented in
-[SPEC](docs/SPEC.md) and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md).
+All four engine crates are internal, unpublished packages. There is one native
+application host, not an alternative renderer-owned runtime or a second OS
+integration layer.
+
+Read [architecture and scope](docs/SPEC.md),
+[host protocol](docs/PROTOCOL.md),
+[document protocol](docs/PROTOCOL_DOCUMENTS.md),
+[tooling](tools/README.md),
+[verification status](docs/STATUS.md), and
+[third-party notices](THIRD_PARTY_NOTICES.md).

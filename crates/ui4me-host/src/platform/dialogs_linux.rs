@@ -136,7 +136,7 @@ async fn run_async(
     }
     let method = match options.kind {
         DialogKind::OpenFiles => {
-            arguments.insert("multiple", Value::from(true));
+            arguments.insert("multiple", Value::from(options.multiple));
             "OpenFile"
         }
         DialogKind::ChooseFolder => {

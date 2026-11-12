@@ -1,0 +1,18 @@
+{
+  "diagnostics": [
+    {
+      "code": "RESOURCE_PENDING",
+      "message": "image resource is pending; laid out without a natural size",
+      "stage": "layout"
+    }
+  ],
+  "height": 420,
+  "output": "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/B04-static-svg.png",
+  "pending_resources": false,
+  "pixel_height": 420,
+  "pixel_width": 640,
+  "profile": "ui4me-desktop-0.2",
+  "scale": 1.0,
+  "source": "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/source/static-svg.html",
+  "width": 640
+}

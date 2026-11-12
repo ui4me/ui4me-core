@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>resources-svg</title>
+<style>
+body { margin: 8px; font: 12px sans-serif; color: #b33 }
+.row { display: flex; gap: 8px; align-items: flex-start; margin: 4px 0 }
+.glyph { width: 20px; height: 20px; background: #0d6efd center/ 100% no-repeat url("svg/checkbox.svg") }
+.caret { width: 32px; height: 20px; border: 1px solid #aaa; background: #fff right 4px center/16px 12px no-repeat url("svg/select-caret.svg") }
+</style>
+<div class="row">
+<img id="sized" data-probe="sized" src="svg/sized-40x20.svg">
+<img id="viewbox" data-probe="viewbox" src="svg/viewbox-only.svg">
+<img id="nosize" data-probe="nosize" src="svg/no-size-no-viewbox.svg">
+<img id="text" data-probe="text" src="svg/with-text.svg">
+<img id="currentcolor" data-probe="currentcolor" src="svg/current-color.svg">
+</div>
+<div class="row">
+<img id="relhref" data-probe="relhref" src="svg/relative-image-href.svg">
+</div>
+<div class="row">
+<div id="checkbox" class="glyph" data-probe="checkbox"></div>
+<div id="select" class="caret" data-probe="select"></div>
+<svg id="inline" data-probe="inline" width="30" height="30" viewBox="0 0 30 30"><circle cx="15" cy="15" r="12" fill="#a3c"/></svg>
+</div>

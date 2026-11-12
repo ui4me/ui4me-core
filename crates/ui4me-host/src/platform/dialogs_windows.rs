@@ -247,10 +247,14 @@ pub(super) fn run(
     let mut flags =
         unsafe { dialog.GetOptions() }? | FOS_FORCEFILESYSTEM | FOS_NOCHANGEDIR | FOS_PATHMUSTEXIST;
     flags |= match options.kind {
-        DialogKind::OpenFiles => FOS_FILEMUSTEXIST | FOS_ALLOWMULTISELECT,
+        DialogKind::OpenFiles => FOS_FILEMUSTEXIST,
         DialogKind::SaveFile => FOS_OVERWRITEPROMPT | FOS_NOREADONLYRETURN,
         DialogKind::ChooseFolder => FOS_PICKFOLDERS,
     };
+    flags &= !FOS_ALLOWMULTISELECT;
+    if options.kind == DialogKind::OpenFiles && options.multiple {
+        flags |= FOS_ALLOWMULTISELECT;
+    }
     unsafe {
         dialog.SetOptions(flags)?;
         dialog.SetTitle(&HSTRING::from(options.title()))?;

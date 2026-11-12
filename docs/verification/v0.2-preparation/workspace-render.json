@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "source_sha256": "7b25711ba2ae48fa9c2b82721be4d193e40ae57d132a0dacd95f37431eae1828",
+  "host": "/workspace/scratch/3c4bbc64a9f5/ui4me-core/target/debug/ui4me-host",
+  "host_sha256": "9b052090db9f455674079fc8f9479713c9e019e04a6ceba209b1ab3c0133d4d0",
+  "host_size_bytes": 335184392,
+  "time_utc": "2026-11-12T15:45:13.076547+00:00",
+  "argv": [
+    "/workspace/scratch/3c4bbc64a9f5/ui4me-core/target/debug/ui4me-host",
+    "render",
+    "--html",
+    "/workspace/scratch/3c4bbc64a9f5/ui4me-core/examples/python/ui/index.html",
+    "--output",
+    "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/workspace.png",
+    "--width",
+    "1080",
+    "--height",
+    "760",
+    "--scale",
+    "1"
+  ],
+  "exit_code": 0,
+  "scope": "CPU screenshot, not a native desktop qualification",
+  "snapshot": {
+    "diagnostics": [
+      {
+        "code": "RESOURCE_PENDING",
+        "message": "image resource is pending; laid out without a natural size",
+        "stage": "layout"
+      },
+      {
+        "code": "RESOURCE_PENDING",
+        "message": "image resource is pending; laid out without a natural size",
+        "stage": "layout"
+      }
+    ],
+    "height": 760,
+    "output": "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/workspace.png",
+    "pending_resources": false,
+    "pixel_height": 760,
+    "pixel_width": 1080,
+    "profile": "ui4me-desktop-0.2",
+    "scale": 1.0,
+    "source": "/workspace/scratch/3c4bbc64a9f5/ui4me-core/examples/python/ui/index.html",
+    "width": 1080
+  },
+  "image_sha256": "5cb28860d055f213ac460b5f602b7ca84a5cc45761be8b3cf983677950308e59"
+}

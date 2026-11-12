@@ -36,11 +36,11 @@ if (-not $toolchain) { throw 'Cannot read pinned Rust toolchain' }
 & rustup toolchain install $toolchain --profile minimal --component rustfmt --component clippy
 if ($LASTEXITCODE -ne 0) { throw 'Toolchain installation failed' }
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-    throw 'Python 3.11+ is required for the reference client. Install Python for the dedicated development user, enable PATH, then rerun.'
+    throw 'Python 3.11+ is required for the reference client. Reuse an existing approved interpreter (including an all-users install on managed Server 2022), make it available on PATH, then rerun.'
 }
 & python -c 'import sys; assert sys.version_info >= (3, 11), sys.version'
 if ($LASTEXITCODE -ne 0) { throw 'A working Python 3.11+ interpreter is required; Windows Store aliases are insufficient.' }
 $env:CARGO_BUILD_JOBS = '2'
 & cargo build --locked -p ui4me-host
 if ($LASTEXITCODE -ne 0) { throw 'Host build failed' }
-Write-Host 'Build complete. Launch tools/run_example.py inside the development user RDP session.'
+Write-Host 'Build complete. Launch tools/run_renderer.py inside the development user RDP session. tools/run_example.py retains the v0.1 host probe.'

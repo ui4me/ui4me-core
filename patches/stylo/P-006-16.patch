@@ -1,0 +1,235 @@
+# P-006-16: CSS Scroll Snap 1 in servo mode (ui4me Core 0.8 F0804): `scroll-snap-type`, `scroll-snap-align`, `scroll-snap-stop`, the `scroll-padding*` and `scroll-margin*` longhands and their shorthands (physical and logical) lose `engine = "gecko"` and are parsed and computed in servo mode behind the new static pref `layout.css.scroll-snap.enabled` (default false); the existing structs hold the values (no new ComputedValues field)
+# Applies to: servo/stylo @ 37c1ed3b707c8f333304de2107c13b68fbc1057c after P-006-1 .. P-006-15 (root of the checkout, `patch -p1`)
+# Licence: MPL-2.0 (modifications to MPL-2.0 files; the modified source is published with the repository, see engine/NOTICE)
+
+--- a/style/properties/longhands.toml
++++ b/style/properties/longhands.toml
+@@ -1840,7 +1840,7 @@ affects = "overflow"
+ type = "ScrollSnapAlign"
+ initial = "computed::ScrollSnapAlign::none()"
+ struct = "box"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ spec = "https://drafts.csswg.org/css-scroll-snap-1/#scroll-snap-align"
+ animation_type = "discrete"
+ affects = "paint"
+@@ -1849,7 +1849,7 @@ affects = "paint"
+ type = "ScrollSnapStop"
+ initial = "computed::ScrollSnapStop::Normal"
+ struct = "box"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ spec = "https://drafts.csswg.org/css-scroll-snap-1/#scroll-snap-stop"
+ animation_type = "discrete"
+ affects = "paint"
+@@ -1858,7 +1858,7 @@ affects = "paint"
+ type = "ScrollSnapType"
+ initial = "computed::ScrollSnapType::none()"
+ struct = "box"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ spec = "https://drafts.csswg.org/css-scroll-snap-1/#scroll-snap-type"
+ animation_type = "discrete"
+ affects = "paint"
+@@ -3391,7 +3391,7 @@ affects = "layout"
+ type = "Length"
+ initial = "computed::Length::zero()"
+ struct = "margin"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ logical_group = "scroll-margin"
+ gecko_ffi_name = "mScrollMargin.0"
+ spec = "https://drafts.csswg.org/css-scroll-snap-1/#propdef-scroll-margin-top"
+@@ -3401,7 +3401,7 @@ affects = ""
+ type = "Length"
+ initial = "computed::Length::zero()"
+ struct = "margin"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ logical_group = "scroll-margin"
+ gecko_ffi_name = "mScrollMargin.1"
+ spec = "https://drafts.csswg.org/css-scroll-snap-1/#propdef-scroll-margin-right"
+@@ -3411,7 +3411,7 @@ affects = ""
+ type = "Length"
+ initial = "computed::Length::zero()"
+ struct = "margin"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ logical_group = "scroll-margin"
+ gecko_ffi_name = "mScrollMargin.2"
+ spec = "https://drafts.csswg.org/css-scroll-snap-1/#propdef-scroll-margin-bottom"
+@@ -3421,7 +3421,7 @@ affects = ""
+ type = "Length"
+ initial = "computed::Length::zero()"
+ struct = "margin"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ logical_group = "scroll-margin"
+ gecko_ffi_name = "mScrollMargin.3"
+ spec = "https://drafts.csswg.org/css-scroll-snap-1/#propdef-scroll-margin-left"
+@@ -3431,7 +3431,7 @@ affects = ""
+ type = "Length"
+ initial = "computed::Length::zero()"
+ struct = "margin"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ logical = true
+ logical_group = "scroll-margin"
+ gecko_ffi_name = "mScrollMargin.4"
+@@ -3442,7 +3442,7 @@ affects = ""
+ type = "Length"
+ initial = "computed::Length::zero()"
+ struct = "margin"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ logical = true
+ logical_group = "scroll-margin"
+ gecko_ffi_name = "mScrollMargin.5"
+@@ -3453,7 +3453,7 @@ affects = ""
+ type = "Length"
+ initial = "computed::Length::zero()"
+ struct = "margin"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ logical = true
+ logical_group = "scroll-margin"
+ gecko_ffi_name = "mScrollMargin.6"
+@@ -3464,7 +3464,7 @@ affects = ""
+ type = "Length"
+ initial = "computed::Length::zero()"
+ struct = "margin"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ logical = true
+ logical_group = "scroll-margin"
+ gecko_ffi_name = "mScrollMargin.7"
+@@ -3565,7 +3565,7 @@ affects = "layout"
+ type = "NonNegativeLengthPercentageOrAuto"
+ initial = "computed::NonNegativeLengthPercentageOrAuto::auto()"
+ struct = "padding"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ logical_group = "scroll-padding"
+ gecko_ffi_name = "mScrollPadding.0"
+ spec = "https://drafts.csswg.org/css-scroll-snap-1/#propdef-scroll-padding-top"
+@@ -3575,7 +3575,7 @@ affects = ""
+ type = "NonNegativeLengthPercentageOrAuto"
+ initial = "computed::NonNegativeLengthPercentageOrAuto::auto()"
+ struct = "padding"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ logical_group = "scroll-padding"
+ gecko_ffi_name = "mScrollPadding.1"
+ spec = "https://drafts.csswg.org/css-scroll-snap-1/#propdef-scroll-padding-right"
+@@ -3585,7 +3585,7 @@ affects = ""
+ type = "NonNegativeLengthPercentageOrAuto"
+ initial = "computed::NonNegativeLengthPercentageOrAuto::auto()"
+ struct = "padding"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ logical_group = "scroll-padding"
+ gecko_ffi_name = "mScrollPadding.2"
+ spec = "https://drafts.csswg.org/css-scroll-snap-1/#propdef-scroll-padding-bottom"
+@@ -3595,7 +3595,7 @@ affects = ""
+ type = "NonNegativeLengthPercentageOrAuto"
+ initial = "computed::NonNegativeLengthPercentageOrAuto::auto()"
+ struct = "padding"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ logical_group = "scroll-padding"
+ gecko_ffi_name = "mScrollPadding.3"
+ spec = "https://drafts.csswg.org/css-scroll-snap-1/#propdef-scroll-padding-left"
+@@ -3605,7 +3605,7 @@ affects = ""
+ type = "NonNegativeLengthPercentageOrAuto"
+ initial = "computed::NonNegativeLengthPercentageOrAuto::auto()"
+ struct = "padding"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ logical = true
+ logical_group = "scroll-padding"
+ gecko_ffi_name = "mScrollPadding.4"
+@@ -3616,7 +3616,7 @@ affects = ""
+ type = "NonNegativeLengthPercentageOrAuto"
+ initial = "computed::NonNegativeLengthPercentageOrAuto::auto()"
+ struct = "padding"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ logical = true
+ logical_group = "scroll-padding"
+ gecko_ffi_name = "mScrollPadding.5"
+@@ -3627,7 +3627,7 @@ affects = ""
+ type = "NonNegativeLengthPercentageOrAuto"
+ initial = "computed::NonNegativeLengthPercentageOrAuto::auto()"
+ struct = "padding"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ logical = true
+ logical_group = "scroll-padding"
+ gecko_ffi_name = "mScrollPadding.6"
+@@ -3638,7 +3638,7 @@ affects = ""
+ type = "NonNegativeLengthPercentageOrAuto"
+ initial = "computed::NonNegativeLengthPercentageOrAuto::auto()"
+ struct = "padding"
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ logical = true
+ logical_group = "scroll-padding"
+ gecko_ffi_name = "mScrollPadding.7"
+--- a/style/properties/shorthands.toml
++++ b/style/properties/shorthands.toml
+@@ -19,19 +19,19 @@ rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+ kind = "two_properties"
+ 
+ [scroll-margin]
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ sub_properties = ["scroll-margin-top", "scroll-margin-right", "scroll-margin-bottom", "scroll-margin-left"]
+ spec = "https://drafts.csswg.org/css-scroll-snap-1/#propdef-scroll-margin"
+ kind = "four_sides"
+ 
+ [scroll-margin-block]
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ sub_properties = ["scroll-margin-block-start", "scroll-margin-block-end"]
+ spec = "https://drafts.csswg.org/css-scroll-snap-1/#propdef-scroll-margin-block"
+ kind = "two_properties"
+ 
+ [scroll-margin-inline]
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ sub_properties = ["scroll-margin-inline-start", "scroll-margin-inline-end"]
+ spec = "https://drafts.csswg.org/css-scroll-snap-1/#propdef-scroll-margin-inline"
+ kind = "two_properties"
+@@ -55,19 +55,19 @@ rule_types_allowed = ["style", "keyframe", "page", "scope", "position-try"]
+ kind = "two_properties"
+ 
+ [scroll-padding]
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ sub_properties = ["scroll-padding-top", "scroll-padding-right", "scroll-padding-bottom", "scroll-padding-left"]
+ spec = "https://drafts.csswg.org/css-scroll-snap-1/#propdef-scroll-padding"
+ kind = "four_sides"
+ 
+ [scroll-padding-block]
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ sub_properties = ["scroll-padding-block-start", "scroll-padding-block-end"]
+ spec = "https://drafts.csswg.org/css-scroll-snap-1/#propdef-scroll-padding-block"
+ kind = "two_properties"
+ 
+ [scroll-padding-inline]
+-engine = "gecko"
++servo_pref = "layout.css.scroll-snap.enabled"  # ui4me P-006-16
+ sub_properties = ["scroll-padding-inline-start", "scroll-padding-inline-end"]
+ spec = "https://drafts.csswg.org/css-scroll-snap-1/#propdef-scroll-padding-inline"
+ kind = "two_properties"
+--- a/stylo_static_prefs/preferences.toml
++++ b/stylo_static_prefs/preferences.toml
+@@ -60,6 +60,7 @@
+ "layout.css.ruby.enabled" = false
+ "layout.css.scroll-behavior.enabled" = false
+ "layout.css.scroll-driven-animations.enabled" = false
++"layout.css.scroll-snap.enabled" = false
+ "layout.css.scroll-state.enabled" = false
+ "layout.css.scrollbar-styling.enabled" = false
+ "layout.css.starting-style-at-rules.enabled" = false

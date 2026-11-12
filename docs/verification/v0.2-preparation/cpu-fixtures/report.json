@@ -1,0 +1,169 @@
+{
+  "schema": 1,
+  "source_sha256": "7b25711ba2ae48fa9c2b82721be4d193e40ae57d132a0dacd95f37431eae1828",
+  "host": "/workspace/scratch/3c4bbc64a9f5/ui4me-core/target/debug/ui4me-host",
+  "host_sha256": "9b052090db9f455674079fc8f9479713c9e019e04a6ceba209b1ab3c0133d4d0",
+  "host_size_bytes": 335184392,
+  "time_utc": "2026-11-12T15:45:13.076547+00:00",
+  "scope": "CPU render/PNG integrity plus separate visual inspection; not browser parity or native desktop qualification",
+  "browser_reference_status": "BLOCKED",
+  "browser_blocker": "External Chromium cannot create its process-singleton Unix socket in this environment (EPERM); prior full-suite attempt retained separately.",
+  "results": [
+    {
+      "fixture": "B01-box-model",
+      "argv": [
+        "/workspace/scratch/3c4bbc64a9f5/ui4me-core/target/debug/ui4me-host",
+        "render",
+        "--html",
+        "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/source/box-model.html",
+        "--output",
+        "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/B01-box-model.png",
+        "--width",
+        "640",
+        "--height",
+        "420",
+        "--scale",
+        "1"
+      ],
+      "exit_code": 0,
+      "scope": "Fixed block geometry, padding, borders, backgrounds, rounded corners and linear gradient",
+      "status": "PASS",
+      "snapshot": {
+        "diagnostics": [],
+        "height": 420,
+        "output": "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/B01-box-model.png",
+        "pending_resources": false,
+        "pixel_height": 420,
+        "pixel_width": 640,
+        "profile": "ui4me-desktop-0.2",
+        "scale": 1.0,
+        "source": "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/source/box-model.html",
+        "width": 640
+      },
+      "image_sha256": "13c1c762fe93bafc24d4010a31596ca6d93aa83321c0fa7c0e8227f53d83224c",
+      "correct_size": true,
+      "nonuniform_pixels": true
+    },
+    {
+      "fixture": "B02-flex-grid",
+      "argv": [
+        "/workspace/scratch/3c4bbc64a9f5/ui4me-core/target/debug/ui4me-host",
+        "render",
+        "--html",
+        "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/source/flex-grid.html",
+        "--output",
+        "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/B02-flex-grid.png",
+        "--width",
+        "640",
+        "--height",
+        "420",
+        "--scale",
+        "1"
+      ],
+      "exit_code": 0,
+      "scope": "Flex spacing/alignment and explicit grid tracks/gaps, with no font-dependent geometry",
+      "status": "PASS",
+      "snapshot": {
+        "diagnostics": [],
+        "height": 420,
+        "output": "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/B02-flex-grid.png",
+        "pending_resources": false,
+        "pixel_height": 420,
+        "pixel_width": 640,
+        "profile": "ui4me-desktop-0.2",
+        "scale": 1.0,
+        "source": "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/source/flex-grid.html",
+        "width": 640
+      },
+      "image_sha256": "c6ed760b423eaf7668b4f2ba7ba029ec80b7e5b307918b9e0c98fc8da6c5b754",
+      "correct_size": true,
+      "nonuniform_pixels": true
+    },
+    {
+      "fixture": "B03-local-font",
+      "argv": [
+        "/workspace/scratch/3c4bbc64a9f5/ui4me-core/target/debug/ui4me-host",
+        "render",
+        "--html",
+        "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/source/local-font.html",
+        "--output",
+        "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/B03-local-font.png",
+        "--width",
+        "640",
+        "--height",
+        "420",
+        "--scale",
+        "1"
+      ],
+      "exit_code": 0,
+      "scope": "Pinned local Noto Sans, line breaking, line height, inline emphasis and overflow clipping",
+      "status": "PASS",
+      "snapshot": {
+        "diagnostics": [],
+        "height": 420,
+        "output": "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/B03-local-font.png",
+        "pending_resources": false,
+        "pixel_height": 420,
+        "pixel_width": 640,
+        "profile": "ui4me-desktop-0.2",
+        "scale": 1.0,
+        "source": "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/source/local-font.html",
+        "width": 640
+      },
+      "image_sha256": "6b186d11421da44207c58ad57ffcd5fccfa936c3b6535b14e8850defcc15382c",
+      "correct_size": true,
+      "nonuniform_pixels": true
+    },
+    {
+      "fixture": "B04-static-svg",
+      "argv": [
+        "/workspace/scratch/3c4bbc64a9f5/ui4me-core/target/debug/ui4me-host",
+        "render",
+        "--html",
+        "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/source/static-svg.html",
+        "--output",
+        "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/B04-static-svg.png",
+        "--width",
+        "640",
+        "--height",
+        "420",
+        "--scale",
+        "1"
+      ],
+      "exit_code": 0,
+      "scope": "Local SVG image and basic inline SVG paths/shapes at explicit dimensions",
+      "status": "PASS",
+      "snapshot": {
+        "diagnostics": [
+          {
+            "code": "RESOURCE_PENDING",
+            "message": "image resource is pending; laid out without a natural size",
+            "stage": "layout"
+          }
+        ],
+        "height": 420,
+        "output": "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/B04-static-svg.png",
+        "pending_resources": false,
+        "pixel_height": 420,
+        "pixel_width": 640,
+        "profile": "ui4me-desktop-0.2",
+        "scale": 1.0,
+        "source": "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/source/static-svg.html",
+        "width": 640
+      },
+      "image_sha256": "0f2c7d8259ac568539550421617dd1b49aecff991fb01dfbabe62742e0873cf7",
+      "correct_size": true,
+      "nonuniform_pixels": true
+    }
+  ],
+  "fixture_sources": {
+    "box-model.html": "24dc7ab7a98831880d067b73f20bf9c5ef4ebc3754af859b27198de2b3c28d5e",
+    "cases.json": "6d43ae0365229f072bd55c4ca9e59b9bb4ffd637f3108819522931969ba66264",
+    "flex-grid.html": "653d7a6ed0bad8afa92768522629fd4220bc4df19d04fd92a06bbc37c57e86c4",
+    "fonts/FONT-LICENSE.txt": "075f91382875da1c4b491f1facf2586f55448705133264d98ce15cab6211b125",
+    "fonts/NotoSans-Regular.ttf": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d",
+    "local-font.html": "356f45e86d456472a790d80a1570673d5044146949a1a0d4f230a45f8f4aa5ba",
+    "mark.svg": "390a28819da924ae5c3bc985ef0b2c500ae667da6f2b4e08941899e784311c88",
+    "static-svg.html": "3821ad88974803262ee27f29a473260ff72bda5f5caecca15a6e97f13399b184"
+  }
+}

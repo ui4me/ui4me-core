@@ -1,0 +1,151 @@
+/* owner: 006-style-engine — T033
+ *
+ * SPDX-License-Identifier: CC-BY-4.0
+ * Ported-From: https://html.spec.whatwg.org/multipage/rendering.html@6d7788bc56a4b39d955a9a7fdb501c7c7d27999a
+ *
+ * Quirks-mode rules of the WHATWG HTML Living Standard, section 15 "Rendering" ("In quirks mode,
+ * the following rules are also expected to apply"). Copyright © WHATWG (Apple, Google, Mozilla,
+ * Microsoft), CC-BY-4.0, https://creativecommons.org/licenses/by/4.0/ (OD-26 default, pending
+ * owner approval). This sheet is part of the cascade only while the document is in quirks mode
+ * (limited-quirks mode does not use it). Changes: see ua/PROVENANCE.md (M13, M14).
+ */
+
+@namespace "http://www.w3.org/1999/xhtml";
+
+form { margin-block-end: 1em; }
+
+li { list-style-position: inside; }
+li :is(dir, menu, ol, ul) { list-style-position: outside; }
+:is(dir, menu, ol, ul) :is(dir, menu, ol, ul, li) { list-style-position: unset; }
+
+table {
+  font-weight: initial;
+  font-style: initial;
+  font-variant: initial;
+  font-size: initial;
+  line-height: initial;
+  white-space: initial;
+  text-align: initial;
+}
+
+input:not([type=image i]), textarea { box-sizing: border-box; }
+
+img[align=left i] { margin-right: 3px; }
+img[align=right i] { margin-left: 3px; }
+
+/* Margin collapsing quirks. M13: "no substantial previous sibling" is `:first-child` (text nodes
+ * are not counted by the selector, so a non-blank text node before the element is ignored) and
+ * "blank" is `:empty`. The reference browser keeps the UA margin as the element's CSSOM value and
+ * only ignores it in layout, so each rule also records the margin it zeroed in the engine-internal
+ * `--ui4me-quirk-margin-start|end` carriers (a `<length>`, `0px` = none; M15, D-LSTYFIXr7-05): the
+ * view reports that length as the computed margin while layout sees the zeroed one. */
+
+@property --ui4me-quirk-margin-start { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --ui4me-quirk-margin-end { syntax: "<length>"; inherits: false; initial-value: 0px; }
+
+body > :is(blockquote, dir, dl, h3, listing, menu, ol, p, plaintext, pre, ul, xmp):first-child,
+:is(td, th) > :is(blockquote, dir, dl, h3, listing, menu, ol, p, plaintext, pre, ul, xmp):first-child {
+  margin-block-start: 0;
+  --ui4me-quirk-margin-start: 1em;
+}
+
+body > :is(blockquote, dir, dl, h3, listing, menu, ol, p, plaintext, pre, ul, xmp):first-child:empty,
+:is(td, th) > :is(blockquote, dir, dl, h3, listing, menu, ol, p, plaintext, pre, ul, xmp):first-child:empty {
+  margin-block-end: 0;
+  --ui4me-quirk-margin-end: 1em;
+}
+
+:is(td, th) > :is(blockquote, dir, dl, h3, listing, menu, ol, p, plaintext, pre, ul, xmp):last-child:empty {
+  margin-block-start: 0;
+  --ui4me-quirk-margin-start: 1em;
+}
+
+body > :is(h1):first-child,
+:is(td, th) > :is(h1):first-child {
+  margin-block-start: 0;
+  --ui4me-quirk-margin-start: 0.67em;
+}
+
+body > :is(h1):first-child:empty,
+:is(td, th) > :is(h1):first-child:empty {
+  margin-block-end: 0;
+  --ui4me-quirk-margin-end: 0.67em;
+}
+
+:is(td, th) > :is(h1):last-child:empty {
+  margin-block-start: 0;
+  --ui4me-quirk-margin-start: 0.67em;
+}
+
+body > :is(h2):first-child,
+:is(td, th) > :is(h2):first-child {
+  margin-block-start: 0;
+  --ui4me-quirk-margin-start: 0.83em;
+}
+
+body > :is(h2):first-child:empty,
+:is(td, th) > :is(h2):first-child:empty {
+  margin-block-end: 0;
+  --ui4me-quirk-margin-end: 0.83em;
+}
+
+:is(td, th) > :is(h2):last-child:empty {
+  margin-block-start: 0;
+  --ui4me-quirk-margin-start: 0.83em;
+}
+
+body > :is(h4):first-child,
+:is(td, th) > :is(h4):first-child {
+  margin-block-start: 0;
+  --ui4me-quirk-margin-start: 1.33em;
+}
+
+body > :is(h4):first-child:empty,
+:is(td, th) > :is(h4):first-child:empty {
+  margin-block-end: 0;
+  --ui4me-quirk-margin-end: 1.33em;
+}
+
+:is(td, th) > :is(h4):last-child:empty {
+  margin-block-start: 0;
+  --ui4me-quirk-margin-start: 1.33em;
+}
+
+body > :is(h5):first-child,
+:is(td, th) > :is(h5):first-child {
+  margin-block-start: 0;
+  --ui4me-quirk-margin-start: 1.67em;
+}
+
+body > :is(h5):first-child:empty,
+:is(td, th) > :is(h5):first-child:empty {
+  margin-block-end: 0;
+  --ui4me-quirk-margin-end: 1.67em;
+}
+
+:is(td, th) > :is(h5):last-child:empty {
+  margin-block-start: 0;
+  --ui4me-quirk-margin-start: 1.67em;
+}
+
+body > :is(h6):first-child,
+:is(td, th) > :is(h6):first-child {
+  margin-block-start: 0;
+  --ui4me-quirk-margin-start: 2.33em;
+}
+
+body > :is(h6):first-child:empty,
+:is(td, th) > :is(h6):first-child:empty {
+  margin-block-end: 0;
+  --ui4me-quirk-margin-end: 2.33em;
+}
+
+:is(td, th) > :is(h6):last-child:empty {
+  margin-block-start: 0;
+  --ui4me-quirk-margin-start: 2.33em;
+}
+
+:is(td, th) > p:last-child {
+  margin-block-end: 0;
+  --ui4me-quirk-margin-end: 1em;
+}

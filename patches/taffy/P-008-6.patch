@@ -1,0 +1,24 @@
+--- a/src/compute/grid/mod.rs
++++ b/src/compute/grid/mod.rs
+@@ -904,0 +905,21 @@
++    // The grid itself contributes its track area to scrollable overflow, even when no item
++    // occupies the overflowing tracks. Track offsets are in border-box coordinates; overflow
++    // uses the padding-box frame.
++    #[cfg(feature = "content_size")]
++    {
++        let mut track_rect = Rect::ZERO;
++        for t in columns.iter().filter(|t| t.kind == GridTrackKind::Track) {
++            track_rect.left = track_rect.left.min(t.offset - padding_box_inset.left);
++            track_rect.right = track_rect.right.max(t.offset + t.base_size - padding_box_inset.left);
++        }
++        for t in rows.iter().filter(|t| t.kind == GridTrackKind::Track) {
++            track_rect.top = track_rect.top.min(t.offset - padding_box_inset.top);
++            track_rect.bottom = track_rect.bottom.max(t.offset + t.base_size - padding_box_inset.top);
++        }
++        if is_scroll_container {
++            if direction.is_rtl() { track_rect.left -= padding.left; } else { track_rect.right += padding.right; }
++            track_rect.bottom += padding.bottom;
++        }
++        item_overflow_rect = item_overflow_rect.union(track_rect);
++    }
++

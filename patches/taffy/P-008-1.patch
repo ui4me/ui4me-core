@@ -1,0 +1,97 @@
+# P-008-1: block layout (ui4me 008; lane L-FLOAT-r10, AUTHORISATIONS E-029): (1) a `max-height` clamp separates the last child's bottom margin from the box's own; (2) tables and block-level replaced boxes avoid floats, fitting by their narrowest used width; (3) a baseline-aligned grid item's reported margin excludes the baseline shim (lane L-GRID-r14)
+# Applies to: DioxusLabs/taffy @ fca167cf659b8bf48019d0dea90624109a78103f (root of the checkout, `patch -p1`)
+# Licence: MIT (modification to an MIT file; the notice stays in LICENSE of the vendored tree and engine/NOTICE)
+
+diff -u a/src/compute/block.rs b/src/compute/block.rs
+--- a/src/compute/block.rs
++++ b/src/compute/block.rs
+@@ -717,10 +717,16 @@
+     // in-flow child's bottom margin only if the box's `min-height` is less than the box's
+     // used height. When `min-height` determines the used height, the last child's bottom
+     // margin no longer adjoins the box's bottom edge, so it stays inside the box instead of
+-    // collapsing with the box's own bottom margin. (`max-height` has no such effect.)
++    // collapsing with the box's own bottom margin.
++    //
++    // ui4me patch UP-06 (P-008-1): `max-height` has the same effect. A used height that is the
++    // `max-height` clamp of a taller auto height is not the auto height, so the last child's bottom
++    // margin does not adjoin the box's bottom edge either (WPT css/CSS2/normal-flow/
++    // max-height-separates-margin.html passes in the reference browser).
+     let height_constrained_by_min_height = matches!(min_size.height, Some(h) if h > 0.0 && h >= container_outer_height);
++    let height_constrained_by_max_height = matches!(max_size.height, Some(h) if intrinsic_outer_height > h);
+     let own_bottom_margin_collapses_with_children =
+-        own_margins_collapse_with_children.end && !height_constrained_by_min_height;
++        own_margins_collapse_with_children.end && !height_constrained_by_min_height && !height_constrained_by_max_height;
+ 
+     // Apply `align-content` to in-flow non-floated items if requested. The per-item layouts were
+     // held back in `item.final_layout` so that this step can shift `location.y` before tree commit.
+@@ -963,8 +969,11 @@
+             let is_scroll_container = overflow.x.is_scroll_container() || overflow.y.is_scroll_container();
+             let contain = child_style.contain();
+ 
++            // ui4me patch UP-06 (P-008-1): a block-level replaced box, like a table, must not overlap the
++            // margin box of a float (CSS 2.1 section 9.5), so it is placed as a box that establishes a BFC.
+             let is_in_same_bfc: bool = is_block
+                 && !is_table
++                && !is_compressible_replaced
+                 && !position.is_out_of_flow()
+                 && is_not_floated
+                 && !is_scroll_container
+@@ -1502,6 +1511,25 @@
+                             .or(item.min_size.height)
+                             .unwrap_or(0.0)
+                             .max(item.padding_border_sum.height);
++                        // ui4me patch UP-06 (P-008-1): a table or replaced box resolves its own width, so it fits
++                        // beside the floats when its narrowest used width does (CSS 2.1 section 9.5: its border box
++                        // must not overlap the margin box of a float; it is narrowed, or moved below the floats).
++                        let table_min_width = if (item.is_table || item.is_compressible_replaced) && item.size.width.is_none() {
++                            Some(tree.measure_child_size(
++                                item.node_id,
++                                Size::NONE,
++                                parent_size,
++                                Size {
++                                    width: if item.is_table { AvailableSpace::MinContent } else { AvailableSpace::MaxContent },
++                                    height: AvailableSpace::MaxContent,
++                                },
++                                SizingMode::InherentSize,
++                                crate::AbsoluteAxis::Horizontal,
++                                Line::FALSE,
++                            ))
++                        } else {
++                            None
++                        };
+                         let mut slot_segment = None;
+                         let slot = loop {
+                             let slot = block_ctx.find_bfc_slot(
+@@ -1516,7 +1544,7 @@
+                             let width = item
+                                 .size
+                                 .width
+-                                .unwrap_or(slot.stretch_width.max(min_auto_width).max(0.0))
++                                .unwrap_or_else(|| table_min_width.unwrap_or(slot.stretch_width.max(min_auto_width).max(0.0)))
+                                 .maybe_clamp(item.min_size.width, item.max_size.width);
+                             if width <= slot.border_width + FIT_TOLERANCE {
+                                 break slot;
+diff -u a/src/compute/grid/alignment.rs b/src/compute/grid/alignment.rs
+--- a/src/compute/grid/alignment.rs
++++ b/src/compute/grid/alignment.rs
+@@ -406,6 +406,11 @@
+     };
+ 
+     let resolved_margin = Rect { left: x_margin.start, right: x_margin.end, top: y_margin.start, bottom: y_margin.end };
++    // ui4me patch UP-06 (P-008-1): the baseline-alignment shim moves the item down inside its margin edge
++    // (`y_margin.start` includes it so that the position and the scrollable overflow are right), but it is
++    // not a margin: the item's margin box in the reference browser starts at its border box
++    // (`align-items: baseline`, CSS Box Alignment 3 section 9.2).
++    let layout_margin = Rect { top: resolved_margin.top - baseline_shim, ..resolved_margin };
+ 
+     // Bubble out-of-flow candidates from the item's subtree, translating anchors from
+     // item-relative to container-relative coordinates
+@@ -426,7 +431,7 @@
+             scrollbar_size,
+             padding,
+             border,
+-            margin: resolved_margin,
++            margin: layout_margin,
+         },
+     );
+ 

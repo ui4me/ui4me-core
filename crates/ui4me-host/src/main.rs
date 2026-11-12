@@ -27,6 +27,21 @@ enum Command {
         #[arg(long)]
         allow_unsupervised: bool,
     },
+    /// Render an HTML screen to a diagnostic PNG without a desktop or backend.
+    Render {
+        #[arg(long)]
+        html: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+        /// Viewport width in CSS pixels.
+        #[arg(long, default_value_t = 900)]
+        width: u32,
+        /// Viewport height in CSS pixels.
+        #[arg(long, default_value_t = 600)]
+        height: u32,
+        #[arg(long, default_value_t = 1.0)]
+        scale: f64,
+    },
     /// Print environment facts, not a claim of native qualification.
     Doctor,
 }
@@ -35,7 +50,10 @@ fn execute() -> Result<i32> {
     let cli = Cli::parse();
     // Set only before starting threads. These are explicit launcher choices,
     // never inferred silently from a missing desktop/service manager.
-    let headless = matches!(cli.command, Command::Run { headless: true, .. });
+    let headless = matches!(
+        cli.command,
+        Command::Run { headless: true, .. } | Command::Render { .. }
+    );
     let unsupervised = matches!(
         cli.command,
         Command::Run {
@@ -58,6 +76,22 @@ fn execute() -> Result<i32> {
         println!("{}", serde_json::to_string_pretty(&host::doctor())?);
         return Ok(0);
     }
+    if let Command::Render {
+        ref html,
+        ref output,
+        width,
+        height,
+        scale,
+    } = cli.command
+    {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&ui4me_host::snapshot::render(
+                html, output, width, height, scale
+            )?)?
+        );
+        return Ok(0);
+    }
     if unsupervised {
         tracing::warn!("explicit diagnostic containment selected; this does not qualify hard-host-death cleanup on Linux");
     }
@@ -69,7 +103,7 @@ fn execute() -> Result<i32> {
     match cli.command {
         Command::Run { app, headless, .. } => host::run(AppConfig::load(&app)?, headless),
         Command::Probe { .. } => host::run_probe(),
-        Command::Doctor => unreachable!(),
+        Command::Doctor | Command::Render { .. } => unreachable!(),
     }
 }
 

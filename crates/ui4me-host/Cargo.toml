@@ -1,10 +1,10 @@
 [package]
 name = "ui4me-host"
 version.workspace = true
-edition.workspace = true
+edition = "2021"
 rust-version.workspace = true
 license.workspace = true
-description = "Renderer-independent desktop application host for UI4ME"
+description = "Native HTML/CSS desktop application host for UI4ME"
 publish = false
 build = "build.rs"
 
@@ -16,6 +16,8 @@ name = "ui4me-host"
 path = "src/main.rs"
 
 [dependencies]
+ui4me-renderer = { workspace = true }
+ui4me-engine-types = { workspace = true }
 anyhow = "1"
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }

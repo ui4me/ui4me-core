@@ -1,0 +1,43 @@
+# P-006-14: add a UA-only select display-size pseudo for host matching.
+# Applies to servo/stylo @ 37c1ed3b707c8f333304de2107c13b68fbc1057c after P-006-13 (patch -p1).
+# Licence: MPL-2.0; modified source is published in this repository.
+--- a/style/servo/selector_parser.rs
++++ b/style/servo/selector_parser.rs
+@@ -407,6 +407,7 @@
+     ReadWrite,
+     Required,
+     ServoNonZeroBorder,
++    Ui4meSingleRowSelect,
+     Target,
+     UserInvalid,
+     UserValid,
+@@ -488,6 +489,7 @@
+             Self::ReadWrite => ":read-write",
+             Self::Required => ":required",
+             Self::ServoNonZeroBorder => ":-servo-nonzero-border",
++            Self::Ui4meSingleRowSelect => ":-ui4me-single-row-select",
+             Self::Target => ":target",
+             Self::UserInvalid => ":user-invalid",
+             Self::UserValid => ":user-valid",
+@@ -539,7 +541,7 @@
+             Self::UserValid => ElementState::USER_VALID,
+             Self::Valid => ElementState::VALID,
+             Self::Visited => ElementState::VISITED,
+-            Self::CustomState(_) | Self::Lang(_) | Self::Dir(_) | Self::ServoNonZeroBorder => {
++            Self::CustomState(_) | Self::Lang(_) | Self::Dir(_) | Self::ServoNonZeroBorder | Self::Ui4meSingleRowSelect => {
+                 ElementState::empty()
+             },
+         }
+@@ -677,6 +679,12 @@
+                 }
+                 NonTSPseudoClass::MozTopmostModal
+             },
++            "-ui4me-single-row-select" => {
++                if !self.in_user_agent_stylesheet() {
++                    return Err(ParseError::custom(SelectorParseErrorKind::UnexpectedIdent))
++                }
++                NonTSPseudoClass::Ui4meSingleRowSelect
++            },
+             "-servo-nonzero-border" => {
+                 if !self.in_user_agent_stylesheet() {
+                     return Err(ParseError::custom(

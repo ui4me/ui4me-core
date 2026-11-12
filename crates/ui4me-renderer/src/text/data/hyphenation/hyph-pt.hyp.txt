@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: BSD-3-Clause
+# Ported-From: https://github.com/hyphenation/tex-hyphen@5684c0f51c0b81133db2efbe60a408b4155a3ff5:hyph-utf8/tex/generic/hyph-utf8/patterns/txt/hyph-pt.hyp.txt
+# Modifications: none to the patterns (these three comment lines added); licences in NOTICES.txt
+hard-ware
+soft-ware

@@ -1,0 +1,31 @@
+{
+ "schema_version": 1,
+ "generator": "generate.py",
+ "tools": {
+  "fonttools": "4.68.0",
+  "brotli": "1.2.1"
+ },
+ "sources": {
+  "noto-sans": {
+   "path": "verification/fixtures/fonts/noto-sans/NotoSans-Regular.ttf",
+   "sha256": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d",
+   "licence": "OFL-1.1"
+  },
+  "roboto-flex": {
+   "path": "verification/fixtures/fonts/roboto-flex/RobotoFlex-VF.ttf",
+   "sha256": "9b523f7d82593df0107173849ebb8c817471a1df4b4fb2c3cbf40cfd810c8281",
+   "licence": "OFL-1.1"
+  }
+ },
+ "files": {
+  "bomb-declared.woff2": "7f8980672095c73e70879402e58a69a57bff17bec68bc7b525cdf14094c18ad6",
+  "bomb-ratio.woff2": "dc51ab7ebbc8a3ce1962b53d8168bfce0c19d8b98143346807f25fc1e635df6b",
+  "bomb-stream.woff2": "9badb586be79e6a07684446fe3b76d2218f2a0ebf96fea1647a0eb74cf566b33",
+  "noto-sans-hmtx.woff2": "25a90b67529091333eeffe11c3efd520879a17306a1bdd8b65eb5c52c45e4b26",
+  "noto-sans-nulltransform.woff2": "594d3def1126f6c9b40a2c47f7b3f180a043a4fbbb9defc2c23e3bc58a520f66",
+  "noto-sans-subset.ttf": "2fa2205446504ecfce079c6df0610638f2321a143ee2ebb9ab3b26837bd4474c",
+  "noto-sans-subset.woff2": "faf6b990adf975dea6da173fa0704e2d70dac843072d5157b503d15ecd9416db",
+  "roboto-flex-subset.ttf": "a35566d0b06d64ca99e930c912e694b89c480232b081f2afb4a99d6922e89215",
+  "roboto-flex-subset.woff2": "1cbefc33a7df9336126d08231dcfdcc5d9afa0f67384c7d67ddd7016926c5e5a"
+ }
+}

@@ -1,0 +1,52 @@
+{
+ "schema_version": 1,
+ "suite": "resources-images",
+ "note": "materialised by tests/lifecycle.rs",
+ "files": {
+  "fake/red-4x3.fake": {
+   "hex": "5534464b040000000300000000000000000001ff0000ff"
+  },
+  "fake/blue-8x6.fake": {
+   "hex": "5534464b0800000006000000000000000000010000ffff"
+  },
+  "fake/green-16x12.fake": {
+   "hex": "5534464b100000000c0000000000000000000100ff00ff"
+  },
+  "fake/delayed-300ms.fake": {
+   "hex": "5534464b04000000030000002c010000000001ff0000ff"
+  },
+  "fake/delayed-600ms.fake": {
+   "hex": "5534464b080000000600000058020000000001ff0000ff"
+  },
+  "fake/fails-decode.fake": {
+   "hex": "5534464b040000000300000000000000010001ff0000ff"
+  },
+  "fake/animated.fake": {
+   "hex": "5534464b040000000300000000000000000201ff0000ff"
+  },
+  "fake/icc.fake": {
+   "hex": "5534464b040000000300000000000000000401ff0000ff"
+  },
+  "fake/panics.fake": {
+   "hex": "5534464b040000000300000000000000000101ff0000ff"
+  },
+  "fake/orient6-6x2.fake": {
+   "hex": "5534464b060000000200000000000000000006ff0000ff"
+  },
+  "fake/shared-logo.fake": {
+   "hex": "5534464b2800000014000000000000000000010a141eff"
+  },
+  "fake/logo@1x.fake": {
+   "hex": "5534464b640000003200000000000000000001ff0000ff"
+  },
+  "fake/logo@2x.fake": {
+   "hex": "5534464bc80000006400000000000000000001ff0000ff"
+  },
+  "css/site.css": {
+   "text": ".hero { background-image: url(../fake/green-16x12.fake); }\n.icon { background-image: url('../fake/red-4x3.fake'); }\n"
+  },
+  "index.html": {
+   "text": "<!doctype html><title>resources-images</title><img src=\"fake/red-4x3.fake\"><img srcset=\"fake/logo@1x.fake 1x, fake/logo@2x.fake 2x\">\n"
+  }
+ }
+}

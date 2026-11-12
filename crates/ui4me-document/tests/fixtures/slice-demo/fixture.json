@@ -1,0 +1,281 @@
+{
+  "baselines": {
+    "chromium.linux-kde-wayland.headless": {
+      "version": 1
+    },
+    "chromium.windows-server-2022.headless": {
+      "version": 1
+    }
+  },
+  "entry": "index.html",
+  "environment": {
+    "profile": "default"
+  },
+  "fixture_id": "slice-demo",
+  "observables": [
+    "dom",
+    "computed-style",
+    "geometry"
+  ],
+  "owner_feature": "001",
+  "probes": [
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "dom",
+        "computed-style",
+        "geometry"
+      ],
+      "probe_id": "card",
+      "properties": [
+        "display",
+        "box-sizing",
+        "width",
+        "height",
+        "margin-top",
+        "margin-right",
+        "margin-bottom",
+        "margin-left",
+        "padding-top",
+        "padding-right",
+        "padding-bottom",
+        "padding-left",
+        "border-top-width",
+        "border-right-width",
+        "border-bottom-width",
+        "border-left-width",
+        "border-top-style",
+        "border-top-color",
+        "color",
+        "background-color",
+        "font-size",
+        "line-height",
+        "text-align"
+      ]
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "dom",
+        "computed-style",
+        "geometry"
+      ],
+      "probe_id": "title",
+      "properties": [
+        "display",
+        "box-sizing",
+        "width",
+        "height",
+        "margin-top",
+        "margin-right",
+        "margin-bottom",
+        "margin-left",
+        "padding-top",
+        "padding-right",
+        "padding-bottom",
+        "padding-left",
+        "border-top-width",
+        "border-right-width",
+        "border-bottom-width",
+        "border-left-width",
+        "border-top-style",
+        "border-top-color",
+        "color",
+        "background-color",
+        "font-size",
+        "line-height",
+        "text-align"
+      ]
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "dom",
+        "computed-style",
+        "geometry"
+      ],
+      "probe_id": "msg",
+      "properties": [
+        "display",
+        "box-sizing",
+        "width",
+        "height",
+        "margin-top",
+        "margin-right",
+        "margin-bottom",
+        "margin-left",
+        "padding-top",
+        "padding-right",
+        "padding-bottom",
+        "padding-left",
+        "border-top-width",
+        "border-right-width",
+        "border-bottom-width",
+        "border-left-width",
+        "border-top-style",
+        "border-top-color",
+        "color",
+        "background-color",
+        "font-size",
+        "line-height",
+        "text-align"
+      ]
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "dom",
+        "computed-style",
+        "geometry"
+      ],
+      "probe_id": "inc",
+      "properties": [
+        "display",
+        "box-sizing",
+        "width",
+        "height",
+        "margin-top",
+        "margin-right",
+        "margin-bottom",
+        "margin-left",
+        "padding-top",
+        "padding-right",
+        "padding-bottom",
+        "padding-left",
+        "border-top-width",
+        "border-right-width",
+        "border-bottom-width",
+        "border-left-width",
+        "border-top-style",
+        "border-top-color",
+        "color",
+        "background-color",
+        "font-size",
+        "line-height",
+        "text-align"
+      ]
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "dom",
+        "computed-style",
+        "geometry"
+      ],
+      "probe_id": "count",
+      "properties": [
+        "display",
+        "box-sizing",
+        "width",
+        "height",
+        "margin-top",
+        "margin-right",
+        "margin-bottom",
+        "margin-left",
+        "padding-top",
+        "padding-right",
+        "padding-bottom",
+        "padding-left",
+        "border-top-width",
+        "border-right-width",
+        "border-bottom-width",
+        "border-left-width",
+        "border-top-style",
+        "border-top-color",
+        "color",
+        "background-color",
+        "font-size",
+        "line-height",
+        "text-align"
+      ]
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "dom",
+        "computed-style",
+        "geometry"
+      ],
+      "probe_id": "n",
+      "properties": [
+        "display",
+        "box-sizing",
+        "width",
+        "height",
+        "margin-top",
+        "margin-right",
+        "margin-bottom",
+        "margin-left",
+        "padding-top",
+        "padding-right",
+        "padding-bottom",
+        "padding-left",
+        "border-top-width",
+        "border-right-width",
+        "border-bottom-width",
+        "border-left-width",
+        "border-top-style",
+        "border-top-color",
+        "color",
+        "background-color",
+        "font-size",
+        "line-height",
+        "text-align"
+      ]
+    }
+  ],
+  "profile_expectations": {
+    "ui4me-css/1": {
+      "expect_unsupported": []
+    }
+  },
+  "schema_version": 1,
+  "source_hash": "36d382556a90925b1a19b595b915b420eb715e96244f6280011313ef82b19f79",
+  "sources": [
+    {
+      "path": "index.html",
+      "role": "html",
+      "sha256": "d88afc729ea93434c1a2285dadebcfecf3ca0d63463ec18cb1f16bdc36ba7d8c"
+    }
+  ],
+  "status": "active",
+  "suite": "slice",
+  "tags": {
+    "contracts": [
+      "U4C-DOC",
+      "U4C-CSS",
+      "U4C-BOX",
+      "U4C-RES"
+    ],
+    "kind": [],
+    "stages": [
+      "parse",
+      "cascade",
+      "box",
+      "text",
+      "layout"
+    ],
+    "standards": [
+      "css2.1",
+      "css-values-4",
+      "css-color-4"
+    ],
+    "u4t": [
+      "U4T-101",
+      "U4T-102"
+    ]
+  },
+  "title": "Slice S1 demo document (001 slice-scenario §1)",
+  "variants": [
+    {
+      "color_scheme": "light",
+      "dpr": 1,
+      "reduced_motion": "no-preference",
+      "variant_id": "default",
+      "viewport": {
+        "height": 360,
+        "width": 480
+      }
+    }
+  ]
+}

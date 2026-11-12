@@ -8,6 +8,7 @@ divides shared pages between processes) next to RSS; on Windows as private bytes
 and working set. Results are measurements of this machine only.
 """
 import argparse
+from contextlib import nullcontext
 from datetime import datetime, timezone
 import json
 import os
@@ -17,10 +18,12 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from run_example import locate_host  # noqa: E402
+from native_acceptance import source_identity  # noqa: E402
 
 
 # --------------------------------------------------------------------------- backend
@@ -36,7 +39,22 @@ def backend(args):
     client = RpcClient.from_environment()
     main = client.call("window.create", {"title": "UI4ME measurement", "width": 800, "height": 500})
     main = main if isinstance(main, str) else main["window_id"]
-    client.call("probe.set_text", {"window_id": main, "text": "Resource measurement"})
+    def load_document(window):
+        result = client.call("document.load", {"window_id": window,
+            "path": str(ROOT / "examples/python/ui/index.html")}, timeout=30)
+        key = {"window_id": window, "document_id": result["document_id"]}
+        client.call("document.command", {**key, "command": {"op": "set_environment", "reduced_motion": "reduce"}})
+        deadline = time.monotonic() + 20
+        while client.call("document.get", {"window_id": window})["pending_resources"]:
+            if time.monotonic() > deadline:
+                raise TimeoutError("Renderer resources did not settle")
+            time.sleep(0.02)
+        return key
+
+    if args.renderer:
+        main_document = load_document(main)
+    else:
+        client.call("probe.set_text", {"window_id": main, "text": "Resource measurement"})
     client.call("app.ready")
     diagnostics = client.call("host.diagnostics")
     emit("ready", host_pid=diagnostics["pid"], backend_pid=os.getpid())
@@ -48,7 +66,10 @@ def backend(args):
     for index in range(args.cycles):
         window = client.call("window.create", {"title": f"UI4ME cycle {index}", "width": 400, "height": 300})
         window = window if isinstance(window, str) else window["window_id"]
-        client.call("probe.set_text", {"window_id": window, "text": f"cycle {index}"})
+        if args.renderer:
+            load_document(window)
+        else:
+            client.call("probe.set_text", {"window_id": window, "text": f"cycle {index}"})
         time.sleep(0.05)
         client.call("window.request_close", {"window_id": window})
         deadline = time.monotonic() + 10
@@ -59,9 +80,23 @@ def backend(args):
         if (index + 1) % args.sample_every == 0:
             emit("cycles", done=index + 1)
             time.sleep(1.0)  # let the driver sample a settled state
+    if args.renderer:
+        for index in range(args.dom_cycles):
+            markup = f'<tr id="churn-{index}"><td>{index}</td><td>Transient document row</td><td>Normal</td><td>Yes</td></tr>'
+            client.call("document.command", {**main_document, "command": {"op": "batch", "ops": [
+                {"op": "insert_html", "element": "rows", "position": "beforeend", "html": markup},
+                {"op": "set_text", "element": "status", "text": f"Document mutation {index}"},
+            ]}})
+            client.call("document.command", {**main_document,
+                "command": {"op": "remove_element", "element": f"churn-{index}"}})
+            if (index + 1) % args.sample_every == 0:
+                emit("dom_cycles", done=index + 1)
+                time.sleep(1.0)
     emit("done")
     client.call("app.request_quit")
-    client.shutdown_requested.wait(10)
+    if not client.shutdown_requested.wait(10):
+        raise TimeoutError("Missing orderly shutdown")
+    client.close()
 
 
 # --------------------------------------------------------------------------- sampling
@@ -70,11 +105,20 @@ def cpu_seconds(pid):
         import ctypes
         from ctypes import wintypes
         k = ctypes.WinDLL("kernel32", use_last_error=True)
+        k.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
         k.OpenProcess.restype = wintypes.HANDLE
+        k.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+        k.GetProcessTimes.restype = wintypes.BOOL
+        k.CloseHandle.argtypes = [wintypes.HANDLE]
         handle = k.OpenProcess(0x1000, False, pid)
+        if not handle:
+            raise ctypes.WinError(ctypes.get_last_error())
         times = [wintypes.FILETIME() for _ in range(4)]
-        k.GetProcessTimes(handle, *(ctypes.byref(t) for t in times))
-        k.CloseHandle(handle)
+        try:
+            if not k.GetProcessTimes(handle, *(ctypes.byref(t) for t in times)):
+                raise ctypes.WinError(ctypes.get_last_error())
+        finally:
+            k.CloseHandle(handle)
         value = lambda t: ((t.dwHighDateTime << 32) | t.dwLowDateTime) / 1e7
         return value(times[2]) + value(times[3])
     # Exact scheduler runtime of every thread. Tick-sampled utime/stime
@@ -100,12 +144,21 @@ def memory_kib(pid):
                     "QuotaPagedPoolUsage", "QuotaPeakNonPagedPoolUsage", "QuotaNonPagedPoolUsage",
                     "PagefileUsage", "PeakPagefileUsage", "PrivateUsage")]
         k = ctypes.WinDLL("kernel32", use_last_error=True)
+        k.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
         k.OpenProcess.restype = wintypes.HANDLE
-        psapi = ctypes.WinDLL("psapi")
+        k.CloseHandle.argtypes = [wintypes.HANDLE]
+        psapi = ctypes.WinDLL("psapi", use_last_error=True)
+        psapi.GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD]
+        psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
         handle = k.OpenProcess(0x1000 | 0x0010, False, pid)
+        if not handle:
+            raise ctypes.WinError(ctypes.get_last_error())
         counters = Counters(cb=ctypes.sizeof(Counters))
-        psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb)
-        k.CloseHandle(handle)
+        try:
+            if not psapi.GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
+                raise ctypes.WinError(ctypes.get_last_error())
+        finally:
+            k.CloseHandle(handle)
         return {"private_kib": counters.PrivateUsage // 1024, "working_set_kib": counters.WorkingSetSize // 1024}
     values = {}
     for line in Path(f"/proc/{pid}/smaps_rollup").read_text().splitlines()[1:]:
@@ -156,17 +209,19 @@ def first_frame_time(log_path):
     return None, None
 
 
-def run_once(host, folder, index, idle, cycles, sample_every):
+def run_once(host, folder, index, idle, cycles, sample_every, *, renderer=False, dom_cycles=0):
     events = folder / f"events-{index}.jsonl"
     log_path = folder / f"host-{index}.log"
     app = folder / f"app-{index}.toml"
     backend_args = [str(Path(__file__).resolve()), "--backend", "--events", str(events),
                     "--idle", str(idle), "--cycles", str(cycles), "--sample-every", str(sample_every)]
+    if renderer:
+        backend_args += ["--renderer", "--dom-cycles", str(dom_cycles)]
     q = lambda value: json.dumps(value, ensure_ascii=False)
     app.write_text("\n".join([
         "[app]", 'id = "org.ui4me.Measurement"', 'name = "UI4ME measurement"', "",
         "[backend]", f"program = {q(sys.executable)}", f"args = {q(backend_args)}",
-        f"cwd = {q(str(folder))}", "", "[host]", 'instance = "multiple"', ""]), encoding="utf-8")
+        f"cwd = {q(str(folder))}", "", "[host]", 'instance = "multiple"', "startup_timeout_ms = 30000", ""]), encoding="utf-8")
     with log_path.open("wb") as log:
         started = time.time()
         process = subprocess.Popen([host, "run", "--app", str(app)], stdout=log, stderr=subprocess.STDOUT)
@@ -186,19 +241,26 @@ def run_once(host, folder, index, idle, cycles, sample_every):
                                   "backend_cpu_percent": round(100 * (c1[1] - c0[1]) / span, 3),
                                   "memory_after_idle": combined(host_pid, backend_pid)}
                 del start_row
-            if cycles:
-                samples, seen = [], 0
-                deadline = time.monotonic() + cycles * 2 + 60
+            if cycles or dom_cycles:
+                samples, seen = {"cycles": [], "dom_cycles": []}, {"cycles": 0, "dom_cycles": 0}
+                deadline = time.monotonic() + (cycles + dom_cycles) * 2 + 60
+                completed = False
                 while time.monotonic() < deadline:
-                    rows = [r for r in read_events(events) if r["event"] == "cycles"]
-                    if len(rows) > seen:
-                        seen = len(rows)
-                        time.sleep(0.5)
-                        samples.append({"cycles": rows[-1]["done"], **combined(host_pid, backend_pid)})
+                    for kind in samples:
+                        rows = [r for r in read_events(events) if r["event"] == kind]
+                        if len(rows) > seen[kind]:
+                            seen[kind] = len(rows)
+                            time.sleep(0.5)
+                            samples[kind].append({kind: rows[-1]["done"], **combined(host_pid, backend_pid)})
                     if any(r["event"] == "done" for r in read_events(events)):
+                        completed = True
                         break
                     time.sleep(0.05)
-                result["window_cycles"] = samples
+                if not completed:
+                    raise TimeoutError("Window/DOM churn did not finish")
+                result["window_cycles"] = samples["cycles"]
+                if renderer:
+                    result["dom_cycles"] = samples["dom_cycles"]
             process.wait(timeout=30)
         finally:
             if process.poll() is None:
@@ -208,6 +270,8 @@ def run_once(host, folder, index, idle, cycles, sample_every):
     result["first_frame_ms"] = round((frame_at - started) * 1000, 1) if frame_at else None
     result["first_frame_since_host_start_ms"] = since_host_ms
     result["host_exit_code"] = process.returncode
+    if process.returncode:
+        raise RuntimeError(f"Measurement host failed with exit code {process.returncode}; {log_path}")
     return result
 
 
@@ -220,21 +284,37 @@ def main():
     parser.add_argument("--idle", type=float, default=25)
     parser.add_argument("--cycles", type=int, default=200)
     parser.add_argument("--sample-every", type=int, default=50)
+    parser.add_argument("--renderer", action="store_true", help="Measure loaded HTML/CSS documents with animation disabled")
+    parser.add_argument("--dom-cycles", type=int, default=400, help="Additional insert/update/remove cycles with --renderer")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    if args.startup_runs < 1 or args.sample_every < 1 or min(args.cycles, args.dom_cycles) < 0:
+        parser.error("Startup runs and sample interval must be positive; cycle counts must not be negative")
+    if args.idle != 0 and args.idle < 5:
+        parser.error("--idle must be zero or at least five seconds")
     if args.backend:
         return backend(args)
     host = locate_host(args.host, release=True)
     report = {"schema": 1, "time_utc": datetime.now(timezone.utc).isoformat(), "host": host,
+              "source_sha256": source_identity(), "surface": "renderer" if args.renderer else "probe",
+              "first_frame_scope": "First native window frame; not proof that asynchronous document resources are visible",
+              "readiness_scope": "HTML loaded and resources settled, reduced motion enabled" if args.renderer else "Probe created",
               "platform": platform.platform(), "python": sys.version.split()[0],
               "cpu_metric": "Linux: summed per-thread schedstat runtime" if os.name != "nt"
               else "Windows: GetProcessTimes kernel+user time",
               "memory_metric": "Linux: PSS/RSS/shared/private from smaps_rollup" if os.name != "nt"
               else "Windows: private bytes and working set (GetProcessMemoryInfo)"}
-    with tempfile.TemporaryDirectory(prefix="ui4me-measure-") as tmp:
+    if args.output:
+        raw = args.output.resolve().parent / (args.output.stem + "-raw-" + uuid.uuid4().hex[:8])
+        raw.mkdir(parents=True, exist_ok=False)
+        report["raw_directory"] = str(raw)
+    else:
+        raw = None
+    with nullcontext(str(raw)) if raw else tempfile.TemporaryDirectory(prefix="ui4me-measure-") as tmp:
         folder = Path(tmp)
-        report["startup"] = [run_once(host, folder, i, 0, 0, 1) for i in range(args.startup_runs)]
-        report["sustained"] = run_once(host, folder, 99, args.idle, args.cycles, args.sample_every)
+        report["startup"] = [run_once(host, folder, i, 0, 0, 1, renderer=args.renderer) for i in range(args.startup_runs)]
+        report["sustained"] = run_once(host, folder, 99, args.idle, args.cycles, args.sample_every,
+                                       renderer=args.renderer, dom_cycles=args.dom_cycles if args.renderer else 0)
     text = json.dumps(report, indent=2)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

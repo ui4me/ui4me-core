@@ -1,0 +1,13 @@
+# P-006-12: enable scrollbar-gutter in servo mode (015 PAINT-3).
+# Applies to servo/stylo @ 37c1ed3b707c8f333304de2107c13b68fbc1057c after P-006-1 .. P-006-10 (patch -p1).
+# Licence: MPL-2.0; modified source is published in this repository.
+--- a/style/properties/longhands.toml
++++ b/style/properties/longhands.toml
+@@ -1929,7 +1929,6 @@
+ type = "ScrollbarGutter"
+ initial = "computed::ScrollbarGutter::AUTO"
+ struct = "box"
+-engine = "gecko"
+ animation_type = "discrete"
+ spec = "https://drafts.csswg.org/css-overflow-3/#scrollbar-gutter-property"
+ affects = "layout"

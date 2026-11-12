@@ -1,0 +1,53 @@
+# P-006-7: `orphans` and `widows` as servo-mode inherited integer longhands (ui4me 015 FRAG-2c, register UP-11; lane L-MC, AUTHORISATIONS E-029): positive integers, initial 2, struct inherited_text; removed from the counted-unknown list (Gecko never implemented them, so the pinned engine drops them as unknown)
+# Applies to: servo/stylo @ 37c1ed3b707c8f333304de2107c13b68fbc1057c after P-006-1, P-006-2, P-006-3, P-006-4, P-006-5 and P-006-6 (when P-006-6, lane L-TXT, is carried; this diff was made against P-006-1..5 and is regenerated on that merge) (root of the checkout, `patch -p1`)
+# Licence: MPL-2.0 (modifications to MPL-2.0 files; the modified source is published with the repository, see engine/NOTICE)
+
+--- a/style/properties/longhands.toml
++++ b/style/properties/longhands.toml
+@@ -1484,6 +1484,17 @@
+ servo_restyle_damage = "rebuild_box"
+ affects = "layout"
+ 
++[orphans]
++type = "Integer"
++initial = "2"
++struct = "inherited_text"
++engine = "servo"
++parse_method = "parse_positive"
++animation_type = "discrete"
++spec = "https://drafts.csswg.org/css-break/#propdef-orphans"
++servo_restyle_damage = "rebuild_box"
++affects = "layout"
++
+ [outline-color]
+ type = "Color"
+ initial = "computed_value::T::currentcolor()"
+@@ -2444,6 +2455,17 @@
+ spec = "https://svgwg.org/svg2-draft/geometry.html#Y"
+ affects = "layout"
+ 
++[widows]
++type = "Integer"
++initial = "2"
++struct = "inherited_text"
++engine = "servo"
++parse_method = "parse_positive"
++animation_type = "discrete"
++spec = "https://drafts.csswg.org/css-break/#propdef-widows"
++servo_restyle_damage = "rebuild_box"
++affects = "layout"
++
+ [width]
+ type = "Size"
+ initial = "computed::Size::auto()"
+--- a/style/properties/counted_unknown_properties.py
++++ b/style/properties/counted_unknown_properties.py
+@@ -7,8 +7,6 @@
+     "speak",
+     "text-size-adjust",
+     "-webkit-user-drag",
+-    "orphans",
+-    "widows",
+     "-webkit-user-modify",
+     "-webkit-margin-before",
+     "-webkit-margin-after",

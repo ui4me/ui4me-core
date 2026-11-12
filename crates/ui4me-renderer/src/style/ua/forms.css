@@ -1,0 +1,136 @@
+/* owner: 006-style-engine — T032
+ *
+ * SPDX-License-Identifier: CC-BY-4.0 AND MIT
+ * (CC-BY-4.0: block 1, WHATWG-derived; MIT: block 2, ui4me-owned.)
+ * Ported-From: https://html.spec.whatwg.org/multipage/rendering.html@6d7788bc56a4b39d955a9a7fdb501c7c7d27999a
+ *
+ * Block 1 (§15.5.x "Form controls") derives from the WHATWG HTML Living Standard, Copyright ©
+ * WHATWG (Apple, Google, Mozilla, Microsoft), CC-BY-4.0, https://creativecommons.org/licenses/by/4.0/
+ * (OD-26 default, pending owner approval). Block 2 states the UA padding and border values of
+ * 012 `contracts/controls.md` section 4 (Chromium-like, OD-28 deterministic theme) and is owned
+ * by ui4me. Changes and the omitted rules are listed in ua/PROVENANCE.md (M4, M11, M12).
+ */
+
+@namespace "http://www.w3.org/1999/xhtml";
+
+/* Block 1: WHATWG Rendering, Form controls */
+input, button, textarea {
+  letter-spacing: initial;
+  word-spacing: initial;
+  line-height: initial;
+}
+
+input, select, button, textarea {
+  text-transform: initial;
+  text-indent: initial;
+  text-shadow: initial;
+  appearance: auto;
+}
+
+/* Enabled controls use the system text colour instead of inheriting the parent's.
+ * File inputs inherit and range inputs have a separate platform colour. */
+input:enabled:not([type=file i], [type=range i]), select:enabled, textarea:enabled { color: FieldText; }
+button:enabled, input:enabled:is([type=button i], [type=submit i], [type=reset i]) { color: ButtonText; }
+
+/* The native progress control defaults to auto; author appearance:none overrides it. */
+progress { appearance: auto; }
+
+input:not([type=range i], [type=checkbox i], [type=radio i]) {
+  overflow: clip !important;
+}
+
+input, select, textarea {
+  text-align: initial;
+}
+
+input:is([type=reset i], [type=button i], [type=submit i]), button {
+  text-align: center;
+}
+
+/* M4 (slice): §15.5 states the button-layout behaviour in prose ("expected to act as
+ * inline-block"); stated as a rule. */
+input, button {
+  display: inline-block;
+}
+
+/* L-LAYFIX-r8: the same prose covers the other form controls (Chromium resolves `inline-block`). */
+select, textarea, meter, progress {
+  display: inline-block;
+}
+
+/* Chromium aligns these controls one fifth of their font size below the baseline. */
+meter, progress { vertical-align: -0.2em; }
+
+input[type=hidden i], input[type=file i], input[type=image i] {
+  appearance: none;
+}
+
+input:is([type=radio i], [type=checkbox i], [type=reset i], [type=button i],
+[type=submit i], [type=color i], [type=search i]), select, button {
+  box-sizing: border-box;
+}
+
+textarea { white-space: pre-wrap; overflow: auto; }
+
+/* Chromium: menulists clip even an author overflow declaration, while a
+ * multi-row listbox's scroll defaults remain overridable by the author. */
+select:-ui4me-single-row-select { overflow: clip !important; }
+select:not(:-ui4me-single-row-select) { overflow-x: hidden; overflow-y: scroll; }
+
+/* Block 2: ui4me-owned values of controls.md section 4 (author CSS overrides everything). */
+
+/* L-BLK-r13: the reference browser's `font: -webkit-small-control` for the text-bearing controls (13.3333px
+ * system-ui, every other font longhand and the line height reset): a control's own font does not inherit from
+ * its parent, which also holds for the text of a `display: contents` button (layout-block/box-display-contents). */
+input, select, textarea, button {
+  font: 13.3333px system-ui;
+}
+
+input:not([type=checkbox i], [type=radio i], [type=range i], [type=button i], [type=submit i],
+[type=reset i], [type=image i], [type=file i], [type=color i], [type=hidden i]) {
+  padding: 1px 2px;
+  border: 2px inset;
+}
+
+textarea {
+  padding: 2px;
+  border: 1px solid;
+}
+
+input:is([type=checkbox i], [type=radio i]) {
+  margin: 3px 3px 3px 4px;
+  padding: 0;
+  color: FieldText;
+}
+
+input:disabled:is([type=checkbox i], [type=radio i]) {
+  color: light-dark(rgb(84, 84, 84), rgb(170, 170, 170));
+}
+
+input[type=radio i] {
+  margin: 3px 3px 0 5px;
+}
+
+button, input:is([type=button i], [type=submit i], [type=reset i]) {
+  padding: 1px 6px;
+  border: 2px outset;
+}
+
+select {
+  padding: 0;
+  border: 1px solid;
+}
+
+select[multiple], select[size]:not([size="1"]) {
+  border-style: inset;
+}
+
+input[type=range i] {
+  margin: 2px;
+}
+
+/* L-CTRL-r10: the colour swatch box (Chromium: 50 x 27 outside, border 1px, padding 1px 2px). */
+input[type=color i] {
+  padding: 1px 2px;
+  border: 1px solid;
+}

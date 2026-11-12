@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ui4me slice</title>
+<style>
+:root { --accent: #3366cc; --accent-active: #cc3333; }
+html { background-color: #ffffff; }
+body { margin: 16px; font-family: "Noto Sans"; font-size: 16px; line-height: 20px; color: #1a1a1a; }
+.card { width: 320px; padding: 12px; border: 2px solid var(--accent); background-color: #eef3fb; }
+.card.active { border-color: var(--accent-active); background-color: #fbeeee; }
+h1 { margin: 0 0 8px 0; font-size: 24px; line-height: 28px; font-weight: 400; color: #102a5c; }
+p { margin: 0 0 12px 0; }
+.btn { display: block; box-sizing: border-box; width: 50%; margin: 0 0 12px 0; padding: 6px 12px;
+       border: 2px solid #1f4e9c; background-color: #2b6cd4; color: #ffffff; font: inherit;
+       text-align: center; appearance: none; }
+.count { margin: 0; }
+#n { color: var(--accent); }
+.card.active #n { color: var(--accent-active); }
+.log { margin: 4px 0 0 0; font-size: 12px; line-height: 16px; color: #555555; }
+</style>
+</head>
+<body>
+<div id="card" data-probe="card" class="card">
+<h1 id="title" data-probe="title">Hello from ui4me</h1>
+<p id="msg" data-probe="msg">The quick brown fox jumps over the lazy dog, then rests in the shade of the old oak tree.</p>
+<button id="inc" data-probe="inc" class="btn" type="button">Increment</button>
+<p id="count" data-probe="count" class="count">Clicks: <span id="n" data-probe="n">0</span></p>
+</div>
+</body>
+</html>

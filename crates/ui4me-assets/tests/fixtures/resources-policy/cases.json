@@ -1,0 +1,1131 @@
+{
+ "schema_version": 1,
+ "suite": "resources-policy",
+ "cases": [
+  {
+   "id": "plain-relative",
+   "title": "relative file inside the document directory",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/a.png",
+   "expect": "OK"
+  },
+  {
+   "id": "nested-relative",
+   "title": "nested subdirectory",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "sub/deep/c.png",
+   "expect": "OK"
+  },
+  {
+   "id": "dot-segments-inside",
+   "title": "./ and . segments normalised",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "./img/./a.png",
+   "expect": "OK"
+  },
+  {
+   "id": "double-slash",
+   "title": "empty path segment",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img//a.png",
+   "expect": "OK"
+  },
+  {
+   "id": "case-differs",
+   "title": "Linux file names are case sensitive",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/b.png",
+   "expect": "FILE_NOT_FOUND"
+  },
+  {
+   "id": "dotdot-parent",
+   "title": "../ escapes the implicit root",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "../secret.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "dotdot-encoded",
+   "title": "%2e%2e/ escapes",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "%2e%2e/secret.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "dotdot-encoded-mixed",
+   "title": "%2E%2e/ escapes",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "%2E%2e/secret.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "dotdot-twice",
+   "title": "../../outside/o.png",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "../../outside/o.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "dotdot-double-encoded",
+   "title": "%252e%252e is a literal name, not a traversal",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "%252e%252e/secret.png",
+   "expect": "FILE_NOT_FOUND"
+  },
+  {
+   "id": "encoded-slash",
+   "title": "..%2fsecret.png cannot smuggle a separator",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "..%2fsecret.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "backslash-traversal",
+   "title": "..\\secret.png (WHATWG turns it into ../)",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "..\\secret.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "absolute-inside",
+   "title": "absolute file URL inside the root",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "file://{tmp}/app/ui/img/a.png",
+   "expect": "OK"
+  },
+  {
+   "id": "absolute-outside",
+   "title": "absolute file URL outside every root",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "file://{tmp}/outside/o.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "absolute-etc-passwd",
+   "title": "a well-known system file",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "file:///etc/passwd",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "path-absolute-reference",
+   "title": "/app/secret.png resolves to the file system root",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "/app/secret.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "localhost-host",
+   "title": "file://localhost/... is the local machine",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "file://localhost{tmp}/app/ui/img/a.png",
+   "expect": "OK"
+  },
+  {
+   "id": "unc-like-host",
+   "title": "a host other than localhost is a network share",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "file://server/share/a.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "nul-byte",
+   "title": "%00 in the path",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/a%00.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "space-in-name",
+   "title": "percent-encoded space",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/a%20b.png",
+   "expect": "OK",
+   "extra": {
+    "files": {
+     "app/ui/img/a b.png": "fake:2x2"
+    }
+   }
+  },
+  {
+   "id": "unicode-name",
+   "title": "non-ASCII file name",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/%C3%A9.png",
+   "expect": "OK",
+   "extra": {
+    "files": {
+     "app/ui/img/\u00e9.png": "fake:2x2"
+    }
+   }
+  },
+  {
+   "id": "fragment-ignored",
+   "title": "fragment is ignored for loading",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/a.png#frag",
+   "expect": "OK"
+  },
+  {
+   "id": "query-ignored",
+   "title": "query is not part of a file path",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/a.png?v=1",
+   "expect": "OK"
+  },
+  {
+   "id": "missing-inside",
+   "title": "a missing file inside the root",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/nope.png",
+   "expect": "FILE_NOT_FOUND"
+  },
+  {
+   "id": "missing-outside",
+   "title": "a missing file outside every root does not reveal that it is missing",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "../nope.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "sibling-prefix",
+   "title": "app/ui2 shares a string prefix with the root app/ui",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "../ui2/x.png",
+   "expect": "RESOURCE_DENIED",
+   "extra": {
+    "files": {
+     "app/ui2/x.png": "fake:2x2"
+    }
+   }
+  },
+  {
+   "id": "symlink-inside-file",
+   "title": "symlink to a file inside the root",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/link_in.png",
+   "expect": "OK",
+   "extra": {
+    "symlinks": {
+     "app/ui/img/link_in.png": "a.png"
+    }
+   }
+  },
+  {
+   "id": "symlink-chain-inside",
+   "title": "chain of three links inside the root",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/l3.png",
+   "expect": "OK",
+   "extra": {
+    "symlinks": {
+     "app/ui/img/l1.png": "a.png",
+     "app/ui/img/l2.png": "l1.png",
+     "app/ui/img/l3.png": "l2.png"
+    }
+   }
+  },
+  {
+   "id": "symlink-out-file",
+   "title": "symlink to a file outside the root",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/link_out.png",
+   "expect": "RESOURCE_DENIED",
+   "extra": {
+    "symlinks": {
+     "app/ui/img/link_out.png": "../../../outside/o.png"
+    }
+   }
+  },
+  {
+   "id": "symlink-out-dir",
+   "title": "symlinked directory that leaves the root",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "linkdir/o.png",
+   "expect": "RESOURCE_DENIED",
+   "extra": {
+    "symlinks": {
+     "app/ui/linkdir": "../../outside"
+    }
+   }
+  },
+  {
+   "id": "symlink-out-absolute",
+   "title": "absolute symlink target outside",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/abs_out.png",
+   "expect": "RESOURCE_DENIED",
+   "extra": {
+    "symlinks": {
+     "app/ui/img/abs_out.png": "{tmp}/outside/o.png"
+    }
+   }
+  },
+  {
+   "id": "symlink-to-etc-passwd",
+   "title": "symlink to a system file",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/passwd.png",
+   "expect": "RESOURCE_DENIED",
+   "extra": {
+    "symlinks": {
+     "app/ui/img/passwd.png": "/etc/passwd"
+    }
+   }
+  },
+  {
+   "id": "symlink-loop",
+   "title": "a symlink loop cannot be opened",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/loop1.png",
+   "expect": "RESOURCE_DENIED",
+   "extra": {
+    "symlinks": {
+     "app/ui/img/loop1.png": "loop2.png",
+     "app/ui/img/loop2.png": "loop1.png"
+    }
+   }
+  },
+  {
+   "id": "symlink-dangling-inside",
+   "title": "dangling link whose directory is inside the root",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/dangling.png",
+   "expect": "FILE_NOT_FOUND",
+   "extra": {
+    "symlinks": {
+     "app/ui/img/dangling.png": "gone.png"
+    }
+   }
+  },
+  {
+   "id": "symlink-into-root-from-outside",
+   "title": "a link outside the root pointing in, requested by its real path",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/a.png",
+   "expect": "OK",
+   "extra": {
+    "symlinks": {
+     "outside/pointer": "../app/ui"
+    }
+   }
+  },
+  {
+   "id": "proc-magic-link",
+   "title": "/proc/self/root traversal",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "file:///proc/self/root{tmp}/outside/o.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "root-is-symlink",
+   "title": "an explicit root that is itself a symlink is canonicalised",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "string_none",
+   "roots": [
+    "rootlink"
+   ],
+   "implicit_root": true,
+   "request": "file://{tmp}/rootlink/img/a.png",
+   "expect": "OK",
+   "extra": {
+    "symlinks": {
+     "rootlink": "app/ui"
+    }
+   }
+  },
+  {
+   "id": "root-symlink-escape",
+   "title": "a link inside a symlinked root still may not leave it",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "string_none",
+   "roots": [
+    "rootlink"
+   ],
+   "implicit_root": true,
+   "request": "file://{tmp}/rootlink/linkdir/o.png",
+   "expect": "RESOURCE_DENIED",
+   "extra": {
+    "symlinks": {
+     "rootlink": "app/ui",
+     "app/ui/linkdir": "../../outside"
+    }
+   }
+  },
+  {
+   "id": "directory",
+   "title": "a directory is not a regular file",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "directory-slash",
+   "title": "a directory with a trailing slash",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "fifo",
+   "title": "a FIFO does not hang and is not regular",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/pipe.png",
+   "expect": "RESOURCE_DENIED",
+   "extra": {
+    "fifos": [
+     "app/ui/img/pipe.png"
+    ]
+   }
+  },
+  {
+   "id": "device-node",
+   "title": "a character device under an explicit root",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "string_none",
+   "roots": [
+    "abs:/dev"
+   ],
+   "implicit_root": true,
+   "request": "file:///dev/null",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "dev-outside-root",
+   "title": "a device outside the roots",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "file:///dev/zero",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "hardlink-inside",
+   "title": "a hard link inside the root is the root's own file",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/hard.png",
+   "expect": "OK",
+   "extra": {
+    "hardlinks": {
+     "app/ui/img/hard.png": "app/ui/img/a.png"
+    }
+   }
+  },
+  {
+   "id": "size-over-limit",
+   "title": "encoded size over the limit is rejected before reading",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/big.png",
+   "expect": "SIZE_LIMIT",
+   "extra": {
+    "files": {
+     "app/ui/img/big.png": "size:2048"
+    }
+   },
+   "policy": {
+    "max_encoded_image": 1024
+   }
+  },
+  {
+   "id": "size-at-limit",
+   "title": "exactly at the limit passes the size gate",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/edge.png",
+   "expect": "UNSUPPORTED_MEDIA_TYPE",
+   "extra": {
+    "files": {
+     "app/ui/img/edge.png": "size:1024"
+    }
+   },
+   "policy": {
+    "max_encoded_image": 1024
+   }
+  },
+  {
+   "id": "zero-byte",
+   "title": "an empty file",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/zero.png",
+   "expect": "UNSUPPORTED_MEDIA_TYPE",
+   "extra": {
+    "files": {
+     "app/ui/img/zero.png": "size:0"
+    }
+   }
+  },
+  {
+   "id": "text-named-png",
+   "title": "a text file named .png (extensions are ignored for rasters)",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/text.png",
+   "expect": "UNSUPPORTED_MEDIA_TYPE",
+   "extra": {
+    "files": {
+     "app/ui/img/text.png": "text:hello"
+    }
+   }
+  },
+  {
+   "id": "gzip-svgz",
+   "title": "gzip magic is UNSUPPORTED_MEDIA_TYPE",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/x.svgz",
+   "expect": "UNSUPPORTED_MEDIA_TYPE",
+   "extra": {
+    "files": {
+     "app/ui/img/x.svgz": "hex:1f8b0800000000000003"
+    }
+   }
+  },
+  {
+   "id": "truncated-image",
+   "title": "a truncated image container",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/trunc.png",
+   "expect": "DECODE_FAILED",
+   "extra": {
+    "files": {
+     "app/ui/img/trunc.png": "hex:5534464b0100"
+    }
+   }
+  },
+  {
+   "id": "pixel-budget",
+   "title": "a fake 9000x9000 image over a 1 Mpx budget",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/huge.png",
+   "expect": "SIZE_LIMIT",
+   "extra": {
+    "files": {
+     "app/ui/img/huge.png": "fake:9000x9000"
+    }
+   },
+   "policy": {
+    "max_decoded_pixels": 1000000
+   }
+  },
+  {
+   "id": "http-denied",
+   "title": "network schemes are always denied",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "http://example.com/a.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "https-denied",
+   "title": "https",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "https://example.com/a.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "ftp-denied",
+   "title": "ftp",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "ftp://example.com/a.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "javascript-denied",
+   "title": "javascript:",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "javascript:alert(1)",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "blob-denied",
+   "title": "blob:",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "blob:https://x/uuid",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "about-denied",
+   "title": "about: other than the document URL",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "about:srcdoc",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "ui4me-res-approved-unregistered",
+   "title": "ui4me-res: is approved (OD-19, E-029, 2026-11-06): no bundle is registered in this runner, so FILE_NOT_FOUND (was RESOURCE_DENIED while unapproved)",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "ui4me-res://app/a.png",
+   "expect": "FILE_NOT_FOUND"
+  },
+  {
+   "id": "data-disabled",
+   "title": "data: with data_url_max_bytes = 0",
+   "u4t": "U4T-221",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "data:image/png;base64,AAAA",
+   "expect": "RESOURCE_DENIED",
+   "policy": {
+    "data_url_max_bytes": 0
+   }
+  },
+  {
+   "id": "data-undecodable-payload",
+   "title": "data: enabled; the payload decodes (data-url processor, T041) but is not an image",
+   "u4t": "U4T-221",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "data:image/png;base64,AAAA",
+   "expect": "UNSUPPORTED_MEDIA_TYPE"
+  },
+  {
+   "u4t": "U4T-221",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "id": "data-over-limit",
+   "title": "decoded data: payload larger than data_url_max_bytes",
+   "request": "data:text/plain,0123456789abcdef",
+   "expect": "SIZE_LIMIT",
+   "policy": {
+    "data_url_max_bytes": 8
+   }
+  },
+  {
+   "u4t": "U4T-221",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "id": "data-bad-base64",
+   "title": "data: with invalid base64",
+   "request": "data:image/png;base64,@@@@",
+   "expect": "URI_MALFORMED"
+  },
+  {
+   "u4t": "U4T-221",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "id": "data-no-comma",
+   "title": "data: without the comma separator",
+   "request": "data:image/png;base64",
+   "expect": "URI_MALFORMED"
+  },
+  {
+   "id": "malformed-url",
+   "title": "unparseable URL",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "http://[::1",
+   "expect": "URI_MALFORMED"
+  },
+  {
+   "id": "no-base",
+   "title": "relative reference in a string document without a base",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "string_none",
+   "roots": [],
+   "implicit_root": true,
+   "request": "a.png",
+   "expect": "URI_MALFORMED"
+  },
+  {
+   "id": "empty-reference-is-document",
+   "title": "an empty reference names the document itself",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "",
+   "expect": "UNSUPPORTED_MEDIA_TYPE"
+  },
+  {
+   "id": "string-doc-file-base-denied",
+   "title": "a string document never gets an implicit root (Q1)",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "string_base_file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/a.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "string-doc-file-base-root",
+   "title": "...but an explicit root applies",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "string_base_file",
+   "roots": [
+    "app/ui"
+   ],
+   "implicit_root": true,
+   "request": "img/a.png",
+   "expect": "OK"
+  },
+  {
+   "id": "string-doc-root-parent",
+   "title": "an explicit parent root covers the parent too",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "string_base_file",
+   "roots": [
+    "app"
+   ],
+   "implicit_root": true,
+   "request": "../secret.png",
+   "expect": "OK"
+  },
+  {
+   "id": "implicit-root-off",
+   "title": "implicit_document_root = false",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": false,
+   "request": "img/a.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "file-doc-never-parent",
+   "title": "a file document's implicit root never covers its parent",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "../secret.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "file-doc-explicit-parent",
+   "title": "an explicit parent root extends access",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [
+    "app"
+   ],
+   "implicit_root": true,
+   "request": "../secret.png",
+   "expect": "OK"
+  },
+  {
+   "id": "outside-two-roots",
+   "title": "second explicit root",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [
+    "outside"
+   ],
+   "implicit_root": true,
+   "request": "file://{tmp}/outside/o.png",
+   "expect": "OK"
+  },
+  {
+   "id": "root-missing",
+   "title": "a configured root that does not exist",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [
+    "no/such/dir"
+   ],
+   "implicit_root": true,
+   "request": "img/a.png",
+   "expect": "INVALID_ARGUMENT"
+  },
+  {
+   "id": "root-is-file",
+   "title": "a configured root that is a file",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [
+    "app/secret.png"
+   ],
+   "implicit_root": true,
+   "request": "img/a.png",
+   "expect": "INVALID_ARGUMENT"
+  },
+  {
+   "id": "file-url-no-host-form",
+   "title": "file:/path form",
+   "u4t": "U4T-220",
+   "platform": "unix",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "file:{tmp}/app/ui/img/a.png",
+   "expect": "OK"
+  },
+  {
+   "id": "win-junction-out",
+   "title": "a junction leaving the root",
+   "u4t": "U4T-220",
+   "platform": "windows",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "link/o.png",
+   "expect": "RESOURCE_DENIED",
+   "extra": {
+    "junctions": {
+     "app/ui/link": "outside"
+    }
+   }
+  },
+  {
+   "id": "win-short-name",
+   "title": "8.3 short name of an in-root directory",
+   "u4t": "U4T-220",
+   "platform": "windows",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "PROGRA~1/a.png",
+   "expect": "OK"
+  },
+  {
+   "id": "win-unc-no-root",
+   "title": "UNC path without an explicit UNC root",
+   "u4t": "U4T-220",
+   "platform": "windows",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "file://server/share/a.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "win-ads",
+   "title": "alternate data stream",
+   "u4t": "U4T-220",
+   "platform": "windows",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/a.png:stream",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "win-device-nul",
+   "title": "reserved device name NUL",
+   "u4t": "U4T-220",
+   "platform": "windows",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/NUL",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "win-device-com1",
+   "title": "reserved device name with extension",
+   "u4t": "U4T-220",
+   "platform": "windows",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/COM1.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "win-verbatim",
+   "title": "verbatim prefix",
+   "u4t": "U4T-220",
+   "platform": "windows",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "file:///%5C%5C%3F%5CC:%5CWindows%5Cwin.ini",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "win-trailing-dot",
+   "title": "trailing dot is stripped by Windows",
+   "u4t": "U4T-220",
+   "platform": "windows",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "img/a.png.",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "win-case-insensitive-root",
+   "title": "root comparison ignores case",
+   "u4t": "U4T-220",
+   "platform": "windows",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "IMG/A.PNG",
+   "expect": "OK"
+  },
+  {
+   "id": "win-dotdot-encoded",
+   "title": "%2e%2e escapes",
+   "u4t": "U4T-220",
+   "platform": "windows",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "%2E%2E/%2e%2e/Windows/win.ini",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "win-backslash-encoded",
+   "title": "%5C is not a separator smuggle",
+   "u4t": "U4T-220",
+   "platform": "windows",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "..%5Csecret.png",
+   "expect": "RESOURCE_DENIED"
+  },
+  {
+   "id": "win-drive-other",
+   "title": "another drive letter",
+   "u4t": "U4T-220",
+   "platform": "windows",
+   "doc": "file",
+   "roots": [],
+   "implicit_root": true,
+   "request": "file:///D:/x/a.png",
+   "expect": "RESOURCE_DENIED"
+  }
+ ]
+}

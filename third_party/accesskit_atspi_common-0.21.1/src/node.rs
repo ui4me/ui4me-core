@@ -342,6 +342,14 @@ impl NodeWrapper<'_> {
         if state.is_modal() {
             atspi_state.insert(State::Modal);
         }
+        // ui4me P-013-1: expose aria-expanded and aria-invalid (mapped by the Windows adapter, missing here).
+        if let Some(expanded) = state.data().is_expanded() {
+            atspi_state.insert(State::Expandable);
+            atspi_state.insert(if expanded { State::Expanded } else { State::Collapsed });
+        }
+        if state.data().invalid().is_some() {
+            atspi_state.insert(State::InvalidEntry);
+        }
         if let Some(selected) = state.is_selected() {
             if !state.is_disabled() {
                 atspi_state.insert(State::Selectable);

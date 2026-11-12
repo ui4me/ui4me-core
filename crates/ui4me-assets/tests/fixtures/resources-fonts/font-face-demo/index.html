@@ -1,0 +1,27 @@
+<!doctype html>
+<!-- L-FONTFACE-r12: @font-face with pinned OFL fonts of verification/fixtures/fonts (declared by url(),
+     a weight/style descriptor set, and a unicode-range split). Render with:
+       cargo xtask render verification/fixtures/resources-fonts/font-face-demo/index.html \
+         --out /tmp/font-face-demo.png --root verification/fixtures/fonts -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>font-face demo</title>
+<style>
+  @font-face { font-family: "Demo Grotesk"; src: url("../../fonts/space-grotesk/SpaceGrotesk-Regular.ttf") format("truetype"); }
+  @font-face { font-family: "Demo Grotesk"; src: url("../../fonts/noto-sans-mono/NotoSansMono-Bold.ttf") format("truetype"); font-weight: 700; }
+  /* unicode-range: capitals come from the serif face, everything else from the grotesk */
+  @font-face { font-family: "Demo Split"; src: url("../../fonts/space-grotesk/SpaceGrotesk-Regular.ttf"); }
+  @font-face { font-family: "Demo Split"; src: url("../../fonts/noto-serif/NotoSerif-Regular.ttf"); unicode-range: U+41-5A; }
+  body { margin: 8px; font-size: 28px; line-height: 1.3; }
+  .grotesk { font-family: "Demo Grotesk", sans-serif; }
+  .bold { font-weight: 700; }
+  .split { font-family: "Demo Split", sans-serif; }
+</style>
+</head>
+<body>
+<p class="grotesk">Hamburgefonts 123</p>
+<p class="grotesk bold">Hamburgefonts 123</p>
+<p class="split">aBcD eFgH ijKL</p>
+</body>
+</html>

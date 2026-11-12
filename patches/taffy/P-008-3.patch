@@ -1,0 +1,128 @@
+# P-008-3: block fragmentation hooks (ui4me 015 FRAG-2b; lane L-FRAG, AUTHORISATIONS E-029): `LayoutBlockContainer::begin_block_child` / `end_block_child` (no-op defaults) are called around each in-flow, non-floated block child during PerformLayout in `perform_final_layout_on_in_flow_children`; the returned strut moves the child (and the content after it) and, like clearance, stops its top margin collapsing with the container's
+# Applies to: DioxusLabs/taffy @ fca167cf659b8bf48019d0dea90624109a78103f after P-008-1 and P-008-2 (root of the checkout, `patch -p1`)
+# Licence: MIT (modification to an MIT file; the notice stays in LICENSE of the vendored tree and engine/NOTICE)
+
+--- a/src/compute/block.rs
++++ b/src/compute/block.rs
+@@ -680,6 +680,7 @@
+         mut first_baseline,
+     ) = perform_final_layout_on_in_flow_children(
+         tree,
++        node_id,
+         run_mode,
+         &mut items,
+         container_outer_width,
+@@ -1216,6 +1217,7 @@
+ #[allow(clippy::too_many_arguments)]
+ fn perform_final_layout_on_in_flow_children<Tree: LayoutBlockContainer>(
+     tree: &mut Tree,
++    node_id: NodeId,
+     run_mode: RunMode,
+     items: &mut [BlockItem],
+     container_outer_width: f32,
+@@ -1607,6 +1609,10 @@
+                 let estimated_y = committed_y_offset
+                     + active_collapsible_margin_set.collapse_with_margin(item_non_auto_margin.top).resolve();
+                 let mut child_block_ctx = block_ctx.sub_context(estimated_y.max(clear_pos), insets);
++                // ui4me patch P-008-3: block fragmentation hook (no-op by default).
++                if run_mode == RunMode::PerformLayout {
++                    tree.begin_block_child(node_id, item.node_id, estimated_y.max(clear_pos));
++                }
+                 let output = tree.compute_block_child_layout(item.node_id, inputs, Some(&mut child_block_ctx));
+ 
+                 // Extract float contribution from child block context
+@@ -1621,6 +1627,10 @@
+ 
+                 output
+             } else {
++                // ui4me patch P-008-3: block fragmentation hook (no-op by default).
++                if run_mode == RunMode::PerformLayout {
++                    tree.begin_block_child(node_id, item.node_id, float_avoiding_position.y);
++                }
+                 tree.compute_child_layout(item.node_id, inputs)
+             };
+             item.oof_candidates = item_layout.oof_candidates.take();
+@@ -1761,6 +1771,28 @@
+                 }
+             };
+ 
++            // ui4me patch P-008-3: block fragmentation. The child may be pushed to the next
++            // fragmentainer (or its truncated margin pulled back to a fragmentainer start) by a strut;
++            // a moved child's top margin no longer collapses with the container's.
++            let mut moved_by_strut = false;
++            if run_mode == RunMode::PerformLayout {
++                let strut = tree.end_block_child(
++                    node_id,
++                    item.node_id,
++                    crate::BlockChildPlacement {
++                        y: location.y - inset_offset.y,
++                        height: item_layout.size.height,
++                        margin_top: resolved_margin.top,
++                        committed_y: committed_y_offset,
++                        first: committed_y_offset <= resolved_content_box_inset.top,
++                    },
++                );
++                if strut != 0.0 {
++                    location.y += strut;
++                    moved_by_strut = true;
++                }
++            }
++
+             // Floats within the child are positioned relative to the child's border-top, so the
+             // child's (margin-collapsed) position, rather than its relative offset, is added.
+             #[cfg(feature = "float_layout")]
+@@ -1892,7 +1924,10 @@
+                 // propagate to the parent
+                 is_collapsing_with_first_margin_set = false;
+             }
+-            if is_collapsing_with_first_margin_set && has_clearance {
++            if is_collapsing_with_first_margin_set && moved_by_strut {
++                // ui4me patch P-008-3: like clearance, a strut separates the margins.
++                is_collapsing_with_first_margin_set = false;
++            } else if is_collapsing_with_first_margin_set && has_clearance {
+                 is_collapsing_with_first_margin_set = false;
+             } else if is_collapsing_with_first_margin_set {
+                 if item.can_be_collapsed_through {
+--- a/src/tree/traits.rs
++++ b/src/tree/traits.rs
+@@ -384,6 +384,40 @@
+         let _ = block_ctx;
+         self.compute_child_layout(node_id, inputs)
+     }
++
++    /// ui4me patch P-008-3 (block fragmentation, ui4me 015 FRAG-2b): called during `PerformLayout`
++    /// before an in-flow, non-floated block child of `parent` is laid out, with the estimated y of
++    /// the child's border box in the parent's border-box space. The default does nothing.
++    #[cfg(feature = "block_layout")]
++    fn begin_block_child(&mut self, parent: NodeId, child: NodeId, estimated_y: f32) {
++        let _ = (parent, child, estimated_y);
++    }
++
++    /// ui4me patch P-008-3: called during `PerformLayout` once the position of that child is
++    /// resolved. The returned strut is added to the child's y (and so to everything after it in the
++    /// container); the default is no strut.
++    #[cfg(feature = "block_layout")]
++    fn end_block_child(&mut self, parent: NodeId, child: NodeId, placement: BlockChildPlacement) -> f32 {
++        let _ = (parent, child, placement);
++        0.0
++    }
++}
++
++/// ui4me patch P-008-3: where block layout placed an in-flow child (see
++/// [`LayoutBlockContainer::end_block_child`]). Lengths are in the parent's border-box space.
++#[cfg(feature = "block_layout")]
++#[derive(Debug, Clone, Copy, PartialEq)]
++pub struct BlockChildPlacement {
++    /// The y of the child's border box (without its relative offset).
++    pub y: f32,
++    /// The child's border-box height.
++    pub height: f32,
++    /// The child's own resolved top margin.
++    pub margin_top: f32,
++    /// The end of the in-flow content before the child (where its collapsed top margin starts).
++    pub committed_y: f32,
++    /// No in-flow content precedes the child in the parent.
++    pub first: bool,
+ }
+ 
+ // --- PRIVATE TRAITS

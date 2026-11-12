@@ -1,0 +1,20 @@
+  Installing ui4me-host v0.2.0 (/workspace/scratch/3c4bbc64a9f5/ui4me-core/crates/ui4me-host)
+warning: default toolchain implicitly overridden with `1.99.1-x86_64-unknown-linux-gnu` by rustup toolchain file
+  |
+  = help: use `cargo +stable install` if you meant to use the stable toolchain
+  = note: rustup selects the toolchain based on the parent environment and not the environment of the package being installed
+    Updating crates.io index
+    Finished `debug` profile [unoptimized + debuginfo] target(s) in 16.71s
+  Installing /workspace/scratch/3c4bbc64a9f5/v02-install-check/bin/ui4me-host
+   Installed package `ui4me-host v0.2.0 (/workspace/scratch/3c4bbc64a9f5/ui4me-core/crates/ui4me-host)` (executable `ui4me-host`)
+warning: be sure to add `/workspace/scratch/3c4bbc64a9f5/v02-install-check/bin` to your PATH to be able to run the installed binaries
+{
+  "reference_app": "/workspace/scratch/3c4bbc64a9f5/v02-reference-check/app.toml",
+  "launch": [
+    "ui4me-host",
+    "run",
+    "--app",
+    "/workspace/scratch/3c4bbc64a9f5/v02-reference-check/app.toml"
+  ],
+  "note": "The manifest pins this Python interpreter. Keep it installed at the registered location."
+}

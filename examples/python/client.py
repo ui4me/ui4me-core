@@ -285,7 +285,7 @@ def use_utf8_stdio() -> None:
 
 
 class RpcClient:
-    def __init__(self, stream, *, workers: int = 4):
+    def __init__(self, stream, *, workers: int = 4, ordered_notifications: bool = False):
         self._stream = stream
         self._lock = threading.RLock()
         self._pending: dict[str, concurrent.futures.Future] = {}
@@ -296,6 +296,10 @@ class RpcClient:
         self._notifications: dict[str, Callable[[dict], None]] = {}
         self._outgoing = queue.Queue(maxsize=256)
         self._callbacks = queue.Queue(maxsize=128)
+        # Optional application-event ordering must not serialize lifecycle
+        # policy requests behind a user callback waiting for a native dialog.
+        # The default client retains its qualified callback-pool behavior.
+        self._ordered_notifications = queue.Queue(maxsize=128) if ordered_notifications else None
         self._queued_bytes = 0
         self.dropped_notifications = 0
         self._failure: BaseException | None = None
@@ -303,22 +307,27 @@ class RpcClient:
         self.on_request("app.before_quit", lambda _: {"allow": True})
         self.on_request("app.shutdown", self._shutdown)
         self.on_notification("app.shutdown", self._shutdown)
-        self._threads = [
+        self._io_threads = [
             threading.Thread(target=self._reader, name="ui4me-receiver", daemon=True),
             threading.Thread(target=self._writer, name="ui4me-writer", daemon=True),
-        ] + [threading.Thread(target=self._callback_worker, name=f"ui4me-callback-{i}", daemon=True)
+        ]
+        self._threads = self._io_threads + [threading.Thread(target=self._callback_worker, name=f"ui4me-callback-{i}", daemon=True)
              for i in range(workers)]
+        if self._ordered_notifications is not None:
+            self._threads.append(threading.Thread(target=self._callback_worker,
+                args=(self._ordered_notifications,), name="ui4me-application-events", daemon=True))
         for thread in self._threads:
             thread.start()
 
     @classmethod
-    def from_environment(cls):
+    def from_environment(cls, *, workers: int = 4, ordered_notifications: bool = False):
         use_utf8_stdio()
-        client = cls(connect_stream(os.environ["UI4ME_ENDPOINT"]))
+        client = cls(connect_stream(os.environ["UI4ME_ENDPOINT"]), workers=workers,
+                     ordered_notifications=ordered_notifications)
         try:
             client.hello = client.call("host.hello", {
                 "token": os.environ["UI4ME_TOKEN"], "protocol_version": 1,
-                "client": {"name": "ui4me-python-reference", "version": "0.1.0"},
+                "client": {"name": "ui4me-python-reference", "version": "0.2.0"},
             })
             return client
         except BaseException:
@@ -417,8 +426,12 @@ class RpcClient:
                         raise ProtocolError("Invalid host request")
                     if "id" in message and not isinstance(message["id"], str):
                         raise ProtocolError("Request IDs must be strings")
+                    callbacks = self._callbacks
+                    if (self._ordered_notifications is not None and "id" not in message
+                            and message["method"] != "app.shutdown"):
+                        callbacks = self._ordered_notifications
                     try:
-                        self._callbacks.put_nowait(message)
+                        callbacks.put_nowait(message)
                     except queue.Full:
                         if "id" in message:
                             self._enqueue({"jsonrpc": "2.0", "id": message["id"],
@@ -451,10 +464,11 @@ class RpcClient:
         except BaseException as error:
             self._fail(error)
 
-    def _callback_worker(self):
+    def _callback_worker(self, callbacks=None):
+        callbacks = self._callbacks if callbacks is None else callbacks
         while not self._closed.is_set():
             try:
-                message = self._callbacks.get(timeout=0.2)
+                message = callbacks.get(timeout=0.2)
             except queue.Empty:
                 continue
             method, params = message["method"], message.get("params", {})
@@ -522,6 +536,10 @@ class RpcClient:
     def close(self):
         self._fail(DisconnectedError("Client closed"))
         for thread in self._threads:
+            if self._ordered_notifications is not None and thread not in self._io_threads:
+                # User code may intentionally be blocked. These daemon workers
+                # do not own transport resources; shutdown must not await them.
+                continue
             if thread is not threading.current_thread():
                 thread.join(timeout=1.0)
 

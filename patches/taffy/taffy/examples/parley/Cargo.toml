@@ -1,0 +1,8 @@
+[package]
+name = "parley-example"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+taffy = { path = "../.." }
+parley = "0.11.1"

@@ -13,7 +13,7 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-STAGES = ("fmt", "check", "test", "python", "headless", "faults", "native")
+STAGES = ("fmt", "check", "test", "python", "headless", "renderer", "faults", "native", "renderer-native", "browser")
 
 
 def stop_process_tree(process):
@@ -45,7 +45,7 @@ def main():
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error("--jobs must be positive")
-    stages = args.stage or ["fmt", "check", "test", "python", "headless", "faults"]
+    stages = args.stage or ["fmt", "check", "test", "python", "headless", "renderer", "faults"]
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
@@ -53,7 +53,12 @@ def main():
     env["RUST_TEST_THREADS"] = str(args.jobs)
     fault_run = output / "faults" / uuid.uuid4().hex[:10]
     commands = {
-        "fmt": [["cargo", "fmt", "--all", "--", "--check"]],
+        # `fmt --all` also traverses local patch crates' upstream workspaces;
+        # those intentionally contain no upstream developer-only generators.
+        # Format our five workspace packages, never rewrite vendored sources.
+        "fmt": [["cargo", "fmt", "-p", "ui4me-host", "-p", "ui4me-renderer",
+                 "-p", "ui4me-document", "-p", "ui4me-assets", "-p", "ui4me-engine-types",
+                 "--", "--check"]],
         "check": [["cargo", "check", "--locked", "--workspace", "--all-targets"]],
         "test": [["cargo", "test", "--locked", "--workspace"]],
         "python": [[sys.executable, "-m", "unittest", "discover", "-s", "tools", "-p", "test_*.py", "-v"]],
@@ -63,6 +68,13 @@ def main():
                       "--evidence", str(output / "backend-headless.json")]],
         "native": [[sys.executable, "tools/native_acceptance.py", "--automated",
                     "--output", str(output / "native")]],
+        "renderer": [["cargo", "build", "--locked", "-p", "ui4me-host"],
+                     [sys.executable, "tools/run_renderer.py", "--headless", "--timeout", "90",
+                      "--app-id", "org.ui4me.RendererHeadlessVerification",
+                      "--evidence", str(output / "renderer-headless.json")]],
+        "renderer-native": [[sys.executable, "tools/renderer_acceptance.py", "--automated",
+                             "--output", str(output / "renderer-native")]],
+        "browser": [[sys.executable, "tools/browser_reference.py", "--output", str(output / "browser" / uuid.uuid4().hex[:10])]],
     }
     commands["faults"] = [["cargo", "build", "--locked", "-p", "ui4me-host"]] + [
         [sys.executable, "tools/run_faults.py", mode, "--headless", "--duration", "1",
@@ -108,7 +120,7 @@ def main():
                         rc = 124
                 row["commands"].append({"argv": command, "exit_code": rc, "log": str(log.relative_to(output))})
                 if rc:
-                    row["status"] = "BLOCKED" if rc == 2 and stage == "native" else "FAIL"
+                    row["status"] = "BLOCKED" if rc == 2 and stage in ("native", "renderer-native", "browser") else "FAIL"
                     break
             except (OSError, KeyboardInterrupt) as error:
                 if process is not None and process.poll() is None:

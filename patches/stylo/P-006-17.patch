@@ -1,0 +1,23 @@
+# Based on servo/stylo 37c1ed3b707c8f333304de2107c13b68fbc1057c (MPL-2.0).
+# P-006-17 (F0808): anchor-name and position-anchor compute under the Servo engine (they were Gecko-only);
+# the pref layout.css.anchor-positioning.enabled gates them like position-area and position-try-fallbacks.
+--- a/style/properties/longhands.toml
++++ b/style/properties/longhands.toml
+@@ -180,7 +180,7 @@
+ type = "AnchorName"
+ initial = "computed::AnchorName::none()"
+ struct = "box"
+-engine = "gecko"
++servo_pref = "layout.css.anchor-positioning.enabled"
+ animation_type = "discrete"
+ spec = "https://drafts.csswg.org/css-anchor-position-1/#propdef-anchor-name"
+ affects = ""
+@@ -1722,7 +1722,7 @@
+ type = "PositionAnchor"
+ initial = "computed::PositionAnchor::normal()"
+ struct = "position"
+-engine = "gecko"
++servo_pref = "layout.css.anchor-positioning.enabled"
+ animation_type = "discrete"
+ rule_types_allowed = ["style", "keyframe", "scope", "position-try"]
+ spec = "https://drafts.csswg.org/css-anchor-position-1/#propdef-position-anchor"

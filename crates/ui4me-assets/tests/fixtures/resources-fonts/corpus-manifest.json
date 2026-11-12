@@ -1,0 +1,26 @@
+{
+ "schema_version": 1,
+ "suite": "resources-fonts",
+ "owner_feature": "007",
+ "title": "Font loading and registration: @font-face sources, format skipping, validation, ranges",
+ "status": "proposed",
+ "generator": "generate.py",
+ "references": [
+  {
+   "path": "verification/fixtures/fonts/noto-sans/NotoSans-Regular.ttf",
+   "sha256": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d",
+   "owner": "002 (R-46)",
+   "licence": "OFL-1.1"
+  }
+ ],
+ "files": [
+  {
+   "path": "synthetic-fonts.json",
+   "sha256": "c16bbfc5ad3a1b439f8747c467e882e91a0c204110a6246c16f9cc1a9431130a"
+  },
+  {
+   "path": "faces.json",
+   "sha256": "43de82402951964c1b39b4fd422f6f9391099ecbf923db4461fadca70edfedb9"
+  }
+ ]
+}

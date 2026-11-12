@@ -1,0 +1,13 @@
+# P-006-10: enable inherited accent-color in servo mode (015 PAINT-2).
+# Applies to servo/stylo @ 37c1ed3b707c8f333304de2107c13b68fbc1057c after P-006-1 .. P-006-9 (patch -p1).
+# Licence: MPL-2.0; the modified source is published with the repository.
+--- a/style/properties/longhands.toml
++++ b/style/properties/longhands.toml
+@@ -130,7 +130,6 @@
+ type = "ColorOrAuto"
+ initial = "generics::color::ColorOrAuto::Auto"
+ struct = "inherited_ui"
+-engine = "gecko"
+ spec = "https://drafts.csswg.org/css-ui-4/#widget-accent"
+ ignored_when_colors_disabled = true
+ affects = "paint"

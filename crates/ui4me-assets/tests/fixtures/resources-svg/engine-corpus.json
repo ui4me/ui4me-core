@@ -1,0 +1,22 @@
+{
+ "schema_version": 1,
+ "suite": "resources-svg",
+ "note": "engine-only data (file/data: hrefs, nesting, SVGZ); materialised by tests/svg.rs once the SVG adapter is unblocked",
+ "files": {
+  "file-href.svg": {
+   "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\"><image href=\"file:///etc/hostname\" width=\"20\" height=\"20\"/></svg>\n"
+  },
+  "nested-depth5.svg": {
+   "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\"><image href=\"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMCIgaGVpZ2h0PSIxMCI+PGltYWdlIGhyZWY9ImRhdGE6aW1hZ2Uvc3ZnK3htbDtiYXNlNjQsUEhOMlp5QjRiV3h1Y3owaWFIUjBjRG92TDNkM2R5NTNNeTV2Y21jdk1qQXdNQzl6ZG1jaUlIZHBaSFJvUFNJeE1DSWdhR1ZwWjJoMFBTSXhNQ0krUEdsdFlXZGxJR2h5WldZOUltUmhkR0U2YVcxaFoyVXZjM1puSzNodGJEdGlZWE5sTmpRc1VFaE9NbHA1UWpSaVYzaDFZM293YVdGSVVqQmpSRzkyVEROa00yUjVOVE5OZVRWMlkyMWpkazFxUVhkTlF6bDZaRzFqYVVsSVpIQmFTRkp2VUZOSmVFMURTV2RoUjFad1dqSm9NRkJUU1hoTlEwa3JVRWRzZEZsWFpHeEpSMmg1V2xkWk9VbHRVbWhrUjBVMllWY3hhRm95Vlhaak0xcHVTek5vZEdKRWRHbFpXRTVzVG1wUmMxVkZhRTlOYkhBMVVXcFNhVll6YURGWk0yOTNZVmRHU1ZWcVFtcFNSemt5VkVST2EwMHlValZPVkU1T1pWUldNbGt5TVdwa2F6RnhVVmhrVGxGNmJEWmFSekZxWVZWc1NWcElRbUZUUmtwMlZVWk9TbVZGTVVSVFYyUm9VakZhZDFkcVNtOU5Sa0pVVTFob1RsRXdhM0pWUldoTFlrWnJlbFZYWkd0TmJYaHlXa1ZrYms5VmJIRlNXR1JLWVZWS2RsZHNaSE5pYlVaSlZWUnNTbUZyVmpOVFYyeERZbGRHV0dWSVRsRlZNR3h4VjFod2JtUXdiSEJQUTNSUlVYcHNObHBITVdwTGVVbG5aREpzYTJSSFp6bEpha1YzU1dsQ2IxcFhiRzVoU0ZFNVNXcEZkMGxwT0N0UVF6bDZaRzFqS3lJZ2QybGtkR2c5SWpFd0lpQm9aV2xuYUhROUlqRXdJaTgrUEM5emRtYysiIHdpZHRoPSIxMCIgaGVpZ2h0PSIxMCIvPjwvc3ZnPg==\" width=\"10\" height=\"10\"/></svg>\n"
+  },
+  "sample.svgz": {
+   "hex": "1f8b08000000000002ffb3292e4b57a8c8cdc92bb655ca282929b0d2d72f2f2fd72b37d6cb2f4ad737323030d007aa505228cf4c29c9b055b25052c848cd4ccf280131f5ed00bf4e95d73e000000"
+  },
+  "data-url-checkbox": {
+   "text": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><path fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/></svg>"
+  },
+  "data-url-select": {
+   "text": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/></svg>"
+  }
+ }
+}

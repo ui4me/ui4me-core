@@ -25,4 +25,4 @@ export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
 toolchain="$(python3 -c 'import pathlib,re; print(re.search(r"channel\s*=\s*\"([^\"]+)\"", pathlib.Path("rust-toolchain.toml").read_text()).group(1))')"
 rustup toolchain install "$toolchain" --profile minimal --component rustfmt --component clippy
 cargo build --locked -p ui4me-host
-printf '%s\n' 'Build complete. Run python3 tools/run_example.py in your KDE Wayland desktop.'
+printf '%s\n' 'Build complete. Run python3 tools/run_renderer.py in your KDE Wayland desktop. The v0.1 probe remains available through tools/run_example.py.'

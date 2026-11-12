@@ -1,6 +1,11 @@
 //! Host controller. The GUI thread owns every window and policy transition.
 //! Workers can only send bounded messages back to this controller.
+#[cfg(test)]
+mod document_integration_tests;
+mod document_native;
+mod documents;
 mod native;
+use documents::HostedDocument;
 mod requests;
 
 use crate::{
@@ -43,6 +48,12 @@ struct NativeWindow {
     drag_selecting: bool,
     /// Whether a frame has been presented (logged once for startup timing).
     presented: bool,
+    pointer: (f64, f64),
+    document_epoch: Option<String>,
+    composing: bool,
+    ime_resets: u64,
+    ime_quiet_until: Option<Instant>,
+    preedit_cleared: bool,
 }
 
 struct WindowRecord {
@@ -51,6 +62,7 @@ struct WindowRecord {
     height: u32,
     visible: bool,
     probe: Probe,
+    document: Option<HostedDocument>,
     native: Option<NativeWindow>,
     closing: bool,
 }
@@ -58,6 +70,15 @@ struct WindowRecord {
 enum JobKind {
     Dialog,
     External,
+    DocumentDialog {
+        document_id: String,
+        node: ui4me_renderer::NodeId,
+    },
+}
+impl JobKind {
+    fn is_dialog(&self) -> bool {
+        matches!(self, Self::Dialog | Self::DocumentDialog { .. })
+    }
 }
 struct PendingJob {
     reply: Option<Reply>,
@@ -76,6 +97,18 @@ enum TransferTarget {
     Paste(String),
     Drop(String),
     DropText(String),
+    DocumentClipboard {
+        window_id: String,
+        document_id: String,
+        request_id: u64,
+    },
+    DocumentDrop {
+        window_id: String,
+        document_id: String,
+        files: bool,
+        x: f64,
+        y: f64,
+    },
 }
 struct PendingTransfer {
     target: TransferTarget,
@@ -83,6 +116,8 @@ struct PendingTransfer {
 }
 
 pub struct Host {
+    #[cfg(test)]
+    observed_notifications: Vec<Value>,
     config: AppConfig,
     icon: winit::icon::Icon,
     headless: bool,
@@ -246,7 +281,7 @@ pub fn doctor() -> Value {
         "environment":environment,"containment":platform::containment_description(),
         "run_containment":platform::run_containment_description(),
         "paths":platform::standard_paths("org.ui4me.HostProbe").ok(),
-        "native_tests":"not run by doctor","renderer":"CPU integration probe; HTML/CSS renderer not part of v0.1",
+        "native_tests":"not run by doctor","renderer":"CPU HTML/CSS desktop profile ui4me-desktop-0.2 (plus diagnostic probe)",
         "windowing_dependency":"winit 0.31.0-beta.4 (exactly pinned)"})
 }
 
@@ -332,6 +367,8 @@ impl Host {
             exit_code,
             launcher_gone,
             presentation: None,
+            #[cfg(test)]
+            observed_notifications: Vec::new(),
         })
     }
 
@@ -367,6 +404,8 @@ impl Host {
                 tracing::warn!(method, %error, "oversized host notification dropped");
                 return;
             }
+            #[cfg(test)]
+            self.observed_notifications.push(message.clone());
             self.send(client, message);
         }
     }
@@ -410,7 +449,21 @@ impl Host {
             };
             if let Some(job) = self.jobs.remove(&result.id) {
                 if !job.cancelled {
-                    if let Some(reply) = job.reply {
+                    if let JobKind::DocumentDialog {
+                        ref document_id,
+                        node,
+                    } = job.kind
+                    {
+                        if let Some(parent) = &job.parent {
+                            self.complete_document_dialog(
+                                parent,
+                                document_id,
+                                node,
+                                result.value,
+                                event_loop,
+                            );
+                        }
+                    } else if let Some(reply) = job.reply {
                         self.respond(&reply, result.value);
                     } else if let Some(parent) = &job.parent {
                         if let Some(window) = self.windows.get_mut(parent) {
@@ -489,6 +542,7 @@ impl Host {
                 self.read_clipboard_now(event_loop, target);
             }
         }
+        self.poll_documents(event_loop);
         if let Some(backend) = &self.backend {
             crate::logging::backend_logs(backend.drain_logs());
         }
@@ -534,6 +588,7 @@ impl Host {
                 self.stop(event_loop);
             }
         }
+        self.flush_document_refreshes();
     }
 
     fn message(&mut self, connection: u64, value: Value, event_loop: Option<&dyn ActiveEventLoop>) {
@@ -728,7 +783,7 @@ impl Host {
         json!({"native":!self.headless,"headless":self.headless,"windows":true,"max_windows":self.config.host.max_windows,
             "clipboard_text":!self.headless,"file_dialogs":!self.headless,"external_open":!self.headless,
             "drag_drop":!self.headless,"ime":!self.headless,"accessibility":!self.headless,
-            "probe":true,"html_css":false,"printing":false,"tray":false,
+            "probe":true,"html_css":true,"renderer":"cpu","css_profile":"ui4me-desktop-0.2","max_documents":documents::MAX_DOCUMENTS,"printing":false,"tray":false,
             "platform":std::env::consts::OS,"containment":platform::containment_description(),
             "limits":{"frame_bytes":protocol::MAX_FRAME_BYTES,"pending_requests":protocol::MAX_PENDING,"probe_text_bytes":crate::presentation::MAX_TEXT_BYTES},
             "window_positioning":cfg!(target_os="windows"),"native_qualification":"requires local evidence"})
@@ -907,6 +962,7 @@ impl Host {
             }
         }
         for record in self.windows.values_mut() {
+            record.document = None;
             record.probe.failure = Some(reason.chars().take(160).collect());
         }
         for id in self.windows.keys().cloned().collect::<Vec<_>>() {
@@ -931,18 +987,22 @@ impl Host {
             TransferTarget::Paste(parent)
             | TransferTarget::Drop(parent)
             | TransferTarget::DropText(parent) => parent != id,
+            TransferTarget::DocumentClipboard { window_id, .. }
+            | TransferTarget::DocumentDrop { window_id, .. } => window_id != id,
             TransferTarget::Rpc(_) => true,
         });
         self.deferred_clipboard_reads.retain(|target| match target {
             TransferTarget::Paste(parent)
             | TransferTarget::Drop(parent)
             | TransferTarget::DropText(parent) => parent != id,
+            TransferTarget::DocumentClipboard { window_id, .. }
+            | TransferTarget::DocumentDrop { window_id, .. } => window_id != id,
             TransferTarget::Rpc(_) => true,
         });
         if self
             .jobs
             .values()
-            .any(|j| j.parent.as_deref() == Some(id) && matches!(j.kind, JobKind::Dialog))
+            .any(|j| j.parent.as_deref() == Some(id) && j.kind.is_dialog())
         {
             if let Some(window) = self.windows.get_mut(id) {
                 window.closing = true;
@@ -983,8 +1043,21 @@ impl Host {
     }
 
     fn refresh(&mut self, id: &str) {
+        if self.windows.get(id).is_some_and(|w| w.document.is_some()) {
+            self.refresh_document(id);
+            return;
+        }
         if let Some(record) = self.windows.get_mut(id) {
             if let Some(native) = &mut record.native {
+                if native.document_epoch.take().is_some() {
+                    let _ = native
+                        .window
+                        .request_ime_update(winit::window::ImeRequest::Disable);
+                    native.ime_enabled = false;
+                    native.composing = false;
+                    native.preedit_cleared = false;
+                    native.ime_quiet_until = Some(Instant::now() + Duration::from_millis(250));
+                }
                 let size = native.window.surface_size();
                 native.accessibility.update(record.probe.tree(
                     &record.title,
@@ -1028,7 +1101,7 @@ mod tests {
 
     /// A controller with no transport/process/native resources. This exercises
     /// lifecycle policy independently of desktop or IPC availability.
-    fn controller(ready: bool) -> Host {
+    pub(super) fn controller(ready: bool) -> Host {
         let (job_tx, job_rx) = mpsc::sync_channel(protocol::MAX_PENDING);
         let (action_tx, action_rx) = mpsc::sync_channel(128);
         let mut lifecycle = Lifecycle::new();
@@ -1082,10 +1155,12 @@ mod tests {
             exit_code: Arc::new(AtomicI32::new(0)),
             launcher_gone: None,
             presentation: None,
+            #[cfg(test)]
+            observed_notifications: Vec::new(),
         }
     }
 
-    fn add_window(host: &mut Host, id: &str) {
+    pub(super) fn add_window(host: &mut Host, id: &str) {
         host.windows.insert(
             id.into(),
             WindowRecord {
@@ -1094,6 +1169,7 @@ mod tests {
                 height: 500,
                 visible: true,
                 probe: Probe::default(),
+                document: None,
                 native: None,
                 closing: false,
             },

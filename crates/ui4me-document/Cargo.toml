@@ -1,0 +1,32 @@
+# owner: 003-document-model — created by 001 slice (R-28)
+[package]
+name = "ui4me-document"
+description = "DocumentCore: arena DOM, parser sink, mutation journal (U4C-DOC)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ui4me-engine-types = { workspace = true }
+html5ever = { workspace = true }
+markup5ever = { workspace = true }
+web_atoms = { workspace = true }
+string_cache = { workspace = true }
+regex = { version = "1", default-features = false, features = ["std", "unicode"] }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[features]
+# Dev-only: recording hook sinks and allocation-failure injection; never enabled by ui4me-ffi (T002).
+test-sinks = []
+# Dev-only: runs dom_query.rs under 006's test profile `ui4me-css/1+has` (T063; pass `--features ui4me-style/gate-profiles` too).
+gate-profiles = []
+
+[lib]
+name = "ui4me_document"

@@ -53,7 +53,7 @@ MIT OR Apache-2.0 (LICENSE-MIT, LICENSE-APACHE).
 `accesskit_atspi_common-0.21.1/` is the exact crates.io package pinned by
 `Cargo.lock` (package SHA-256
 `24f5baf62e34a4a6c30e3d697e4782f821a7337049c44c3b40576a27dfbb580d`; license
-MIT OR Apache-2.0 as declared in its Cargo.toml). Its only change is in
+MIT OR Apache-2.0 as declared in its Cargo.toml). Its qualified 0.1 change is in
 `src/adapter.rs`: `Drop for Adapter` unregisters the AT-SPI interfaces of every
 node that `register_tree()` and later updates registered, before announcing the
 window's removal. A unit test (`dropping_adapter_unregisters_every_registered_interface`)
@@ -66,3 +66,15 @@ KDE Plasma 6.3 with tools/measure_resources.py, host private memory grew about
 patch about 3.8 KiB per cycle. The remainder is zbus 5.19 keeping the empty
 intermediate object-path node `/org/a11y/atspi/accessible/<adapter>` and its child
 map; zbus exposes no API to prune it, so it is recorded as a residual limit.
+
+## Version 0.2 merge of renderer accessibility behavior
+
+The 0.2 tree preserves the qualified `adapter.rs` teardown patch above and also
+carries the donor renderer's `src/node.rs` mapping of AccessKit expanded/invalid
+states to AT-SPI. The carried change is recorded in
+`accesskit_atspi_common-0.21.1/renderer-state-mapping.patch`. These patches solve
+different issues and must not overwrite one another when updating upstream.
+
+The 0.1 measured results above are historical, not a 0.2 rerun. The complete
+0.1 status report remains in `docs/BASELINE_0.1_STATUS.md`. Further source patches
+needed by the renderer are documented separately in `patches/README.md`.

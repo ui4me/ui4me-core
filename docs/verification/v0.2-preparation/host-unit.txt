@@ -1,0 +1,119 @@
+$ cargo test --locked -p ui4me-host --lib
+   Compiling ui4me-renderer v0.2.0 (/workspace/scratch/3c4bbc64a9f5/ui4me-core/crates/ui4me-renderer)
+   Compiling ui4me-host v0.2.0 (/workspace/scratch/3c4bbc64a9f5/ui4me-core/crates/ui4me-host)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 40.85s
+     Running unittests src/lib.rs (target/debug/deps/ui4me_host-ba91c5c339c28013)
+
+running 78 tests
+test accessibility::tests::children_relations_and_selection_references_are_remapped_in_both_directions ... ok
+test accessibility::tests::removed_node_mapping_is_pruned_and_reintroduced_id_gets_new_native_identity ... ok
+test accessibility::tests::document_replacement_never_reuses_native_children_and_keeps_window_root ... ok
+test accessibility::tests::invalid_full_tree_does_not_change_the_live_cache_or_identity_mapping ... ok
+test accessibility::tests::incremental_publication_retains_full_synchronous_activation_cache ... ok
+test accessibility::tests::queued_actions_keep_the_epoch_at_callback_and_retired_native_objects_are_ignored ... ok
+test config::tests::verbatim_windows_prefix_is_removed_for_substitution ... ok
+test config::tests::missing_working_directory_is_not_silently_replaced ... ok
+test config::tests::invalid_identity_and_unknown_fields_fail_early ... ok
+test config::tests::paths_resolve_without_shell_expansion ... ok
+test config::tests::relative_executable_is_validated_and_absolutized ... ok
+test config::tests::app_dir_paths_with_forward_slashes_resolve_on_every_platform ... ok
+test backend::tests::unicode_survives_a_record_byte_boundary ... ok
+test config::tests::transport_environment_cannot_be_overridden ... ok
+test host::document_native::tests::native_accept_filters_are_hints_without_pattern_injection ... ok
+test backend::tests::log_flood_is_drained_and_bounded_without_newlines ... ok
+test host::document_native::tests::oversized_document_event_reports_error_without_disconnect_or_truncation ... ok
+test host::documents::tests::atomic_batch_rejects_invalid_operation_without_partial_mutation ... ok
+test host::documents::tests::html_fifo_is_rejected_without_waiting_for_a_writer ... ok
+test host::documents::tests::file_loading_is_bounded_and_uses_file_directory_as_asset_root ... ok
+test host::documents::tests::operation_decoder_rejects_unknown_fields_and_excluded_subsystems ... ok
+test host::documents::tests::html_pagination_preserves_utf8_and_outgoing_limit_counts_escaping ... ok
+test host::documents::tests::rejected_load_preserves_document_and_replacement_rejects_stale_commands ... ok
+test host::documents::tests::selectors_page_identified_matches_and_node_references_are_generation_checked ... ok
+test host::requests::tests::external_open_is_data_and_rejects_executable_uri_schemes ... ok
+test host::requests::tests::non_unicode_dialog_path_returns_error_instead_of_panicking_worker ... ok
+test host::requests::tests::window_input_is_validated_before_native_calls ... ok
+test host::tests::deferred_dialog_close_cannot_hide_the_final_usable_window ... ok
+test host::tests::deferred_final_probe_close_completes_the_host_lifecycle ... ok
+test host::tests::duplicate_pending_id_fails_the_session_and_cancels_original_work ... ok
+test host::tests::launcher_exit_during_pending_quit_shuts_down_without_approving_it ... ok
+test host::tests::native_failure_without_a_diagnostic_surface_stops_instead_of_hanging ... ok
+test host::tests::startup_window_close_cancels_startup_without_a_policy_callback ... ok
+test host::tests::wayland_unminimize_is_rejected_instead_of_reporting_success ... ok
+test icons::tests::bundled_icon_decodes_and_invalid_assets_fail_before_native_window_creation ... ok
+test lifecycle::tests::destroying_a_window_or_session_invalidates_pending_decisions ... ok
+test lifecycle::tests::failure_survives_cleanup_and_cannot_resurrect_stopped_session ... ok
+test lifecycle::tests::global_quit_supersedes_individual_close_without_destroying_windows ... ok
+test lifecycle::tests::quit_preflight_can_cancel_before_shutdown ... ok
+test lifecycle::tests::repeated_close_coalesces_and_replies_are_one_shot ... ok
+test lifecycle::tests::spawn_does_not_imply_ready ... ok
+test logging::tests::a_blocked_output_drops_excess_records_without_stalling_the_caller ... ok
+test platform::dialogs::tests::rejects_filter_globs_and_filename_paths ... ok
+test platform::linux::tests::active_listener_cannot_be_replaced_but_stale_socket_can ... FAILED
+test platform::linux::tests::compositor_identity_is_stable_across_launch_routes_and_changes_on_restart ... ok
+test host::documents::tests::unload_and_closed_window_reject_document_operations ... ok
+test platform::linux::tests::dropping_live_child_reaps_without_blocking_the_gui ... ok
+test platform::linux::tests::exited_child_is_reaped_and_exit_status_is_stable ... ok
+test platform::linux::tests::launcher_identity_distinguishes_processes_by_start_time ... ok
+test platform::linux::tests::lock_excludes_other_instance_and_releases ... ok
+test platform::linux::tests::socket_namespace_cannot_escape_the_private_directory ... ok
+test platform::tests::namespaces_are_stable_and_distinguish_inputs ... ok
+test host::document_integration_tests::late_drop_is_discarded_but_live_drop_keeps_document_epoch_and_unicode ... ok
+test presentation::tests::accessibility_selection_matches_unicode_byte_offsets ... ok
+test presentation::tests::grapheme_editing_preserves_combining_and_emoji_sequences ... ok
+test presentation::tests::ime_excerpt_stays_bounded_and_on_utf8_boundaries ... ok
+test presentation::tests::oversized_insert_does_not_partially_modify_selection ... ok
+test presentation::tests::composing_over_a_selection_positions_caret_without_committing_text ... ok
+test protocol::tests::fragmentation_and_unicode_round_trip ... ok
+test protocol::tests::invalid_utf8_and_json_are_distinct ... ok
+test host::document_integration_tests::replacement_and_unload_prune_only_their_document_transfers_and_cancel_their_picker_jobs ... ok
+test protocol::tests::oversized_header_is_rejected_without_reading_body ... ok
+test protocol::tests::responses_have_exactly_one_outcome ... ok
+test protocol::tests::strict_request_profile_and_notifications ... ok
+test protocol::tests::truncated_frames_are_not_clean_disconnects ... ok
+test snapshot::tests::rejects_invalid_geometry_before_touching_files ... ok
+test protocol::tests::encoded_size_accounts_for_unicode_and_json_escape_expansion ... ok
+test transport::tests::disconnect_never_waits_for_a_full_gui_queue ... FAILED
+test transport::tests::incoming_large_frames_obey_the_byte_budget ... FAILED
+test transport::tests::local_round_trip_and_clean_disconnect ... FAILED
+test host::document_integration_tests::registered_keydown_policy_suppresses_the_paired_native_text_only ... ok
+test platform::linux::tests::deadline_applies_to_all_partial_reads ... ok
+test host::document_integration_tests::command_events_are_epoch_wrapped_once_and_removed_element_events_are_discarded ... ok
+test protocol::tests::outgoing_oversize_never_writes_partial_header ... ok
+test snapshot::tests::snapshot_uses_hosted_document_and_reports_physical_dimensions ... ok
+test host::document_integration_tests::picker_completion_is_scoped_to_document_and_generation_even_when_html_ids_repeat ... ok
+test host::document_integration_tests::accessibility_actions_queued_before_replacement_do_not_reach_new_controls ... ok
+test host::document_integration_tests::late_clipboard_completion_cannot_paste_into_replacement_with_reused_request_id ... ok
+
+failures:
+
+---- platform::linux::tests::active_listener_cannot_be_replaced_but_stale_socket_can stdout ----
+
+thread 'platform::linux::tests::active_listener_cannot_be_replaced_but_stale_socket_can' (692) panicked at crates/ui4me-host/src/platform/linux.rs:915:55:
+called `Result::unwrap()` on an `Err` value: Operation not permitted (os error 1)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- transport::tests::disconnect_never_waits_for_a_full_gui_queue stdout ----
+
+thread 'transport::tests::disconnect_never_waits_for_a_full_gui_queue' (721) panicked at crates/ui4me-host/src/transport.rs:558:82:
+called `Result::unwrap()` on an `Err` value: Operation not permitted (os error 1)
+
+---- transport::tests::incoming_large_frames_obey_the_byte_budget stdout ----
+
+thread 'transport::tests::incoming_large_frames_obey_the_byte_budget' (722) panicked at crates/ui4me-host/src/transport.rs:600:82:
+called `Result::unwrap()` on an `Err` value: Operation not permitted (os error 1)
+
+---- transport::tests::local_round_trip_and_clean_disconnect stdout ----
+
+thread 'transport::tests::local_round_trip_and_clean_disconnect' (723) panicked at crates/ui4me-host/src/transport.rs:515:82:
+called `Result::unwrap()` on an `Err` value: Operation not permitted (os error 1)
+
+
+failures:
+    platform::linux::tests::active_listener_cannot_be_replaced_but_stale_socket_can
+    transport::tests::disconnect_never_waits_for_a_full_gui_queue
+    transport::tests::incoming_large_frames_obey_the_byte_budget
+    transport::tests::local_round_trip_and_clean_disconnect
+
+test result: FAILED. 74 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.65s
+
+error: test failed, to rerun pass `-p ui4me-host --lib`

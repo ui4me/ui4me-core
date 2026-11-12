@@ -1,0 +1,27 @@
+# P-008-2: grid (ui4me 015 LAY-2; lane L-LAY, AUTHORISATIONS E-029): a gutter (`gap`) whose percentage has no basis yet resolves against zero so `calc(2% + 4px)` keeps its length part and the percentage is resolved against the final size when sizing re-runs
+# Applies to: DioxusLabs/taffy @ fca167cf659b8bf48019d0dea90624109a78103f after P-008-1 (root of the checkout, `patch -p1`)
+# Licence: MIT (modification to an MIT file; the notice stays in LICENSE of the vendored tree and engine/NOTICE)
+
+diff -u a/src/compute/grid/track_sizing.rs b/src/compute/grid/track_sizing.rs
+--- a/src/compute/grid/track_sizing.rs
++++ b/src/compute/grid/track_sizing.rs
+@@ -1,6 +1,6 @@
+ //! Implements the track sizing algorithm
+ //! <https://www.w3.org/TR/css-grid-1/#layout-algorithm>
+-use super::types::{GridItem, GridTrack, TrackCounts};
++use super::types::{GridItem, GridTrack, GridTrackKind, TrackCounts};
+ use crate::compute::common::alignment::child_first_baseline;
+ use crate::geometry::{AbstractAxis, Line, Size};
+ use crate::style::{AlignContent, AlignContentKeyword, AvailableSpace};
+@@ -419,6 +419,11 @@
+     axis_inner_node_size: Option<f32>,
+ ) {
+     for track in axis_tracks.iter_mut() {
++        // ui4me (L-LAY): a gutter (`gap`) whose percentage has no basis yet resolves against zero, keeping the
++        // length part of a `calc()` (the percentage part is resolved against the final size when the sizing is
++        // re-run, as the reference browser does).
++        let axis_inner_node_size =
++            if track.kind == GridTrackKind::Gutter && axis_inner_node_size.is_none() { Some(0.0) } else { axis_inner_node_size };
+         // For each track, if the track’s min track sizing function is:
+         // - A fixed sizing function
+         //     Resolve to an absolute length and use that size as the track’s initial base size.

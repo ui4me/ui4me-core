@@ -32,6 +32,8 @@ pub struct DialogFilter {
 #[derive(Clone, Debug)]
 pub struct DialogOptions {
     pub kind: DialogKind,
+    /// Allow more than one selected file for an open-file request.
+    pub multiple: bool,
     pub title: Option<String>,
     pub directory: Option<PathBuf>,
     pub file_name: Option<String>,
@@ -80,7 +82,8 @@ impl DialogOptions {
 
     fn title(&self) -> &str {
         self.title.as_deref().unwrap_or(match self.kind {
-            DialogKind::OpenFiles => "Open files",
+            DialogKind::OpenFiles if self.multiple => "Open files",
+            DialogKind::OpenFiles => "Open file",
             DialogKind::SaveFile => "Save file",
             DialogKind::ChooseFolder => "Choose folder",
         })
@@ -140,6 +143,7 @@ mod tests {
     fn rejects_filter_globs_and_filename_paths() {
         let mut options = DialogOptions {
             kind: DialogKind::OpenFiles,
+            multiple: true,
             title: None,
             directory: None,
             file_name: None,

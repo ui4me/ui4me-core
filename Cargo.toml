@@ -1,26 +1,99 @@
 [workspace]
-members = ["crates/ui4me-host"]
-resolver = "2"
+members = ["crates/ui4me-host", "crates/ui4me-document", "crates/ui4me-renderer", "crates/ui4me-assets", "crates/ui4me-engine-types"]
+exclude = ["patches", "third_party"]
+resolver = "3"
 
 [workspace.package]
-version = "0.1.0"
-edition = "2021"
+version = "0.2.0"
+edition = "2024"
 rust-version = "1.99"
 license = "MIT AND OFL-1.1"
+repository = "https://github.com/ui4me/ui4me-core"
+publish = false
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+unused_must_use = "deny"
+missing_debug_implementations = "allow"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+
+[workspace.dependencies]
+# document
+html5ever = "0.40"
+markup5ever = "0.40"
+web_atoms = "0.3"
+string_cache = "0.11"
+# Vendored Stylo revision 37c1ed3b707c8f333304de2107c13b68fbc1057c plus carried fixes.
+# Direct paths avoid fetching a redundant upstream Git checkout during install.
+stylo = { path = "patches/stylo/stylo/style", features = ["servo"] }
+selectors = { path = "patches/stylo/stylo/selectors" }
+stylo_atoms = { path = "patches/stylo/stylo/stylo_atoms" }
+stylo_static_prefs = { path = "patches/stylo/stylo/stylo_static_prefs" }
+style_traits = { path = "patches/stylo/stylo/style_traits", package = "stylo_traits", features = ["servo"] }
+stylo_dom = { path = "patches/stylo/stylo/stylo_dom" }
+cssparser = "0.38"
+# API types named by the private style adapter
+euclid = "0.22"
+app_units = "0.7"
+url = "2.5"
+# layout
+taffy = { path = "patches/taffy/taffy", default-features = false, features = ["std", "block_layout", "flexbox", "grid", "float_layout", "calc", "content_size"] }
+# text
+# System font enumeration uses fontconfig on Linux and DirectWrite on Windows.
+# `fontconfig-dlopen` loads libfontconfig at run time, so the engine starts (with registered fonts only) where it is missing.
+parley = { version = "0.12", default-features = false, features = ["std", "system"] }
+fontique = { version = "0.12", default-features = false, features = ["std", "system", "fontconfig-dlopen"] }
+# Raster: single-threaded CPU rendering
+vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "u8_pipeline"] }
+# platform
+winit = { version = "=0.31.0-beta.4", default-features = false, features = ["wayland", "wayland-dlopen"] }
+softbuffer = { version = "=0.4.8", default-features = false, features = ["wayland", "wayland-dlopen"] }
+# dlopen features avoid a link-time libwayland/libX11 dependency
+raw-window-handle = "0.6"
+# Serialization and diagnostics
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }  # correctly rounded float parsing
+sha2 = "0.10"
+# Local assets: raster codecs, retained SVG backend and data URLs
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
+data-url = "0.3"
+usvg = { version = "0.49", default-features = false }
+resvg = { version = "0.49", default-features = false, features = ["raster-images"] }
+roxmltree = "0.21"
+# WOFF table decompression; flate2 is shared with PNG decoding.
+flate2 = "1.1"
+brotli-decompressor = { version = "6", default-features = false, features = ["std"] }   # WOFF2
+skrifa = "0.44"   # Font inspection and WOFF2 outline comparison
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+# test-only
+proptest = "1"
+jsonschema = { version = "0", default-features = false }
+
+# Internal Rust packages; applications use the host protocol, not a renderer C ABI.
+ui4me-engine-types = { path = "crates/ui4me-engine-types" }
+ui4me-document = { path = "crates/ui4me-document" }
+ui4me-assets = { path = "crates/ui4me-assets" }
+ui4me-renderer = { path = "crates/ui4me-renderer" }
+
+# Preserve the qualified v0.1 native fixes. AccessKit also carries the
+# renderer donor's aria-expanded/aria-invalid mapping; see third_party/README.md.
+[patch.crates-io]
+winit-wayland = { path = "third_party/winit-wayland-0.31.0-beta.4" }
+softbuffer = { path = "third_party/softbuffer-0.4.8" }
+accesskit_atspi_common = { path = "third_party/accesskit_atspi_common-0.21.1" }
 
 [profile.release]
 lto = "thin"
 codegen-units = 1
+panic = "unwind"
 strip = "debuginfo"
 
+[profile.dev.package."*"]
+opt-level = 2
+debug = 0
 
-# Exact pinned winit-wayland release with a minimal clipboard MIME fix
-# (canonical "text/plain;charset=utf-8"); see third_party/README.md.
-[patch.crates-io]
-winit-wayland = { path = "third_party/winit-wayland-0.31.0-beta.4" }
-# Exact pinned softbuffer release whose Wayland backend no longer blocks the
-# GUI thread waiting for buffer release; see third_party/README.md.
-softbuffer = { path = "third_party/softbuffer-0.4.8" }
-# Exact pinned accesskit_atspi_common release whose adapters unregister their
-# AT-SPI interfaces when dropped; see third_party/README.md.
-accesskit_atspi_common = { path = "third_party/accesskit_atspi_common-0.21.1" }
+[profile.dev.build-override]
+opt-level = 0

@@ -1,0 +1,103 @@
+# P-006-6: the legacy flexible box and its line clamp in servo mode (ui4me 015 TXT-4, register UP-10; lane L-TXT, AUTHORISATIONS E-029): `display: -webkit-box` and `-webkit-inline-box` parse, `-webkit-box-orient` (the `-moz-box-orient` longhand and its alias) and the `-webkit-line-clamp` shorthand are enabled behind the pref layout.css.line-clamp.enabled, and `adjust_for_webkit_line_clamp` runs: a `-webkit-box` with a line clamp and a vertical orientation computes to `flow-root` (`Display::FlowRoot` is available in servo mode); the size of ComputedValues grows by the XUL struct pointer (232 -> 240)
+# Applies to: servo/stylo @ 37c1ed3b707c8f333304de2107c13b68fbc1057c after P-006-1, P-006-2, P-006-3, P-006-4 and P-006-5 (root of the checkout, `patch -p1`)
+# Licence: MPL-2.0 (modifications to MPL-2.0 files; the modified source is published with the repository, see engine/NOTICE)
+
+--- a/style/properties/longhands.toml
++++ b/style/properties/longhands.toml
+@@ -4259,7 +4259,7 @@
+ 
+ [-moz-box-orient]
+ struct = "xul"
+-engine = "gecko"
++servo_pref = "layout.css.line-clamp.enabled"
+ spec = "Nonstandard (https://developer.mozilla.org/en-US/docs/Web/CSS/box-orient)"
+ animation_type = "discrete"
+ affects = "layout"
+--- a/style/properties/shorthands.toml
++++ b/style/properties/shorthands.toml
+@@ -553,7 +553,7 @@
+ derive_serialize = true
+ 
+ [-webkit-line-clamp]
+-engine = "gecko"
++servo_pref = "layout.css.line-clamp.enabled"
+ flags = "IS_LEGACY_SHORTHAND ALLOWS_DISABLED_SUBPROPERTIES"
+ sub_properties = ["line-clamp"]
+ spec = "https://drafts.csswg.org/css-overflow-4/#webkit-line-clamp"
+--- a/style/properties/properties.mako.rs
++++ b/style/properties/properties.mako.rs
+@@ -2875,7 +2875,7 @@
+ #[cfg(feature = "gecko")]
+ size_of_test!(ComputedValues, 248);
+ #[cfg(feature = "servo")]
+-size_of_test!(ComputedValues, 232);
++size_of_test!(ComputedValues, 240);
+ 
+ // FFI relies on this.
+ size_of_test!(Option<Arc<ComputedValues>>, 8);
+--- a/style/style_adjuster.rs
++++ b/style/style_adjuster.rs
+@@ -159,7 +159,6 @@
+     /// This makes the element not be a flex container, with all that it
+     /// implies, but it should be safe. It matches blink, see
+     /// https://bugzilla.mozilla.org/show_bug.cgi?id=1786147#c10
+-    #[cfg(feature = "gecko")]
+     fn adjust_for_webkit_line_clamp(&mut self) {
+         use crate::properties::longhands::_moz_box_orient::computed_value::T as BoxOrient;
+         use crate::values::specified::box_::{DisplayInside, DisplayOutside};
+@@ -1052,7 +1051,6 @@
+         }
+         self.adjust_for_top_layer();
+         self.blockify_if_necessary(layout_parent_style, element);
+-        #[cfg(feature = "gecko")]
+         self.adjust_for_webkit_line_clamp();
+         self.adjust_for_position();
+         self.adjust_for_overflow();
+--- a/style/values/specified/box.rs
++++ b/style/values/specified/box.rs
+@@ -171,7 +171,6 @@
+     RubyText,
+     #[cfg(feature = "gecko")]
+     RubyTextContainer,
+-    #[cfg(feature = "gecko")]
+     WebkitBox,
+ }
+ 
+@@ -239,7 +238,6 @@
+     );
+     pub const Block: Self =
+         Self(((DisplayOutside::Block as u16) << Self::OUTSIDE_SHIFT) | DisplayInside::Flow as u16);
+-    #[cfg(feature = "gecko")]
+     pub const FlowRoot: Self = Self(
+         ((DisplayOutside::Block as u16) << Self::OUTSIDE_SHIFT) | DisplayInside::FlowRoot as u16,
+     );
+@@ -268,11 +266,9 @@
+     #[cfg(feature = "gecko")]
+     pub const Ruby: Self =
+         Self(((DisplayOutside::Inline as u16) << Self::OUTSIDE_SHIFT) | DisplayInside::Ruby as u16);
+-    #[cfg(feature = "gecko")]
+     pub const WebkitBox: Self = Self(
+         ((DisplayOutside::Block as u16) << Self::OUTSIDE_SHIFT) | DisplayInside::WebkitBox as u16,
+     );
+-    #[cfg(feature = "gecko")]
+     pub const WebkitInlineBox: Self = Self(
+         ((DisplayOutside::Inline as u16) << Self::OUTSIDE_SHIFT) | DisplayInside::WebkitBox as u16,
+     );
+@@ -525,9 +521,7 @@
+             "ruby-text" => Full(Display::RubyText),
+             #[cfg(feature = "gecko")]
+             "ruby-text-container" => Full(Display::RubyTextContainer),
+-            #[cfg(feature = "gecko")]
+             "-webkit-box" => Full(Display::WebkitBox),
+-            #[cfg(feature = "gecko")]
+             "-webkit-inline-box" => Full(Display::WebkitInlineBox),
+ 
+             /// <display-outside> = block | inline | run-in
+@@ -561,7 +555,6 @@
+         match *self {
+             Display::Block | Display::Inline => outside.to_css(dest),
+             Display::InlineBlock => dest.write_str("inline-block"),
+-            #[cfg(feature = "gecko")]
+             Display::WebkitInlineBox => dest.write_str("-webkit-inline-box"),
+             Display::TableCaption => dest.write_str("table-caption"),
+             _ => match (outside, inside) {

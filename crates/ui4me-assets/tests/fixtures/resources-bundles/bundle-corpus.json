@@ -1,0 +1,35 @@
+{
+ "schema_version": 1,
+ "suite": "resources-bundles",
+ "note": "entries of two bundles (app, app2) registered by tests/bundles.rs; path = <bundle>/<entry path>",
+ "files": {
+  "app/index.html": {
+   "text": "<!doctype html><link rel=stylesheet href=css/site.css><img id=logo src=img/logo.fake><div id=bg></div>"
+  },
+  "app/css/site.css": {
+   "text": "@import url(base.css); #bg{width:30px;height:20px;background:url(../img/blue.fake)}"
+  },
+  "app/css/base.css": {
+   "text": "body{margin:0}"
+  },
+  "app/img/logo.fake": {
+   "hex": "5534464b040000000300000000000000000001ff0000ff"
+  },
+  "app/img/blue.fake": {
+   "hex": "5534464b0800000006000000000000000000010000ffff"
+  },
+  "app/img/my logo.fake": {
+   "hex": "5534464b100000000c0000000000000000000100ff00ff"
+  },
+  "app/img/mark.svg": {
+   "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"10\" viewBox=\"0 0 20 10\"><rect width=\"20\" height=\"10\" fill=\"#0a0\"/></svg>"
+  },
+  "app/img/mark-typed": {
+   "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"10\" viewBox=\"0 0 20 10\"><rect width=\"20\" height=\"10\" fill=\"#0a0\"/></svg>",
+   "mime": "image/svg+xml"
+  },
+  "app2/img/logo.fake": {
+   "hex": "5534464b100000000c0000000000000000000100ff00ff"
+  }
+ }
+}

@@ -1,4 +1,11 @@
-# UI4ME host protocol, version 1
+# UI4ME host protocol, wire version 1
+
+UI4ME Core 0.2 retains this native-service wire contract and adds the document
+methods in [PROTOCOL_DOCUMENTS.md](PROTOCOL_DOCUMENTS.md). Product version and
+wire framing version are separate. `host.capabilities` now advertises
+`html_css: true`, the `ui4me-desktop-0.2` CSS profile, CPU rendering, and a
+16-document limit. The native probe remains available.
+
 
 This document describes the implemented local protocol. It is independent of
 Python, Rust FFI and any future HTML/CSS renderer.
@@ -275,3 +282,15 @@ The parse-error constant is reserved in the shared error model; this transport
 does not attempt to send -32700 after such a framing failure. If a valid service
 result would exceed the frame limit after JSON escaping, it is replaced with a
 small unavailable error. Oversized notifications are logged and dropped.
+
+## Version 0.2 additions
+
+See [PROTOCOL_DOCUMENTS.md](PROTOCOL_DOCUMENTS.md) for `document.load`,
+`document.get`, `document.unload`, `document.command`, `document.event`, and
+`document.error`. `dialog.open_files` additionally accepts `multiple`
+(default `true`); HTML file inputs set this from the `multiple` attribute.
+
+The protocol does not expose arbitrary renderer commands, pagination, printing,
+rich contenteditable, JavaScript, or networking. Native clipboard data is plain
+text. HTML event callbacks are asynchronous notifications; default-action rules
+are registered before input, not returned from a later Python callback.

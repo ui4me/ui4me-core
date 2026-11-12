@@ -100,6 +100,8 @@ struct DialogParams {
     file_name: Option<String>,
     #[serde(default)]
     filters: Vec<DialogFilter>,
+    #[serde(default = "yes")]
+    multiple: bool,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -128,6 +130,18 @@ impl Host {
             ));
         }
         let value = match method {
+            "document.load" | "document.get" | "document.unload" | "document.command" => {
+                let window_id = params
+                    .get("window_id")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned);
+                let result = self.dispatch_document(method, params);
+                if let Some(id) = window_id {
+                    self.prune_document_work(&id);
+                    self.document_changed(&id, event_loop);
+                }
+                result?
+            }
             "host.capabilities" => self.capabilities(),
             "host.diagnostics" => {
                 json!({"phase":self.lifecycle.phase(),"windows":self.windows.keys().collect::<Vec<_>>(),
@@ -356,6 +370,12 @@ impl Host {
                 ime_enabled: false,
                 drag_selecting: false,
                 presented: false,
+                pointer: (0.0, 0.0),
+                document_epoch: None,
+                composing: false,
+                ime_resets: 0,
+                ime_quiet_until: None,
+                preedit_cleared: false,
             };
             native::update_ime(&probe, &mut native);
             native.window.set_visible(request.visible);
@@ -371,6 +391,7 @@ impl Host {
                 visible: request.visible,
                 native,
                 probe,
+                document: None,
                 closing: false,
             },
         );
@@ -531,9 +552,11 @@ impl Host {
         if record.closing {
             return Err(RpcError::closed("Dialog parent is closing"));
         }
-        if self.jobs.values().any(|j| {
-            matches!(j.kind, JobKind::Dialog) && j.parent.as_ref() == Some(&request.window_id)
-        }) {
+        if self
+            .jobs
+            .values()
+            .any(|j| j.kind.is_dialog() && j.parent.as_ref() == Some(&request.window_id))
+        {
             return Err(RpcError::busy("This window already has a native dialog"));
         }
         if let Some(title) = &request.title {
@@ -559,6 +582,7 @@ impl Host {
                 _ => DialogKind::ChooseFolder,
             },
             title: request.title,
+            multiple: request.multiple,
             directory: request.directory,
             file_name: request.file_name,
             filters: request

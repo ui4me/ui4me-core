@@ -1,0 +1,97 @@
+# Based on servo/stylo 37c1ed3b707c8f333304de2107c13b68fbc1057c (MPL-2.0).
+# P-006-19 (0.9 F0903): content-visibility, contain-intrinsic-*, field-sizing and resize compute under the Servo engine
+# (they were Gecko-only), each gated by a layout.css.*.enabled pref; content-visibility animates discretely.
+--- a/style/properties/longhands.toml
++++ b/style/properties/longhands.toml
+@@ -633,7 +633,7 @@
+ type = "ContainIntrinsicSize"
+ initial = "computed::ContainIntrinsicSize::None"
+ struct = "position"
+-engine = "gecko"
++servo_pref = "layout.css.contain-intrinsic-size.enabled"
+ logical_group = "contain-intrinsic-size"
+ logical = true
+ spec = "https://drafts.csswg.org/css-sizing-4/#intrinsic-size-override"
+@@ -643,7 +643,7 @@
+ type = "ContainIntrinsicSize"
+ initial = "computed::ContainIntrinsicSize::None"
+ struct = "position"
+-engine = "gecko"
++servo_pref = "layout.css.contain-intrinsic-size.enabled"
+ logical_group = "contain-intrinsic-size"
+ spec = "https://drafts.csswg.org/css-sizing-4/#intrinsic-size-override"
+ affects = "layout"
+@@ -652,7 +652,7 @@
+ type = "ContainIntrinsicSize"
+ initial = "computed::ContainIntrinsicSize::None"
+ struct = "position"
+-engine = "gecko"
++servo_pref = "layout.css.contain-intrinsic-size.enabled"
+ logical_group = "contain-intrinsic-size"
+ logical = true
+ spec = "https://drafts.csswg.org/css-sizing-4/#intrinsic-size-override"
+@@ -662,7 +662,7 @@
+ type = "ContainIntrinsicSize"
+ initial = "computed::ContainIntrinsicSize::None"
+ struct = "position"
+-engine = "gecko"
++servo_pref = "layout.css.contain-intrinsic-size.enabled"
+ logical_group = "contain-intrinsic-size"
+ spec = "https://drafts.csswg.org/css-sizing-4/#intrinsic-size-override"
+ affects = "layout"
+@@ -698,7 +698,8 @@
+ type = "ContentVisibility"
+ initial = "computed::ContentVisibility::Visible"
+ struct = "box"
+-engine = "gecko"
++servo_pref = "layout.css.content-visibility.enabled"
++animation_type = "discrete"
+ spec = "https://drafts.csswg.org/css-contain/#content-visibility"
+ affects = "layout"
+ 
+@@ -1788,7 +1789,7 @@
+ type = "Resize"
+ initial = "computed::Resize::None"
+ struct = "box"
+-engine = "gecko"
++servo_pref = "layout.css.resize.enabled"
+ animation_type = "discrete"
+ gecko_ffi_name = "mResize"
+ spec = "https://drafts.csswg.org/css-ui/#propdef-resize"
+@@ -4247,11 +4248,10 @@
+ 
+ [field-sizing]
+ struct = "ui"
+-engine = "gecko"
++servo_pref = "layout.css.field-sizing.enabled"
+ spec = "https://drafts.csswg.org/css-ui/#field-sizing"
+ animation_type = "discrete"
+ affects = "layout"
+-gecko_pref = "layout.css.field-sizing.enabled"
+ type = "FieldSizing"
+ initial = "computed::FieldSizing::Fixed"
+ 
+--- a/style/properties/shorthands.toml
++++ b/style/properties/shorthands.toml
+@@ -282,7 +282,7 @@
+ kind = "two_properties"
+ 
+ [contain-intrinsic-size]
+-engine = "gecko"
++servo_pref = "layout.css.contain-intrinsic-size.enabled"
+ sub_properties = ["contain-intrinsic-width", "contain-intrinsic-height"]
+ spec = "https://drafts.csswg.org/css-sizing-4/#intrinsic-size-override"
+ kind = "two_properties"
+--- a/stylo_static_prefs/preferences.toml
++++ b/stylo_static_prefs/preferences.toml
+@@ -93,6 +93,10 @@
+ "layout.css.writing-mode.sideways.enabled" = false
+ "layout.css.writing-mode.text-orientation.enabled" = false
+ "layout.css.zoom.enabled" = false
++"layout.css.field-sizing.enabled" = false
++"layout.css.content-visibility.enabled" = false
++"layout.css.contain-intrinsic-size.enabled" = false
++"layout.css.resize.enabled" = false
+ # Negative means auto, 0 disables the thread-pool (main-thread styling),
+ # other numbers override as specified.
+ "layout.threads" = -1

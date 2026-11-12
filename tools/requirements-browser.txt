@@ -1,0 +1,4 @@
+# Optional development oracle only; these are not application dependencies.
+# Each verification report records the exact installed versions and Chromium.
+playwright>=1.49,<2
+Pillow>=10,<14

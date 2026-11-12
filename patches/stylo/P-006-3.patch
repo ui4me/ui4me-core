@@ -1,0 +1,109 @@
+# P-006-3: system colours of the reference browser (Chromium) for the light and dark used colour schemes (ui4me 006; lane L-DARK-r9, AUTHORISATIONS E-029)
+# Applies to: servo/stylo @ 37c1ed3b707c8f333304de2107c13b68fbc1057c after P-006-1 and P-006-2 (root of the checkout, `patch -p1`)
+# Licence: MPL-2.0 (modification to an MPL-2.0 file; the modified source is published with the repository, see engine/NOTICE)
+
+diff -ru a/style/device/servo.rs b/style/device/servo.rs
+--- a/style/device/servo.rs
++++ b/style/device/servo.rs
+@@ -396,11 +396,13 @@
+             AbsoluteColor::srgb_legacy(r, g, b, 1f32)
+         }
+ 
+-        // Refer to spec
+-        // <https://www.w3.org/TR/css-color-4/#css-system-colors>
++        // ui4me patch P-006-3: the system colours of the reference browser (Chromium) for the
++        // light and the dark used colour scheme, instead of Firefox's, so that computed values
++        // and the canvas agree with the pinned oracle. Deprecated system colours map as in
++        // <https://www.w3.org/TR/css-color-4/#deprecated-system-colors>.
+         if self.is_dark_color_scheme(color_scheme_flags) {
+             match system_color {
+-                SystemColor::Accentcolor => srgb(10, 132, 255),
++                SystemColor::Accentcolor => srgb(0, 117, 255),
+                 SystemColor::Accentcolortext => srgb(255, 255, 255),
+                 SystemColor::Activetext => srgb(255, 0, 0),
+                 SystemColor::Linktext => srgb(158, 158, 255),
+@@ -419,7 +421,7 @@
+                 | SystemColor::Threedface
+                 | SystemColor::Threedhighlight
+                 | SystemColor::Threedlightshadow => srgb(107, 107, 107),
+-                SystemColor::Buttontext => srgb(245, 245, 245),
++                SystemColor::Buttontext => srgb(255, 255, 255),
+                 SystemColor::Canvas
+                 // Deprecated system colors (CSS Color 4) mapped to Canvas.
+                 | SystemColor::Activecaption
+@@ -429,30 +431,30 @@
+                 | SystemColor::Infobackground
+                 | SystemColor::Menu
+                 | SystemColor::Scrollbar
+-                | SystemColor::Window => srgb(30, 30, 30),
++                | SystemColor::Window => srgb(18, 18, 18),
+                 SystemColor::Canvastext
+                 // Deprecated system colors (CSS Color 4) mapped to Canvastext.
+                 | SystemColor::Captiontext
+                 | SystemColor::Infotext
+                 | SystemColor::Menutext
+-                | SystemColor::Windowtext => srgb(232, 232, 232),
+-                SystemColor::Field => srgb(45, 45, 45),
+-                SystemColor::Fieldtext => srgb(240, 240, 240),
++                | SystemColor::Windowtext => srgb(255, 255, 255),
++                SystemColor::Field => srgb(59, 59, 59),
++                SystemColor::Fieldtext => srgb(255, 255, 255),
+                 SystemColor::Graytext
+                 // Deprecated system colors (CSS Color 4) mapped to Graytext.
+-                | SystemColor::Inactivecaptiontext => srgb(155, 155, 155),
+-                SystemColor::Highlight => srgb(38, 79, 120),
++                | SystemColor::Inactivecaptiontext => srgb(128, 128, 128),
++                SystemColor::Highlight => AbsoluteColor::srgb_legacy(0, 65, 198, 0.8),
+                 SystemColor::Highlighttext => srgb(255, 255, 255),
+-                SystemColor::Mark => srgb(102, 92, 0),
+-                SystemColor::Marktext => srgb(255, 255, 255),
++                SystemColor::Mark => srgb(255, 255, 0),
++                SystemColor::Marktext => srgb(0, 0, 0),
+                 SystemColor::Selecteditem => srgb(153, 200, 255),
+                 SystemColor::Selecteditemtext => srgb(59, 59, 59),
+             }
+         } else {
+             match system_color {
+-                SystemColor::Accentcolor => srgb(0, 102, 204),
++                SystemColor::Accentcolor => srgb(0, 117, 255),
+                 SystemColor::Accentcolortext => srgb(255, 255, 255),
+-                SystemColor::Activetext => srgb(238, 0, 0),
++                SystemColor::Activetext => srgb(255, 0, 0),
+                 SystemColor::Linktext => srgb(0, 0, 238),
+                 SystemColor::Visitedtext => srgb(85, 26, 139),
+                 SystemColor::Buttonborder
+@@ -461,14 +463,14 @@
+                 | SystemColor::Inactiveborder
+                 | SystemColor::Threeddarkshadow
+                 | SystemColor::Threedshadow
+-                | SystemColor::Windowframe => srgb(169, 169, 169),
++                | SystemColor::Windowframe => srgb(0, 0, 0),
+                 SystemColor::Buttonface
+                 // Deprecated system colors (CSS Color 4) mapped to Buttonface.
+                 | SystemColor::Buttonhighlight
+                 | SystemColor::Buttonshadow
+                 | SystemColor::Threedface
+                 | SystemColor::Threedhighlight
+-                | SystemColor::Threedlightshadow => srgb(220, 220, 220),
++                | SystemColor::Threedlightshadow => srgb(239, 239, 239),
+                 SystemColor::Buttontext => srgb(0, 0, 0),
+                 SystemColor::Canvas
+                 // Deprecated system colors (CSS Color 4) mapped to Canvas.
+@@ -490,12 +492,12 @@
+                 SystemColor::Fieldtext => srgb(0, 0, 0),
+                 SystemColor::Graytext
+                 // Deprecated system colors (CSS Color 4) mapped to Graytext.
+-                | SystemColor::Inactivecaptiontext => srgb(109, 109, 109),
+-                SystemColor::Highlight => srgb(0, 65, 198),
+-                SystemColor::Highlighttext => srgb(0, 0, 0),
+-                SystemColor::Mark => srgb(255, 235, 59),
++                | SystemColor::Inactivecaptiontext => srgb(128, 128, 128),
++                SystemColor::Highlight => AbsoluteColor::srgb_legacy(0, 65, 198, 0.8),
++                SystemColor::Highlighttext => srgb(255, 255, 255),
++                SystemColor::Mark => srgb(255, 255, 0),
+                 SystemColor::Marktext => srgb(0, 0, 0),
+-                SystemColor::Selecteditem => srgb(0, 102, 204),
++                SystemColor::Selecteditem => srgb(25, 103, 210),
+                 SystemColor::Selecteditemtext => srgb(255, 255, 255),
+             }
+         }

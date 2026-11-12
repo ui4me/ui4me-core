@@ -1,0 +1,19 @@
+{
+ "schema_version": 1,
+ "suite": "resources-policy",
+ "owner_feature": "007",
+ "title": "Resource policy: roots, traversal, symlinks, schemes, limits (U4T-220, U4T-221)",
+ "format": "cases.json: each case builds a tree under a temporary directory (the common tree is described in the runner's header), requests `request` from a document of kind `doc`, and expects the Broken code or OK",
+ "status": "proposed",
+ "files": [
+  {
+   "path": "cases.json",
+   "sha256": "25d602ed332492673e2f5ad46ba348d009a58938ea670c19892ec34fea5687cd",
+   "role": "cases"
+  }
+ ],
+ "counts": {
+  "unix": 76,
+  "windows": 12
+ }
+}

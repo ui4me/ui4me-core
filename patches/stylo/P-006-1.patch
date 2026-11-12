@@ -1,0 +1,119 @@
+# P-006-1: `prefers-reduced-motion` media feature for servo-mode Stylo (ui4me 006, gate X-STYLE-PATCH)
+# Applies to: servo/stylo @ 37c1ed3b707c8f333304de2107c13b68fbc1057c (root of the checkout, `patch -p1`)
+# Licence: MPL-2.0 (modifications to MPL-2.0 files; the publication obligation is recorded in RESULT.md)
+
+diff -ru a/style/device/servo.rs b/style/device/servo.rs
+--- a/style/device/servo.rs
++++ b/style/device/servo.rs
+@@ -12,7 +12,7 @@
+ use crate::media_queries::MediaType;
+ use crate::properties::ComputedValues;
+ use crate::properties::style_structs::Font;
+-use crate::queries::values::PrefersColorScheme;
++use crate::queries::values::{PrefersColorScheme, PrefersReducedMotion};
+ use crate::servo::media_features::PointerCapabilities;
+ use crate::values::KeyframesName;
+ use crate::values::computed::font::GenericFontFamily;
+@@ -79,6 +79,9 @@
+     /// Whether the user prefers light mode or dark mode
+     #[ignore_malloc_size_of = "Pure stack type"]
+     pub prefers_color_scheme: PrefersColorScheme,
++    /// Whether the user prefers reduced motion (ui4me patch P-006-1)
++    #[ignore_malloc_size_of = "Pure stack type"]
++    pub prefers_reduced_motion: PrefersReducedMotion,
+     /// The capabilities of the primary pointer input
+     #[ignore_malloc_size_of = "Pure stack type"]
+     pub primary_pointer_capabilities: PointerCapabilities,
+@@ -316,6 +319,16 @@
+         AbsoluteColor::BLACK
+     }
+ 
++    /// Set the [`PrefersReducedMotion`] value on this [`Device`] (ui4me patch P-006-1).
++    pub fn set_reduced_motion(&mut self, v: PrefersReducedMotion) {
++        self.extra.media_data.prefers_reduced_motion = v;
++    }
++
++    /// The [`PrefersReducedMotion`] value of this [`Device`] (ui4me patch P-006-1).
++    pub fn reduced_motion(&self) -> PrefersReducedMotion {
++        self.extra.media_data.prefers_reduced_motion
++    }
++
+     /// Set the [`PrefersColorScheme`] value on this [`Device`].
+     ///
+     /// Note that this does not update any associated `Stylist`. For this you must call
+diff -ru a/style/queries/values.rs b/style/queries/values.rs
+--- a/style/queries/values.rs
++++ b/style/queries/values.rs
+@@ -36,6 +36,15 @@
+     }
+ }
+ 
++/// Values for the prefers-reduced-motion media feature (ui4me patch P-006-1).
++#[derive(Clone, Copy, Debug, FromPrimitive, Parse, PartialEq, ToCss)]
++#[repr(u8)]
++#[allow(missing_docs)]
++pub enum PrefersReducedMotion {
++    NoPreference,
++    Reduce,
++}
++
+ /// Values for the prefers-color-scheme media feature.
+ #[derive(Clone, Copy, Debug, FromPrimitive, Parse, PartialEq, ToCss)]
+ #[repr(u8)]
+diff -ru a/style/servo/media_features.rs b/style/servo/media_features.rs
+--- a/style/servo/media_features.rs
++++ b/style/servo/media_features.rs
+@@ -6,7 +6,7 @@
+ 
+ use crate::derives::*;
+ use crate::queries::feature::{AllowsRanges, Evaluator, FeatureFlags, QueryFeatureDescription};
+-use crate::queries::values::{Orientation, PrefersColorScheme};
++use crate::queries::values::{Orientation, PrefersColorScheme, PrefersReducedMotion};
+ use crate::values::computed::{CSSPixelLength, Context, Ratio, Resolution};
+ use std::fmt::Debug;
+ 
+@@ -70,6 +70,13 @@
+     }
+ }
+ 
++fn eval_prefers_reduced_motion(context: &Context, query_value: Option<PrefersReducedMotion>) -> bool {
++    match query_value {
++        Some(v) => context.device().reduced_motion() == v,
++        None => context.device().reduced_motion() == PrefersReducedMotion::Reduce,
++    }
++}
++
+ bitflags! {
+     /// https://drafts.csswg.org/mediaqueries-4/#mf-interaction
+     #[derive(Debug, Clone, Copy, PartialEq)]
+@@ -160,7 +167,7 @@
+ }
+ 
+ /// A list with all the media features that Servo supports.
+-pub static MEDIA_FEATURES: [QueryFeatureDescription; 15] = [
++pub static MEDIA_FEATURES: [QueryFeatureDescription; 16] = [
+     feature!(
+         atom!("width"),
+         AllowsRanges::Yes,
+@@ -251,4 +258,10 @@
+         keyword_evaluator!(eval_prefers_color_scheme, PrefersColorScheme),
+         FeatureFlags::empty(),
+     ),
++    feature!(
++        atom!("prefers-reduced-motion"),
++        AllowsRanges::No,
++        keyword_evaluator!(eval_prefers_reduced_motion, PrefersReducedMotion),
++        FeatureFlags::empty(),
++    ),
+ ];
+diff -ru a/stylo_atoms/static_atoms.txt b/stylo_atoms/static_atoms.txt
+--- a/stylo_atoms/static_atoms.txt
++++ b/stylo_atoms/static_atoms.txt
+@@ -137,6 +137,7 @@
+ popstate
+ postershown
+ prefers-color-scheme
++prefers-reduced-motion
+ print
+ progress
+ radio

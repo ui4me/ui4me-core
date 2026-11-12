@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: MIT
+# Ported-From: https://github.com/hyphenation/tex-hyphen@5684c0f51c0b81133db2efbe60a408b4155a3ff5:hyph-utf8/tex/generic/hyph-utf8/patterns/txt/hyph-sk.hyp.txt
+# Modifications: none to the patterns (these three comment lines added); licences in NOTICES.txt
+dosť
+me-tó-da
+me-tó-dy
+ne-do-stat-ka-mi
+sep-tem-bra

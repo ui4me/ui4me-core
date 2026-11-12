@@ -1,0 +1,15 @@
+{
+ "schema_version": 1,
+ "suite": "resources-bundles",
+ "owner_feature": "007",
+ "status": "proposed",
+ "generator": "hand-authored from resources-images/fake-corpus.json",
+ "licence": "generated test data, no third-party content",
+ "scenarios_in": "engine/crates/ui4me-resources/tests/bundles.rs and engine/crates/ui4me-integration-tests/tests/pipeline_bundles.rs",
+ "files": [
+  {
+   "path": "bundle-corpus.json",
+   "sha256": "9e6c2c374aeee422e62fbb32ff542c8f1ec4390dd7c476c4706e242ba4a01ec6"
+  }
+ ]
+}

@@ -1,0 +1,44 @@
+# P-006-2: distinct parse error kind `UnknownVendorProperty` for unknown vendor-prefixed declarations (ui4me 006, gate X-STYLE-PATCH)
+# Applies to: servo/stylo @ 37c1ed3b707c8f333304de2107c13b68fbc1057c (root of the checkout, `patch -p1`)
+# Licence: MPL-2.0 (modifications to MPL-2.0 files; the publication obligation is recorded in RESULT.md)
+
+diff -ru a/style/properties/declaration_block.rs b/style/properties/declaration_block.rs
+--- a/style/properties/declaration_block.rs
++++ b/style/properties/declaration_block.rs
+@@ -1541,6 +1541,9 @@
+         let id = match PropertyId::parse(&name, context) {
+             Ok(id) => id,
+             Err(..) => {
++                if is_non_mozilla_vendor_identifier(&name) && !name.starts_with("--") {
++                    return Err(ParseError::custom(StyleParseErrorKind::UnknownVendorProperty));
++                }
+                 return Err(ParseError::custom(StyleParseErrorKind::UnknownProperty));
+             },
+         };
+@@ -1706,7 +1709,13 @@
+     }
+ 
+     let mut error_string = Cow::Borrowed(slice);
+-    if let ParseErrorKind::Custom(StyleParseErrorKind::UnknownProperty) = error.kind {
++    if let ParseErrorKind::Custom(StyleParseErrorKind::UnknownVendorProperty) = error.kind {
++        // ui4me patch P-006-2: reported (one record per declaration), with the property name.
++        let name = slice.split(':').next().unwrap_or("").trim();
++        if !name.is_empty() {
++            error_string = Cow::Borrowed(name);
++        }
++    } else if let ParseErrorKind::Custom(StyleParseErrorKind::UnknownProperty) = error.kind {
+         // The error no longer carries the property name, but `slice` is the
+         // declaration text, i.e. `<name>: <value>`.
+         let name = slice.split(':').next().unwrap_or("").trim();
+diff -ru a/style_traits/lib.rs b/style_traits/lib.rs
+--- a/style_traits/lib.rs
++++ b/style_traits/lib.rs
+@@ -133,6 +133,8 @@
+     SelectorError(SelectorParseErrorKind),
+     /// The property declaration was for an unknown property.
+     UnknownProperty,
++    /// The property declaration was for an unknown vendor-prefixed property (ui4me patch P-006-2).
++    UnknownVendorProperty,
+     /// The property declaration was for a disabled experimental property.
+     ExperimentalProperty,
+     /// The property declaration contained an invalid value.

@@ -1,0 +1,212 @@
+{
+  "baselines": {
+    "chromium.linux-debian13-kde-wayland.headless": {
+      "version": 2
+    }
+  },
+  "entry": "index.html",
+  "environment": {
+    "profile": "default"
+  },
+  "fixture_id": "svg-images",
+  "observables": [
+    "dom",
+    "geometry",
+    "pixels"
+  ],
+  "owner_feature": "007",
+  "probes": [
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry",
+        "pixels"
+      ],
+      "probe_id": "sized"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry",
+        "pixels"
+      ],
+      "probe_id": "viewbox"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry",
+        "pixels"
+      ],
+      "probe_id": "nosize"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry",
+        "pixels"
+      ],
+      "probe_id": "text"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry",
+        "pixels"
+      ],
+      "probe_id": "currentcolor"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry",
+        "pixels"
+      ],
+      "probe_id": "relhref"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry",
+        "pixels"
+      ],
+      "probe_id": "checkbox"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry",
+        "pixels"
+      ],
+      "probe_id": "select"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry",
+        "pixels"
+      ],
+      "probe_id": "inline"
+    }
+  ],
+  "schema_version": 1,
+  "source_hash": "6edd948778eeb7bd1472f75dc7db3a7e926a5c16a5019de8af6cd183ea499ddf",
+  "sources": [
+    {
+      "path": "img/dot.png",
+      "role": "image",
+      "sha256": "c414cd0e204de974f73753c7e28d7638e7b3691bb8b1a2bab6b25bb7fed7ce77"
+    },
+    {
+      "path": "index.html",
+      "role": "html",
+      "sha256": "69cb78a0445a9d244e7fbe401f032484190d451ab94e6174200256ca0acc6e0c"
+    },
+    {
+      "path": "svg/checkbox.svg",
+      "role": "svg",
+      "sha256": "1befd29faaa9e36011d3c6b997fe5f971421947c0621a549b4729880a5c98700"
+    },
+    {
+      "path": "svg/current-color.svg",
+      "role": "svg",
+      "sha256": "627f0003aa7afbdedfe93cbe8dd1a4fb22209406428be35cb23719e073a1599c"
+    },
+    {
+      "path": "svg/no-size-no-viewbox.svg",
+      "role": "svg",
+      "sha256": "da0a5b5614b97bb1ed22ae1ccd5a2487778cebe702f1c7e20e66d6b3fab0ad5e"
+    },
+    {
+      "path": "svg/relative-image-href.svg",
+      "role": "svg",
+      "sha256": "20b2d6fe6724450f09fc582aa78d53028d103c558863f7caba200861fa2cdbfe"
+    },
+    {
+      "path": "svg/select-caret.svg",
+      "role": "svg",
+      "sha256": "29b120d4c25df5612e91cc8adc06f46ecc67314e30357ff1c99a09a1515ecc36"
+    },
+    {
+      "path": "svg/sized-40x20.svg",
+      "role": "svg",
+      "sha256": "d441e83c6eea9c710a6d69bafd007ca1e26340d742c1d3aff2fe80972d151bd7"
+    },
+    {
+      "path": "svg/viewbox-only.svg",
+      "role": "svg",
+      "sha256": "5d08a73f8b74b2d75303b57cced9ed3261e81d5aff71d546e7f7e6e2d978bd06"
+    },
+    {
+      "path": "svg/with-text.svg",
+      "role": "svg",
+      "sha256": "7b0d87031c41713f92c2cf7a052f3ed8e080648805c210258970d9176361cbdc"
+    }
+  ],
+  "status": "active",
+  "suite": "resources-svg",
+  "tags": {
+    "contracts": [
+      "U4C-RES",
+      "U4C-BOX",
+      "U4C-RND"
+    ],
+    "stages": [
+      "parse",
+      "box",
+      "layout",
+      "raster"
+    ],
+    "standards": [
+      "SVG 2 static",
+      "CSS Images 3"
+    ],
+    "u4t": [
+      "U4T-225",
+      "U4T-226"
+    ]
+  },
+  "title": "Static SVG images: natural size, viewBox, text, currentColor, nesting, data: glyphs, inline svg",
+  "variants": [
+    {
+      "color_scheme": "light",
+      "dpr": 1,
+      "reduced_motion": "no-preference",
+      "variant_id": "scale-1-0",
+      "viewport": {
+        "height": 240,
+        "width": 360
+      }
+    },
+    {
+      "color_scheme": "light",
+      "dpr": 1.25,
+      "reduced_motion": "no-preference",
+      "variant_id": "scale-1-25",
+      "viewport": {
+        "height": 240,
+        "width": 360
+      }
+    },
+    {
+      "color_scheme": "light",
+      "dpr": 1.5,
+      "reduced_motion": "no-preference",
+      "variant_id": "scale-1-5",
+      "viewport": {
+        "height": 240,
+        "width": 360
+      }
+    },
+    {
+      "color_scheme": "light",
+      "dpr": 2,
+      "reduced_motion": "no-preference",
+      "variant_id": "scale-2-0",
+      "viewport": {
+        "height": 240,
+        "width": 360
+      }
+    }
+  ]
+}

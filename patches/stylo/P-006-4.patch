@@ -1,0 +1,61 @@
+# P-006-4: container queries (`@container`, the `cq*` units, the `container` shorthand) for servo-mode Stylo, gated by the pref layout.css.container-queries.enabled (ui4me 015 CQ-1, register UP-01; lane L-CQ, AUTHORISATIONS E-029)
+# Applies to: servo/stylo @ 37c1ed3b707c8f333304de2107c13b68fbc1057c after P-006-1, P-006-2 and P-006-3 (root of the checkout, `patch -p1`)
+# Licence: MPL-2.0 (modifications to MPL-2.0 files; the modified source is published with the repository, see engine/NOTICE)
+
+diff -ru a/style/properties/shorthands.rs b/style/properties/shorthands.rs
+--- a/style/properties/shorthands.rs
++++ b/style/properties/shorthands.rs
+@@ -542,7 +542,6 @@
+     }
+ }
+ 
+-#[cfg(feature = "gecko")]
+ pub mod container {
+     use super::*;
+     pub use crate::properties::generated::shorthands::container::*;
+diff -ru a/style/properties/shorthands.toml b/style/properties/shorthands.toml
+--- a/style/properties/shorthands.toml
++++ b/style/properties/shorthands.toml
+@@ -209,7 +209,7 @@
+ kind = "two_properties"
+ 
+ [container]
+-engine = "gecko"
++servo_pref = "layout.css.container-queries.enabled"
+ sub_properties = ["container-name", "container-type"]
+ spec = "https://drafts.csswg.org/css-contain-3/#container-shorthand"
+ 
+diff -ru a/style/stylesheets/rule_parser.rs b/style/stylesheets/rule_parser.rs
+--- a/style/stylesheets/rule_parser.rs
++++ b/style/stylesheets/rule_parser.rs
+@@ -282,7 +282,7 @@
+             "counter-style" if cfg!(feature = "gecko") => Self::CounterStyle,
+             "media" => Self::Media,
+             "custom-media" if crate::pref!("layout.css.custom-media.enabled") => Self::CustomMedia,
+-            "container" if cfg!(feature = "gecko") => Self::Container,
++            "container" if crate::pref!("layout.css.container-queries.enabled", gecko = true) => Self::Container,
+             "supports" => Self::Supports,
+             "keyframes" => Self::Keyframes(None),
+             "-webkit-keyframes" => Self::Keyframes(Some(VendorPrefix::WebKit)),
+diff -ru a/style/values/specified/length.rs b/style/values/specified/length.rs
+--- a/style/values/specified/length.rs
++++ b/style/values/specified/length.rs
+@@ -188,12 +188,12 @@
+             "dvi" if !in_page_rule => Self::Dvi,
+             // Container query lengths. Inherit the limitation from viewport units since
+             // we may fall back to them.
+-            "cqw" if !in_page_rule && cfg!(feature = "gecko") => Self::Cqw,
+-            "cqh" if !in_page_rule && cfg!(feature = "gecko") => Self::Cqh,
+-            "cqi" if !in_page_rule && cfg!(feature = "gecko") => Self::Cqi,
+-            "cqb" if !in_page_rule && cfg!(feature = "gecko") => Self::Cqb,
+-            "cqmin" if !in_page_rule && cfg!(feature = "gecko") => Self::Cqmin,
+-            "cqmax" if !in_page_rule && cfg!(feature = "gecko") => Self::Cqmax,
++            "cqw" if !in_page_rule && crate::pref!("layout.css.container-queries.enabled", gecko = true) => Self::Cqw,
++            "cqh" if !in_page_rule && crate::pref!("layout.css.container-queries.enabled", gecko = true) => Self::Cqh,
++            "cqi" if !in_page_rule && crate::pref!("layout.css.container-queries.enabled", gecko = true) => Self::Cqi,
++            "cqb" if !in_page_rule && crate::pref!("layout.css.container-queries.enabled", gecko = true) => Self::Cqb,
++            "cqmin" if !in_page_rule && crate::pref!("layout.css.container-queries.enabled", gecko = true) => Self::Cqmin,
++            "cqmax" if !in_page_rule && crate::pref!("layout.css.container-queries.enabled", gecko = true) => Self::Cqmax,
+             _ => return Err(()),
+         })
+     }

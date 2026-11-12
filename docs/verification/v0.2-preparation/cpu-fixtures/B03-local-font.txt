@@ -1,0 +1,12 @@
+{
+  "diagnostics": [],
+  "height": 420,
+  "output": "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/B03-local-font.png",
+  "pending_resources": false,
+  "pixel_height": 420,
+  "pixel_width": 640,
+  "profile": "ui4me-desktop-0.2",
+  "scale": 1.0,
+  "source": "/workspace/scratch/3c4bbc64a9f5/ui4me-core/verification/preparation/final/cpu-fixtures/source/local-font.html",
+  "width": 640
+}

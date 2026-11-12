@@ -1,0 +1,16 @@
+# Based on servo/stylo 37c1ed3b707c8f333304de2107c13b68fbc1057c (MPL-2.0).
+--- a/style/values/specified/border.rs
++++ b/style/values/specified/border.rs
+@@ -238,2 +238,3 @@
+-    // Round `width` down to the nearest device pixel, but any non-zero value that would round
+-    // down to zero is clamped to 1 device pixel.
++    // ui4me servo-mode computed widths follow CSS-pixel snapping, independent of
++    // output scale; rasterization still uses the real device pixel ratio. Gecko
++    // retains its native device-pixel behavior.
+@@ -244 +245,5 @@
+-    let au_per_dev_px = context.device().app_units_per_device_pixel();
++    let au_per_dev_px = if cfg!(feature = "servo") {
++        app_units::AU_PER_PX
++    } else {
++        context.device().app_units_per_device_pixel()
++    };

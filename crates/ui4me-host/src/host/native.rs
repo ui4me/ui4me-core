@@ -144,6 +144,27 @@ impl Host {
         result: Result<String, RpcError>,
     ) {
         match target {
+            TransferTarget::DocumentClipboard {
+                window_id,
+                document_id,
+                request_id,
+            } => {
+                self.complete_document_clipboard(
+                    &window_id,
+                    &document_id,
+                    request_id,
+                    result.map(Some).map_err(|e| e.to_string()),
+                );
+            }
+            TransferTarget::DocumentDrop {
+                window_id,
+                document_id,
+                files,
+                x,
+                y,
+            } => {
+                self.complete_document_drop(&window_id, &document_id, files, (x, y), result);
+            }
             TransferTarget::Rpc(reply) => {
                 self.respond(&reply, result.map(|text| json!({"text":text})))
             }
@@ -252,6 +273,28 @@ impl Host {
         event_loop: Option<&dyn ActiveEventLoop>,
     ) {
         let id = event.window_id;
+        if let Some(document_id) = event.document_id {
+            let result = self
+                .windows
+                .get_mut(&id)
+                .filter(|w| !w.closing)
+                .and_then(|w| w.document.as_mut())
+                .filter(|d| d.id == document_id)
+                .and_then(|d| {
+                    ui4me_renderer::a11y::decode_request(&event.request)
+                        .map(|r| d.engine.accessibility_request(&r))
+                });
+            if let Some(result) = result {
+                if let Err(error) = result {
+                    tracing::warn!(%error, "Document accessibility action failed");
+                }
+                self.document_changed(&id, event_loop);
+            }
+            return;
+        }
+        if self.windows.get(&id).is_some_and(|w| w.document.is_some()) {
+            return;
+        }
         let mut action = None;
         if let Some(window) = self.windows.get_mut(&id) {
             match (
@@ -294,6 +337,11 @@ impl Host {
     }
 
     fn keyboard(&mut self, id: &str, event: KeyEvent, event_loop: &dyn ActiveEventLoop) {
+        if event.state.is_pressed() {
+            if let Some(native) = self.windows.get_mut(id).and_then(|w| w.native.as_mut()) {
+                native.ime_quiet_until = None;
+            }
+        }
         let key_name = match &event.logical_key {
             Key::Character(s) => s.to_string(),
             Key::Named(n) => format!("{n:?}"),
@@ -385,13 +433,25 @@ impl Host {
                 .surface
                 .buffer_mut()
                 .map_err(|e| anyhow::anyhow!("{e}"))?;
-            record.probe.render(
-                &mut buffer,
-                size.width,
-                size.height,
-                native.window.scale_factor(),
-                &record.title,
-            );
+            // Acquire a non-blocking native buffer BEFORE rendering. A covered
+            // Wayland window must retain the document's dirty state if no buffer
+            // is available yet (qualified v0.1 softbuffer fix).
+            if let Some(document) = &mut record.document {
+                let pixels = document.engine.render(
+                    size.width,
+                    size.height,
+                    native.window.scale_factor(),
+                )?;
+                buffer.copy_from_slice(&pixels);
+            } else {
+                record.probe.render(
+                    &mut buffer,
+                    size.width,
+                    size.height,
+                    native.window.scale_factor(),
+                    &record.title,
+                );
+            }
             native.window.pre_present_notify();
             buffer.present().map_err(|e| anyhow::anyhow!("{e}"))?;
             if !native.presented {
@@ -402,13 +462,23 @@ impl Host {
                     "first frame presented"
                 );
             }
-            native.accessibility.update(record.probe.tree(
-                &record.title,
-                size.width,
-                size.height,
-                native.window.scale_factor(),
-            ));
-            update_ime(&record.probe, native);
+            if let Some(document) = &mut record.document {
+                let tree = document.engine.accessibility_tree_titled(&record.title)?;
+                native
+                    .accessibility
+                    .update_document(&document.id, ui4me_renderer::a11y::full_update(&tree));
+                document.a11y = Some(tree);
+                document.native_refresh_pending = false;
+                super::document_native::update_ime(&document.engine, native);
+            } else {
+                native.accessibility.update(record.probe.tree(
+                    &record.title,
+                    size.width,
+                    size.height,
+                    native.window.scale_factor(),
+                ));
+                update_ime(&record.probe, native);
+            }
             Ok(())
         })();
         if let Err(error) = result {
@@ -426,6 +496,22 @@ impl Host {
                 }
             } else {
                 tracing::error!(%error, "native presentation failed");
+                let document_id = self.windows.get_mut(id).and_then(|record| {
+                    let document = record.document.take()?;
+                    record.probe.failure = Some(
+                        format!("Renderer failed: {error}")
+                            .chars()
+                            .take(160)
+                            .collect(),
+                    );
+                    Some(document.id)
+                });
+                if let Some(document_id) = document_id {
+                    self.notify("document.error", json!({"window_id":id,"document_id":document_id,
+                        "fatal":true,"message":format!("Renderer failed: {error}").chars().take(2048).collect::<String>()}));
+                    self.prune_document_work(id);
+                    self.refresh(id);
+                }
             }
         }
     }
@@ -460,6 +546,7 @@ impl ApplicationHandler for Host {
         self.pump(Some(event_loop));
     }
     fn about_to_wait(&mut self, event_loop: &dyn ActiveEventLoop) {
+        self.finish_document_preedits(event_loop);
         self.pump(Some(event_loop));
         // Workers wake the loop for messages, results and backend exit. The
         // timer only enforces deadlines, so poll quickly while time-bounded work
@@ -471,7 +558,7 @@ impl ApplicationHandler for Host {
             || self.connected.keys().any(|id| Some(*id) != self.client);
         let interval = if deadlines_pending { 50 } else { 500 };
         event_loop.set_control_flow(ControlFlow::WaitUntil(
-            Instant::now() + Duration::from_millis(interval),
+            Instant::now() + self.document_wait_interval(Duration::from_millis(interval)),
         ));
     }
 
@@ -486,6 +573,9 @@ impl ApplicationHandler for Host {
         };
         if let Some(native) = self.windows.get_mut(&id).and_then(|r| r.native.as_mut()) {
             native.accessibility.event(native.window.as_ref(), &event);
+        }
+        if self.document_window_event(&id, &event, event_loop) {
+            return;
         }
         match event {
             WindowEvent::CloseRequested => {
@@ -535,6 +625,21 @@ impl ApplicationHandler for Host {
             }
             WindowEvent::KeyboardInput { event, .. } => self.keyboard(&id, event, event_loop),
             WindowEvent::Ime(ime) => {
+                if self
+                    .windows
+                    .get(&id)
+                    .and_then(|w| w.native.as_ref())
+                    .is_some_and(|n| {
+                        n.ime_quiet_until
+                            .is_some_and(|until| Instant::now() < until)
+                    })
+                    && matches!(
+                        ime,
+                        Ime::Preedit(..) | Ime::Commit(..) | Ime::DeleteSurrounding { .. }
+                    )
+                {
+                    return;
+                }
                 if let Some(record) = self.windows.get_mut(&id) {
                     match ime {
                         Ime::Commit(text) => {
@@ -642,7 +747,22 @@ impl ApplicationHandler for Host {
                         self.transfers.insert(
                             serial,
                             PendingTransfer {
-                                target: if file_drop {
+                                target: if let Some(document) =
+                                    self.windows.get(&id).and_then(|w| w.document.as_ref())
+                                {
+                                    let (x, y) = self
+                                        .windows
+                                        .get(&id)
+                                        .and_then(|w| w.native.as_ref())
+                                        .map_or((0.0, 0.0), |n| n.pointer);
+                                    TransferTarget::DocumentDrop {
+                                        window_id: id.clone(),
+                                        document_id: document.id.clone(),
+                                        files: file_drop,
+                                        x,
+                                        y,
+                                    }
+                                } else if file_drop {
                                     TransferTarget::Drop(id.clone())
                                 } else {
                                     TransferTarget::DropText(id.clone())

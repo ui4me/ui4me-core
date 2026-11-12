@@ -1,0 +1,767 @@
+# owner: 001-vertical-slice (file); values 004-host-api (R-15)
+# Canonical error registry (AD-34). Values, families, class and category names are copied UNCHANGED from
+# specs/004-host-api/contracts/error-mapping.md §2, §3, §5; aliases (documentation only) from
+# architecture-final-review/01_CONTRACT_AUDIT.md §4. Aliases never become constants.
+# cargo xtask gen-codes reads this file; do not renumber values (FR-050).
+
+[[families]]
+name = "Identity"
+ident = "Identity"
+python_base = "IdentityError"
+
+[[families]]
+name = "Threading"
+ident = "Threading"
+python_base = "ThreadingError"
+
+[[families]]
+name = "Validation"
+ident = "Validation"
+python_base = "ValidationError"
+
+[[families]]
+name = "Revision"
+ident = "Revision"
+python_base = "RevisionError"
+
+[[families]]
+name = "CSS/Layout"
+ident = "CssLayout"
+python_base = "StyleLayoutError"
+
+[[families]]
+name = "Paint/Backend"
+ident = "PaintBackend"
+python_base = "BackendError"
+
+[[families]]
+name = "Platform"
+ident = "Platform"
+python_base = "PlatformError"
+
+[[families]]
+name = "Resource"
+ident = "Resource"
+python_base = "ResourceError"
+
+[[families]]
+name = "Host/FFI"
+ident = "HostFfi"
+python_base = "HostError"
+
+[[families]]
+name = "Interaction"
+ident = "Interaction"
+python_base = "InteractionError"
+
+[[families]]
+name = "System"
+ident = "System"
+python_base = "EngineError"
+
+[[families]]
+name = "Diagnostics"
+ident = "Diagnostics"
+python_base = "DiagnosticsError"
+
+[[families]]
+name = "Recoverable diagnostic"
+ident = "RecoverableDiagnostic"
+
+[[stages]]
+value = 0
+name = "none"
+
+[[stages]]
+value = 1
+name = "parse"
+
+[[stages]]
+value = 2
+name = "cascade"
+
+[[stages]]
+value = 3
+name = "box"
+
+[[stages]]
+value = 4
+name = "text"
+
+[[stages]]
+value = 5
+name = "layout"
+
+[[stages]]
+value = 6
+name = "scene"
+
+[[stages]]
+value = 7
+name = "raster"
+
+[[stages]]
+value = 8
+name = "event"
+
+[[stages]]
+value = 9
+name = "platform"
+
+[[stages]]
+value = 10
+name = "accessibility"
+
+[[stages]]
+value = 11
+name = "resource"
+
+[[stages]]
+value = 12
+name = "host"
+
+[[codes]]
+code = "OK"
+value = 0
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = []
+summary = "Success."
+
+[[codes]]
+code = "STALE_HANDLE"
+value = 101
+family = "Identity"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = ["StaleNode", "StaleHandle", "ERR_STALE_HANDLE", "InvalidStyleHandle", "InvalidFragmentOwner", "A11yNodeMissing"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The handle refers to a freed or retired slot."
+python_class = "StaleHandleError"
+python_note = "`StaleHandleError`"
+powershell_category = "ObjectNotFound"
+
+[[codes]]
+code = "WRONG_DOCUMENT"
+value = 102
+family = "Identity"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = ["WrongDocument", "ERR_WRONG_DOCUMENT"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The node belongs to a different document."
+python_class = "WrongDocumentError"
+python_also = "ValueError"
+python_note = "`WrongDocumentError` (`ValueError`)"
+powershell_category = "InvalidArgument"
+
+[[codes]]
+code = "DOCUMENT_CLOSED"
+value = 103
+family = "Identity"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = ["DocumentClosed", "ClosedContext", "ERR_DOCUMENT_CLOSED"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The document, window or runtime is closed."
+python_class = "DocumentClosedError"
+python_note = "`DocumentClosedError`"
+powershell_category = "ResourceUnavailable"
+
+[[codes]]
+code = "WRONG_THREAD"
+value = 201
+family = "Threading"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = ["WrongThread", "ConcurrentMutationRejected"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "Called from a thread other than the owner thread."
+python_class = "WrongThreadError"
+python_also = "RuntimeError"
+python_note = "`WrongThreadError` (`RuntimeError`)"
+powershell_category = "InvalidOperation"
+
+[[codes]]
+code = "INVALID_HIERARCHY"
+value = 301
+family = "Validation"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The operation would create an invalid tree hierarchy."
+python_class = "InvalidHierarchyError"
+python_also = "ValueError"
+python_note = "`InvalidHierarchyError` (`ValueError`)"
+powershell_category = "InvalidOperation"
+
+[[codes]]
+code = "INVALID_NAMESPACE"
+value = 302
+family = "Validation"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "Invalid or mismatched XML namespace."
+python_class = "InvalidNamespaceError"
+python_also = "ValueError"
+python_note = "`InvalidNamespaceError` (`ValueError`)"
+powershell_category = "InvalidArgument"
+
+[[codes]]
+code = "INVALID_CHARACTER"
+value = 303
+family = "Validation"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "A name contains an invalid character."
+python_class = "InvalidCharacterError"
+python_also = "ValueError"
+python_note = "`InvalidCharacterError` (`ValueError`)"
+powershell_category = "InvalidArgument"
+
+[[codes]]
+code = "INVALID_ATTRIBUTE"
+value = 304
+family = "Validation"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "Invalid attribute name or value."
+python_class = "InvalidAttributeError"
+python_also = "ValueError"
+python_note = "`InvalidAttributeError` (`ValueError`)"
+powershell_category = "InvalidArgument"
+
+[[codes]]
+code = "INVALID_ARGUMENT"
+value = 305
+family = "Validation"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = ["InvalidConstraint", "InvalidEventType", "InvalidUtf8"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id", "batch_index", "byte_offset"]
+summary = "An argument is invalid; see the sub-reason."
+python_class = "InvalidArgumentError"
+python_also = "ValueError"
+python_note = "`InvalidArgumentError` (`ValueError`)"
+powershell_category = "InvalidArgument"
+
+[[codes]]
+code = "INVALID_STATE"
+value = 306
+family = "Validation"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The operation is not valid in the current state; see the sub-reason."
+python_class = "InvalidStateError"
+python_also = "RuntimeError"
+python_note = "`InvalidStateError` (`RuntimeError`)"
+powershell_category = "InvalidOperation"
+
+[[codes]]
+code = "BUFFER_TOO_SMALL"
+value = 307
+family = "Validation"
+returned_as_status = "yes"
+returned_as_status_note = "yes (C only)"
+aliases = ["BufferTooSmall"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id", "required_size"]
+summary = "Caller buffer too small; carries the required size. Bindings retry."
+python_class = "BufferTooSmallError"
+python_note = "`BufferTooSmallError` — never surfaces: bindings retry (research R-06)"
+
+[[codes]]
+code = "SNAPSHOT_NOT_READY"
+value = 401
+family = "Revision"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = ["SnapshotNotReady", "StyleNotReady", "NotReady"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "A committed read before the first publish."
+python_class = "SnapshotNotReadyError"
+python_note = "`SnapshotNotReadyError`"
+powershell_category = "ResourceUnavailable"
+
+[[codes]]
+code = "SNAPSHOT_RETIRED"
+value = 402
+family = "Revision"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = ["SnapshotRetired"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The snapshot was retired."
+python_class = "SnapshotRetiredError"
+python_note = "`SnapshotRetiredError`"
+powershell_category = "ResourceUnavailable"
+
+[[codes]]
+code = "REVISION_MISMATCH"
+value = 403
+family = "Revision"
+returned_as_status = "internal"
+returned_as_status_note = "never (internal)"
+aliases = ["StyleEpochMismatch", "LayoutEpochMismatch", "SceneRevisionMismatch", "TreeVersionMismatch", "InvalidDocumentRevision", "ResourceEpochMismatch"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "Internal revision mismatch; never published."
+python_class = "RevisionMismatchError"
+python_note = "`RevisionMismatchError` (defined, never raised)"
+
+[[codes]]
+code = "UNSUPPORTED_FEATURE"
+value = 501
+family = "CSS/Layout"
+returned_as_status = "yes"
+returned_as_status_note = "yes (e.g. clipboard under MTA); otherwise diagnostic"
+aliases = ["UnsupportedFeature", "UnsupportedDisplayMode", "UnsupportedFormattingContext", "UnsupportedInlineDecoration", "ContainerQueryUnresolved"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The feature is outside the supported subset."
+python_class = "UnsupportedFeatureError"
+python_also = "NotImplementedError"
+python_note = "`UnsupportedFeatureError` (`NotImplementedError`)"
+powershell_category = "NotImplemented"
+
+[[codes]]
+code = "LAYOUT_NON_CONVERGENCE"
+value = 502
+family = "CSS/Layout"
+returned_as_status = "never"
+returned_as_status_note = "never — a diagnostic attached to successful derived reads (005 §11 row O3; AD-10; XR-009)"
+aliases = ["LayoutNonConvergence", "FeedbackDidNotConverge", "UnstableStyleLayout", "DependencyCycle"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "Layout feedback did not converge; the last result is published with a diagnostic."
+
+[[codes]]
+code = "GEOMETRY_NON_FINITE"
+value = 503
+family = "CSS/Layout"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = ["GeometryNonFinite", "NonFiniteTransform", "NumericOverflow"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "A geometry value is NaN, infinite or overflowed."
+python_class = "GeometryNonFiniteError"
+python_also = "ArithmeticError"
+python_note = "`GeometryNonFiniteError` (`ArithmeticError`)"
+powershell_category = "InvalidData"
+
+[[codes]]
+code = "BACKEND_UNSUPPORTED"
+value = 601
+family = "Paint/Backend"
+returned_as_status = "yes"
+returned_as_status_note = "yes (initialisation)"
+aliases = ["BackendUnsupported", "UnsupportedBackend"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "A mandatory raster capability is unsupported by the backend."
+python_class = "BackendUnsupportedError"
+python_note = "`BackendUnsupportedError`"
+powershell_category = "NotImplemented"
+
+[[codes]]
+code = "SURFACE_LOST"
+value = 602
+family = "Paint/Backend"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = ["SurfaceLost", "softbuffer PlatformError"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The presentation surface was lost."
+python_class = "SurfaceLostError"
+python_note = "`SurfaceLostError`"
+powershell_category = "DeviceError"
+
+[[codes]]
+code = "WINDOW_UNAVAILABLE"
+value = 701
+family = "Platform"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "No window could be created or is available."
+python_class = "WindowUnavailableError"
+python_note = "`WindowUnavailableError`"
+powershell_category = "ResourceUnavailable"
+
+[[codes]]
+code = "RESIZE_FAILED"
+value = 702
+family = "Platform"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "Resizing the window or surface failed."
+python_class = "ResizeFailedError"
+python_note = "`ResizeFailedError`"
+powershell_category = "DeviceError"
+
+[[codes]]
+code = "INVALID_PIXEL_FORMAT"
+value = 703
+family = "Platform"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The pixel format is invalid or unsupported."
+python_class = "InvalidPixelFormatError"
+python_note = "`InvalidPixelFormatError`"
+powershell_category = "DeviceError"
+
+[[codes]]
+code = "PLATFORM_ADAPTER_UNAVAILABLE"
+value = 704
+family = "Platform"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The platform adapter is unavailable."
+python_class = "PlatformAdapterUnavailableError"
+python_note = "`PlatformAdapterUnavailableError`"
+powershell_category = "NotInstalled"
+
+[[codes]]
+code = "RESOURCE_DENIED"
+value = 801
+family = "Resource"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "Resource access denied by policy."
+python_class = "ResourceDeniedError"
+python_also = "PermissionError"
+python_note = "`ResourceDeniedError` (`PermissionError`)"
+powershell_category = "PermissionDenied"
+
+[[codes]]
+code = "URI_MALFORMED"
+value = 802
+family = "Resource"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The URI is malformed or cannot be resolved."
+python_class = "UriMalformedError"
+python_also = "ValueError"
+python_note = "`UriMalformedError` (`ValueError`)"
+powershell_category = "InvalidArgument"
+
+[[codes]]
+code = "FILE_NOT_FOUND"
+value = 803
+family = "Resource"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The file was not found."
+python_class = "ResourceFileNotFoundError"
+python_also = "FileNotFoundError"
+python_note = "`ResourceFileNotFoundError` (`FileNotFoundError`)"
+powershell_category = "ObjectNotFound"
+
+[[codes]]
+code = "DECODE_FAILED"
+value = 804
+family = "Resource"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id", "byte_offset"]
+summary = "Decoding the resource failed."
+python_class = "DecodeFailedError"
+python_note = "`DecodeFailedError`"
+powershell_category = "InvalidData"
+
+[[codes]]
+code = "UNSUPPORTED_MEDIA_TYPE"
+value = 805
+family = "Resource"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The media type is not supported."
+python_class = "UnsupportedMediaTypeError"
+python_note = "`UnsupportedMediaTypeError`"
+powershell_category = "InvalidType"
+
+[[codes]]
+code = "SIZE_LIMIT"
+value = 806
+family = "Resource"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = ["SizeLimit", "TextTooLarge", "ParseResourceLimit", "SerializationLimit"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "A size limit was exceeded."
+python_class = "SizeLimitError"
+python_note = "`SizeLimitError`"
+powershell_category = "LimitsExceeded"
+
+[[codes]]
+code = "ABI_INCOMPATIBLE"
+value = 901
+family = "Host/FFI"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = ["IncompatibleABI", "ABIIncompatible"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The native library ABI is incompatible with the binding."
+python_class = "AbiIncompatibleError"
+python_also = "ImportError"
+python_note = "`AbiIncompatibleError` (`ImportError`)"
+powershell_category = "NotInstalled"
+
+[[codes]]
+code = "REENTRANT_CALL_FORBIDDEN"
+value = 902
+family = "Host/FFI"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = ["ReentrantCallForbidden"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "Re-entrant call (for example run inside a callback) is forbidden."
+python_class = "ReentrantCallForbiddenError"
+python_also = "RuntimeError"
+python_note = "`ReentrantCallForbiddenError` (`RuntimeError`)"
+powershell_category = "InvalidOperation"
+
+[[codes]]
+code = "CALLBACK_FAILED"
+value = 903
+family = "Host/FFI"
+returned_as_status = "never"
+returned_as_status_note = "no — reported (dispatch ID, listener label)"
+aliases = ["CallbackFailed", "CallbackFailure", "HostCallbackFailed"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id", "dispatch_id"]
+summary = "A host callback failed; reported with dispatch id and listener label."
+python_class = "CallbackFailedError"
+python_note = "`CallbackFailedError` (passed to the error hook, not raised)"
+powershell_category = "NotSpecified"
+
+[[codes]]
+code = "DISPATCH_RECURSION_LIMIT"
+value = 904
+family = "Host/FFI"
+returned_as_status = "yes"
+returned_as_status_note = "yes (nested synthetic dispatch)"
+aliases = ["DispatchRecursionLimit"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id", "dispatch_id"]
+summary = "Nested synthetic dispatch exceeded the recursion limit."
+python_class = "DispatchRecursionLimitError"
+python_also = "RecursionError"
+python_note = "`DispatchRecursionLimitError` (`RecursionError`)"
+powershell_category = "LimitsExceeded"
+
+[[codes]]
+code = "CANCELED"
+value = 905
+family = "Host/FFI"
+returned_as_status = "yes"
+returned_as_status_note = "yes (`run()` interrupted; cancelled work)"
+aliases = ["ERR_CANCELED", "UpdateCanceled", "ResourceCanceled"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The operation was canceled."
+python_class = "CanceledError"
+python_note = "`CanceledError`; an interrupted `run()` re-raises `KeyboardInterrupt` instead (OD-23)"
+powershell_category = "OperationStopped"
+
+[[codes]]
+code = "TIMEOUT"
+value = 906
+family = "Host/FFI"
+returned_as_status = "reserved"
+returned_as_status_note = "reserved, never in v1"
+aliases = ["Timeout"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "Reserved; v1 has no blocking cross-thread waits."
+python_class = "Ui4meTimeoutError"
+python_also = "TimeoutError"
+python_note = "`Ui4meTimeoutError` (`TimeoutError`)"
+powershell_category = "OperationTimeout"
+
+[[codes]]
+code = "FOCUS_MOVE_REJECTED"
+value = 1001
+family = "Interaction"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The focus move was rejected."
+python_class = "FocusMoveRejectedError"
+python_note = "`FocusMoveRejectedError`"
+powershell_category = "InvalidOperation"
+
+[[codes]]
+code = "UNSUPPORTED_DEFAULT_ACTION"
+value = 1002
+family = "Interaction"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The default action is unsupported."
+python_class = "UnsupportedDefaultActionError"
+python_also = "NotImplementedError"
+python_note = "`UnsupportedDefaultActionError` (`NotImplementedError`)"
+powershell_category = "NotImplemented"
+
+[[codes]]
+code = "UNSUPPORTED_ACCESSIBLE_ACTION"
+value = 1003
+family = "Interaction"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The accessible action is unsupported."
+python_class = "UnsupportedAccessibleActionError"
+python_also = "NotImplementedError"
+python_note = "`UnsupportedAccessibleActionError` (`NotImplementedError`)"
+powershell_category = "NotImplemented"
+
+[[codes]]
+code = "OUT_OF_MEMORY"
+value = 1101
+family = "System"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "Out of memory."
+python_class = "Ui4meMemoryError"
+python_also = "MemoryError"
+python_note = "`Ui4meMemoryError` (`MemoryError`)"
+powershell_category = "LimitsExceeded"
+
+[[codes]]
+code = "BUDGET_EXCEEDED"
+value = 1102
+family = "System"
+returned_as_status = "yes"
+returned_as_status_note = "yes when failing (full post queue; 005 §11 O4); a diagnostic attached to a successful read when non-fatal (O3)"
+aliases = ["BudgetExceeded", "LayoutBudgetExceeded"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "A budget was exceeded."
+python_class = "BudgetExceededError"
+python_note = "`BudgetExceededError` (failing case only)"
+powershell_category = "QuotaExceeded"
+
+[[codes]]
+code = "ENGINE_MISCONFIGURED"
+value = 1103
+family = "System"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = ["EngineMisconfigured"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The engine is misconfigured."
+python_class = "EngineMisconfiguredError"
+python_note = "`EngineMisconfiguredError`"
+powershell_category = "InvalidArgument"
+
+[[codes]]
+code = "INTERNAL_INVARIANT"
+value = 1104
+family = "System"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = ["InvalidBoxTopology", "InvalidStackingTree", "InvalidDependencyGraph"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "An internal invariant was violated; never hidden."
+python_class = "InternalInvariantError"
+python_note = "`InternalInvariantError`"
+powershell_category = "NotSpecified"
+
+[[codes]]
+code = "UNSUPPORTED_PROBE"
+value = 1201
+family = "Diagnostics"
+returned_as_status = "yes"
+returned_as_status_note = "yes"
+aliases = ["UnsupportedProbe"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "The diagnostic probe is unsupported."
+python_class = "UnsupportedProbeError"
+python_also = "NotImplementedError"
+python_note = "`UnsupportedProbeError` (`NotImplementedError`)"
+powershell_category = "NotImplemented"
+
+[[codes]]
+code = "PARSER_DIAGNOSTIC"
+value = 1301
+family = "Recoverable diagnostic"
+returned_as_status = "never"
+returned_as_status_note = "never"
+aliases = []
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "Recoverable HTML parse diagnostic; never an error."
+
+[[codes]]
+code = "STYLE_PARSE_DIAGNOSTIC"
+value = 1302
+family = "Recoverable diagnostic"
+returned_as_status = "never"
+returned_as_status_note = "never"
+aliases = ["StyleParseDiagnostic"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "Recoverable style parse diagnostic; never an error."
+
+[[codes]]
+code = "RESOURCE_PENDING"
+value = 1303
+family = "Resource"
+returned_as_status = "never"
+returned_as_status_note = "never (AD-05)"
+aliases = ["ResourceNotReady", "ResourceDimensionPending", "FontFallbackUsed", "FontMissingWithFallback"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "A resource is pending; diagnostic only (AD-05)."
+
+[[codes]]
+code = "UNSUPPORTED_PAINT_FEATURE"
+value = 1304
+family = "Paint/Backend"
+returned_as_status = "never"
+returned_as_status_note = "never (RenderReceipt)"
+aliases = ["UnsupportedPaintFeature", "BackendLoweringMissing"]
+detail_fields = ["code", "family", "stage", "sub_reason", "message", "diagnostic_id"]
+summary = "A paint feature is unsupported; reported in the RenderReceipt."
+
+[sub_reasons]
+NOT_A_CHILD = { code = "INVALID_HIERARCHY", registered_for = "003 Table B", meaning = "reference/removed child is not a child of the parent (DOM `NotFoundError`)" }
+NO_MODIFICATION = { code = "INVALID_HIERARCHY", registered_for = "003 Table B", meaning = "outer HTML / adjacent insertion with a Document parent" }
+SYNTAX = { code = "INVALID_ARGUMENT", registered_for = "003 Table B; 006 selector service (IF-02, XR-027)", meaning = "DOM `SyntaxError`, including invalid selector syntax" }
+PROFILE_EXCLUDED = { code = "INVALID_ARGUMENT", registered_for = "006 selector service; 003 FR-068 (IF-02, XR-027)", meaning = "syntactically valid selector construct disabled by the CSS feature profile; accompanied by one `UNSUPPORTED_FEATURE` diagnostic naming the feature id" }
+INDEX_SIZE = { code = "INVALID_ARGUMENT", registered_for = "003 Table B", meaning = "DOM `IndexSizeError`" }
+SURROGATE_SPLIT = { code = "INVALID_ARGUMENT", registered_for = "003 FR-046", meaning = "offset would split a surrogate pair" }
+WRONG_NODE_KIND = { code = "INVALID_ARGUMENT", registered_for = "003 Table B", meaning = "operation not applicable to the node kind" }
+INVALID_UTF8 = { code = "INVALID_ARGUMENT", registered_for = "004", meaning = "input string is not UTF-8" }
+NULL_POINTER = { code = "INVALID_ARGUMENT", registered_for = "004", meaning = "required pointer is null" }
+BAD_BOOL = { code = "INVALID_ARGUMENT", registered_for = "004", meaning = "boolean byte other than 0/1" }
+SUBMITTER_FORM_MISMATCH = { code = "INVALID_ARGUMENT", registered_for = "012 FR-064 (IF-57)", meaning = "`requestSubmit(submitter)` with a submitter whose form owner is another form (HTML NotFoundError)" }
+NO_WINDOWS = { code = "INVALID_STATE", registered_for = "004 (R-17)", meaning = "`run()` with no pending or open window" }
+EVENT_LOOP_BOUND = { code = "INVALID_STATE", registered_for = "004", meaning = "runtime re-creation on another thread after a platform loop existed" }
+RUNTIME_EXISTS = { code = "INVALID_STATE", registered_for = "004", meaning = "a second runtime" }
+NOT_IN_CALLBACK = { code = "INVALID_STATE", registered_for = "004", meaning = "callback-only function called outside a callback" }
+DOCUMENT_SHOWN = { code = "INVALID_STATE", registered_for = "004", meaning = "a second window for a shown document; viewport/scale set on a shown document (FR-085)" }
+CLOCK_REALTIME = { code = "INVALID_STATE", registered_for = "004 (FR-086)", meaning = "clock control while the clock is `realtime`" }
+DETERMINISTIC_ENVIRONMENT = { code = "INVALID_STATE", registered_for = "004 (FR-087)", meaning = "preference override in deterministic environment mode" }
+INSIDE_CALLBACK = { code = "INVALID_STATE", registered_for = "004 (FR-088)", meaning = "apply-completions called inside a callback or Flush" }
+NO_BASE_URL = { code = "URI_MALFORMED", registered_for = "007 FR-002 (`contracts/uri-resolution.md` §3, §5; Remediation R-2, analysis 007 F3)", meaning = "relative reference resolved against an `about:blank` document URL (string document loaded without a host base URL)" }

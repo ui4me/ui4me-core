@@ -1,0 +1,112 @@
+{
+ "schema_version": 1,
+ "note": "Rule descriptors used by tests/fonts.rs; sources name synthetic files or the pinned Noto Sans (NOTO).",
+ "pinned_font": {
+  "path": "verification/fixtures/fonts/noto-sans/NotoSans-Regular.ttf",
+  "sha256": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d"
+ },
+ "scenarios": [
+  {
+   "id": "src-order-woff2-then-ttf",
+   "family": "Fixture A",
+   "sources": [
+    "url(woff2-stub.woff2) format(woff2)",
+    "url(NOTO) format(truetype)"
+   ],
+   "expect": "Loaded",
+   "reads": 1
+  },
+  {
+   "id": "invalid-then-valid",
+   "family": "Fixture B",
+   "sources": [
+    "url(invalid.ttf)",
+    "url(NOTO)"
+   ],
+   "expect": "Loaded"
+  },
+  {
+   "id": "all-fail",
+   "family": "Fixture C",
+   "sources": [
+    "url(invalid.ttf)",
+    "url(woff-stub.woff)",
+    "url(missing.ttf)"
+   ],
+   "expect": "Failed",
+   "codes": [
+    "DECODE_FAILED",
+    "UNSUPPORTED_MEDIA_TYPE",
+    "FILE_NOT_FOUND"
+   ]
+  },
+  {
+   "id": "unicode-range-subset",
+   "family": "Fixture D",
+   "unicode_range": [
+    [
+     0,
+     255
+    ],
+    [
+     8192,
+     8303
+    ]
+   ],
+   "sources": [
+    "url(NOTO)"
+   ]
+  },
+  {
+   "id": "weight-range",
+   "family": "Fixture E",
+   "weight": [
+    100,
+    900
+   ],
+   "width": [
+    75,
+    125
+   ],
+   "style": {
+    "oblique": [
+     -20,
+     20
+    ]
+   },
+   "sources": [
+    "url(NOTO)"
+   ]
+  },
+  {
+   "id": "font-display-values",
+   "display": [
+    "auto",
+    "block",
+    "swap",
+    "fallback",
+    "optional"
+   ]
+  },
+  {
+   "id": "ttc-collection",
+   "family": "Fixture F",
+   "sources": [
+    "url(synthetic-collection.ttc)"
+   ],
+   "expect": "Loaded"
+  },
+  {
+   "id": "local-source",
+   "family": "Fixture G",
+   "sources": [
+    "local(Registered Family)"
+   ]
+  },
+  {
+   "id": "two-documents-same-family",
+   "family": "Shared Name",
+   "note": "document 1 -> NOTO, document 2 -> synthetic-collection.ttc"
+  }
+ ]
+}

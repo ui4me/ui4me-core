@@ -1,0 +1,277 @@
+{
+  "baselines": {
+    "chromium.linux-debian13-kde-wayland.headless": {
+      "version": 2
+    }
+  },
+  "entry": "index.html",
+  "environment": {
+    "profile": "default"
+  },
+  "fixture_id": "natural-sizes",
+  "observables": [
+    "dom",
+    "geometry"
+  ],
+  "owner_feature": "007",
+  "probes": [
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry"
+      ],
+      "probe_id": "png"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry"
+      ],
+      "probe_id": "png16"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry"
+      ],
+      "probe_id": "apng"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry"
+      ],
+      "probe_id": "jpeg-exif6"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry"
+      ],
+      "probe_id": "jpeg-icc"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry"
+      ],
+      "probe_id": "gif-anim"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry"
+      ],
+      "probe_id": "webp-lossy"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry"
+      ],
+      "probe_id": "webp-lossless"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry"
+      ],
+      "probe_id": "webp-alpha"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry"
+      ],
+      "probe_id": "webp-anim"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry"
+      ],
+      "probe_id": "bmp"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry"
+      ],
+      "probe_id": "tiff"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry"
+      ],
+      "probe_id": "avif"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry"
+      ],
+      "probe_id": "truncated"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry"
+      ],
+      "probe_id": "text-png"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry"
+      ],
+      "probe_id": "srcset"
+    },
+    {
+      "geometry_class": "G1",
+      "observables": [
+        "geometry"
+      ],
+      "probe_id": "srcset-width"
+    }
+  ],
+  "schema_version": 1,
+  "source_hash": "fb539fd42ecee4a32711e97be5b32f540d4add5589aa414ee7e22d3bf635bed7",
+  "sources": [
+    {
+      "path": "codecs/apng-anim.png",
+      "role": "image",
+      "sha256": "c6239d89010938040a78c25d45d48971254f328a74c913fd9fa54646cd9a6f00"
+    },
+    {
+      "path": "codecs/bmp-32x16.bmp",
+      "role": "image",
+      "sha256": "543a78da2950da4fbb7257d96cf2eb2608350f0b5c00e4e6d00955e6fb2cc5ef"
+    },
+    {
+      "path": "codecs/gif-animated-24x24.gif",
+      "role": "image",
+      "sha256": "96f984e0cc788473bde57bb882637eebc563013f5c090678c80a251306193a71"
+    },
+    {
+      "path": "codecs/jpeg-icc-64x48.jpg",
+      "role": "image",
+      "sha256": "8adf3605f8340d3ceaad7947fdf450b7eb0ff84501585a35569564aaf0db0065"
+    },
+    {
+      "path": "codecs/jpeg-progressive-exif6-120x80.jpg",
+      "role": "image",
+      "sha256": "6639601446945d4501f5bb9810bed5f8332a9c0dd242fb676b8c98a270dea715"
+    },
+    {
+      "path": "codecs/logo@1x.png",
+      "role": "image",
+      "sha256": "1ac5bf8a5c6eb9117a5e60c158cc6bd45593a656e83d377d282d7f2c52675e03"
+    },
+    {
+      "path": "codecs/logo@2x.png",
+      "role": "image",
+      "sha256": "48b28dc189506cda36f407f7398918e17a26961ca0adf985230d1a1450aa9198"
+    },
+    {
+      "path": "codecs/png-200x100.png",
+      "role": "image",
+      "sha256": "48b28dc189506cda36f407f7398918e17a26961ca0adf985230d1a1450aa9198"
+    },
+    {
+      "path": "codecs/png16-8x8.png",
+      "role": "image",
+      "sha256": "517d16205ab57c5635c840f305d7355627ad4170c41ff343581eb09a526d3552"
+    },
+    {
+      "path": "codecs/text-named.png",
+      "role": "image",
+      "sha256": "0eacf80b6210a3650a31ed18eb35bbd482b6f56df3d723dd3b1db883e9367bf3"
+    },
+    {
+      "path": "codecs/truncated.png",
+      "role": "image",
+      "sha256": "d6a4706e76625b49e5790bcd7e987dfcf74438f30db1d139e33b1d189ffad157"
+    },
+    {
+      "path": "codecs/unsupported-avif.avif",
+      "role": "image",
+      "sha256": "1ada7f2bbf1715bd880d94058e70776b7436b370addaedf103a87d051342f883"
+    },
+    {
+      "path": "codecs/unsupported-tiff-16x16.tiff",
+      "role": "image",
+      "sha256": "32c6ef35b21de9d038c05674a0cfc0724811ac336c567d589c3b76f2237d0b8e"
+    },
+    {
+      "path": "codecs/webp-alpha-64x32.webp",
+      "role": "image",
+      "sha256": "c416754fc767521064eb0d8073720aa6e09acea4acd4897829a65c07372c94b3"
+    },
+    {
+      "path": "codecs/webp-animated-32x16.webp",
+      "role": "image",
+      "sha256": "343e72f5d98071b63a4379f07d4e880b61a22c59d976cf27fecf280afaa2081e"
+    },
+    {
+      "path": "codecs/webp-lossless-64x32.webp",
+      "role": "image",
+      "sha256": "b4e8bc330cb86dff04cfc3931fa84c2acf219e6a19ca6f50800895d91fe672fc"
+    },
+    {
+      "path": "codecs/webp-lossy-64x32.webp",
+      "role": "image",
+      "sha256": "ed15cf3818069c44410de2b33709d861100d1e7ff7f5c3a801778b017f4f489e"
+    },
+    {
+      "path": "index.html",
+      "role": "html",
+      "sha256": "f1d6240dd88018c3a75fe641c397ab14f02454536cd45940eb2c363b5c5632a7"
+    }
+  ],
+  "status": "active",
+  "suite": "resources-images",
+  "tags": {
+    "contracts": [
+      "U4C-RES",
+      "U4C-BOX",
+      "U4C-LAY"
+    ],
+    "stages": [
+      "parse",
+      "box",
+      "layout"
+    ],
+    "standards": [
+      "HTML img",
+      "CSS Images 3 natural dimensions"
+    ],
+    "u4t": [
+      "U4T-222",
+      "U4T-224"
+    ]
+  },
+  "title": "Images: natural sizes of every supported and unsupported container, srcset density",
+  "variants": [
+    {
+      "color_scheme": "light",
+      "dpr": 1,
+      "reduced_motion": "no-preference",
+      "variant_id": "dpr1",
+      "viewport": {
+        "height": 800,
+        "width": 480
+      }
+    },
+    {
+      "color_scheme": "light",
+      "dpr": 2,
+      "reduced_motion": "no-preference",
+      "variant_id": "dpr2",
+      "viewport": {
+        "height": 800,
+        "width": 480
+      }
+    }
+  ]
+}

@@ -29,7 +29,8 @@ def locate_host(explicit=None, release=False):
     raise FileNotFoundError("Build first: cargo build --locked -p ui4me-host")
 
 
-def manifest(backend_args, app_id="org.ui4me.HostReference", backend_path=None, icon_path=None):
+def manifest(backend_args, app_id="org.ui4me.HostReference", backend_path=None, icon_path=None,
+             app_name="UI4ME Host Reference", app_version="0.2.0", startup_timeout_ms=15000):
     backend_path = Path(backend_path) if backend_path else ROOT / "examples/python/demo.py"
     icon_path = icon_path if icon_path is not None else str(ROOT / "crates/ui4me-host/assets/ui4me.png")
     def q(value):
@@ -37,12 +38,12 @@ def manifest(backend_args, app_id="org.ui4me.HostReference", backend_path=None, 
         # surrogate-pair escapes are not valid TOML Unicode scalar escapes.
         return json.dumps(value, ensure_ascii=False)
     return "\n".join([
-        "[app]", f"id = {q(app_id)}", 'name = "UI4ME Host Reference"', 'version = "0.1.0"',
+        "[app]", f"id = {q(app_id)}", f"name = {q(app_name)}", f"version = {q(app_version)}",
         f"icon = {q(str(icon_path))}",
         "", "[backend]", f"program = {q(sys.executable)}",
         f"args = {q([str(backend_path)] + backend_args)}",
         f"cwd = {q(str(backend_path.parent))}", "", "[host]",
-        "startup_timeout_ms = 15000", "shutdown_timeout_ms = 5000",
+        f"startup_timeout_ms = {startup_timeout_ms}", "shutdown_timeout_ms = 5000",
         "max_windows = 16", 'instance = "single"', "",
     ])
 

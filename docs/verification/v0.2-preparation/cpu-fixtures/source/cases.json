@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "policy": "Tolerances are declared before execution. Geometry cases use an explicit clipped viewport to exclude platform scrollbar decoration and allow only sparse edge differences. Text and SVG allow rasterizer antialiasing differences; layout or missing content must be investigated, never hidden by increasing these limits.",
+  "cases": [
+    {
+      "id": "B01-box-model",
+      "html": "box-model.html",
+      "width": 640,
+      "height": 420,
+      "scope": "Fixed block geometry, padding, borders, backgrounds, rounded corners and linear gradient",
+      "tolerance": {
+        "channel_threshold": 16,
+        "mean_absolute_channel_error": 2.0,
+        "fraction_pixels_over_threshold": 0.015
+      }
+    },
+    {
+      "id": "B02-flex-grid",
+      "html": "flex-grid.html",
+      "width": 640,
+      "height": 420,
+      "scope": "Flex spacing/alignment and explicit grid tracks/gaps, with no font-dependent geometry",
+      "tolerance": {
+        "channel_threshold": 16,
+        "mean_absolute_channel_error": 2.0,
+        "fraction_pixels_over_threshold": 0.015
+      }
+    },
+    {
+      "id": "B03-local-font",
+      "html": "local-font.html",
+      "width": 640,
+      "height": 420,
+      "scope": "Pinned local Noto Sans, line breaking, line height, inline emphasis and overflow clipping",
+      "tolerance": {
+        "channel_threshold": 24,
+        "mean_absolute_channel_error": 5.0,
+        "fraction_pixels_over_threshold": 0.08
+      }
+    },
+    {
+      "id": "B04-static-svg",
+      "html": "static-svg.html",
+      "width": 640,
+      "height": 420,
+      "scope": "Local SVG image and basic inline SVG paths/shapes at explicit dimensions",
+      "tolerance": {
+        "channel_threshold": 24,
+        "mean_absolute_channel_error": 3.0,
+        "fraction_pixels_over_threshold": 0.035
+      }
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+# P-006-8: `:dir(ltr | rtl)` in the servo-mode selector parser (ui4me 015 WM-2, register UP-12; lane L-WM, AUTHORISATIONS E-029): `NonTSPseudoClass::Dir(<ident>)` (ASCII-lowercased), serialised as `:dir(x)`, no element-state flag (the embedder matches it against the HTML directionality and invalidates it), behind the new static pref `layout.css.dir-pseudo-class.enabled` (default false)
+# Applies to: servo/stylo @ 37c1ed3b707c8f333304de2107c13b68fbc1057c after P-006-1 .. P-006-7 (root of the checkout, `patch -p1`)
+# Licence: MPL-2.0 (modifications to MPL-2.0 files; the modified source is published with the repository, see engine/NOTICE)
+
+--- a/style/servo/selector_parser.rs
++++ b/style/servo/selector_parser.rs
+@@ -377,6 +377,9 @@
+     CustomState(CustomState),
+     Default,
+     Defined,
++    /// The `:dir()` pseudo-class (ui4me P-006-8): its argument, ASCII-lowercased (`ltr`, `rtl`, or any
++    /// other identifier, which matches nothing).
++    Dir(Box<str>),
+     Disabled,
+     Enabled,
+     Focus,
+@@ -441,6 +444,11 @@
+             serialize_identifier(lang, dest)?;
+             return dest.write_char(')');
+         }
++        if let Dir(ref dir) = *self {
++            dest.write_str(":dir(")?;
++            serialize_identifier(dir, dest)?;
++            return dest.write_char(')');
++        }
+ 
+         dest.write_str(match *self {
+             Self::Active => ":active",
+@@ -485,7 +493,7 @@
+             Self::UserValid => ":user-valid",
+             Self::Valid => ":valid",
+             Self::Visited => ":visited",
+-            Self::Lang(_) => unreachable!(),
++            Self::Lang(_) | Self::Dir(_) => unreachable!(),
+         })
+     }
+ }
+@@ -531,7 +539,7 @@
+             Self::UserValid => ElementState::USER_VALID,
+             Self::Valid => ElementState::VALID,
+             Self::Visited => ElementState::VISITED,
+-            Self::CustomState(_) | Self::Lang(_) | Self::ServoNonZeroBorder => {
++            Self::CustomState(_) | Self::Lang(_) | Self::Dir(_) | Self::ServoNonZeroBorder => {
+                 ElementState::empty()
+             },
+         }
+@@ -697,6 +705,9 @@
+                 let result = AtomIdent::from(parser.expect_ident()?.as_ref());
+                 NonTSPseudoClass::CustomState(CustomState(result))
+             },
++            "dir" if !after_part && crate::pref!("layout.css.dir-pseudo-class.enabled") => {
++                NonTSPseudoClass::Dir(parser.expect_ident()?.to_ascii_lowercase().into_boxed_str())
++            },
+             _ => return Err(ParseError::custom(SelectorParseErrorKind::UnexpectedIdent)),
+         };
+ 
+--- a/stylo_static_prefs/preferences.toml
++++ b/stylo_static_prefs/preferences.toml
+@@ -20,6 +20,7 @@
+ "layout.css.counters.enabled" = false
+ "layout.css.cross-fade.enabled" = false
+ "layout.css.custom-media.enabled" = false
++"layout.css.dir-pseudo-class.enabled" = false
+ "layout.css.display-animations.enabled" = false
+ "layout.css.display-grid-lanes.enabled" = false
+ "layout.css.dominant-baseline.enabled" = false

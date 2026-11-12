@@ -1,0 +1,376 @@
+# P-008-5: flex and grid fragmentation hooks (ui4me 015 STAB-1; lane L-STABL, AUTHORISATIONS E-029): `LayoutPartialTree::frag_wants`, `frag_item_grow`, `frag_place_runs` and `frag_begin_item` (no-op defaults) with `FragRun` / `FragRunItem`. During `PerformLayout` of a flex container (row lines, or the items of a single-line column container) or a grid (row tracks and gutters) the host may push runs to the next fragmentainer (an auto block size grows by the struts) and grow grid rows; items grow by what breaks inside them added (row: hypothetical cross size; column: flex base size); each item's block offset is reported before its final layout. Nothing changes when `frag_wants` is false
+# Applies to: DioxusLabs/taffy @ fca167cf659b8bf48019d0dea90624109a78103f after P-008-1, P-008-2, P-008-3 and P-008-4 (root of the checkout, `patch -p1`)
+# Licence: MIT (modification to MIT files; the notice stays in LICENSE of the vendored tree and engine/NOTICE)
+
+diff -ruN a/src/compute/flexbox.rs b/src/compute/flexbox.rs
+--- a/src/compute/flexbox.rs	2026-11-08 01:07:11.917928485 +0100
++++ b/src/compute/flexbox.rs	2026-11-08 01:07:11.937927849 +0100
+@@ -373,6 +373,10 @@
+         return compute_empty_container_layout(tree, inputs, constants);
+     }
+ 
++    // ui4me patch P-008-5: block fragmentation of this container (struts between runs, grown items).
++    let frag = run_mode == RunMode::PerformLayout && tree.frag_wants(node);
++    let block_size_is_auto = constants.node_outer_size.height.is_none();
++
+     // 9. Flex Layout Algorithm
+ 
+     // 9.1. Initial Setup
+@@ -391,6 +395,20 @@
+     debug_log!("determine_flex_base_size");
+     determine_flex_base_size(tree, &constants, available_space, &mut flex_items);
+ 
++    // ui4me patch P-008-5: a column item grows by what breaks inside it added in the previous pass.
++    if frag && constants.is_column {
++        for item in flex_items.iter_mut() {
++            let grow = tree.frag_item_grow(node, item.node);
++            if grow > 0.0 {
++                item.flex_basis += grow;
++                item.inner_flex_basis += grow;
++                item.resolved_minimum_main_size += grow;
++                item.hypothetical_inner_size.height += grow;
++                item.hypothetical_outer_size.height += grow;
++            }
++        }
++    }
++
+     #[cfg(feature = "debug")]
+     for item in flex_items.iter() {
+         debug_log!("item.flex_basis", item.flex_basis);
+@@ -464,6 +482,19 @@
+         determine_hypothetical_cross_size(tree, line, &constants, known_dimensions, available_space);
+     }
+ 
++    // ui4me patch P-008-5: a row item grows by what breaks inside it added in the previous pass.
++    if frag && constants.is_row {
++        for line in &mut flex_lines {
++            for item in line.items.iter_mut() {
++                let grow = tree.frag_item_grow(node, item.node);
++                if grow > 0.0 {
++                    item.hypothetical_inner_size.height += grow;
++                    item.hypothetical_outer_size.height += grow;
++                }
++            }
++        }
++    }
++
+     // Calculate child baselines. This function is internally smart and only computes child baselines
+     // if they are necessary.
+     debug_log!("calculate_children_base_lines");
+@@ -522,9 +553,19 @@
+     debug_log!("align_flex_lines_per_align_content");
+     align_flex_lines_per_align_content(&mut flex_lines, &constants, total_line_cross_size);
+ 
++    // ui4me patch P-008-5: the host may push runs (lines of a row container, items of a column container) to
++    // the next fragmentainer; an auto block size grows by the struts.
++    if frag {
++        let pushed = frag_place_runs(tree, node, &mut flex_lines, &constants);
++        if block_size_is_auto && pushed > 0.0 {
++            constants.container_size.height += pushed;
++            constants.inner_container_size.height += pushed;
++        }
++    }
++
+     // Do a final layout pass and gather the resulting layouts
+     debug_log!("final_layout_pass");
+-    let inflow_overflow_rect = final_layout_pass(tree, &mut flex_lines, &constants);
++    let inflow_overflow_rect = final_layout_pass(tree, &mut flex_lines, &constants, if frag { Some(node) } else { None });
+ 
+     // Collect out-of-flow candidates in document order (direct out-of-flow children interleaved
+     // with candidates bubbled from in-flow children's subtrees). These are laid out by the
+@@ -2610,6 +2651,71 @@
+     }
+ }
+ 
++/// ui4me patch P-008-5: hand the block-axis runs to the host (`LayoutPartialTree::frag_place_runs`) and apply the
++/// struts it returns. Returns the total strut.
++fn frag_place_runs(
++    tree: &mut impl LayoutFlexboxContainer,
++    node: NodeId,
++    flex_lines: &mut [FlexLine],
++    constants: &AlgoConstants,
++) -> f32 {
++    let mut runs = Vec::new();
++    let mut items = Vec::new();
++    if constants.is_row {
++        let mut y = constants.content_box_inset.top;
++        for (i, line) in flex_lines.iter().enumerate() {
++            let start = y + line.offset_cross;
++            runs.push(crate::FragRun { start, size: line.cross_size });
++            for item in line.items.iter() {
++                items.push(crate::FragRunItem {
++                    node: item.node,
++                    first: i as u32,
++                    last: i as u32,
++                    offset: item.offset_cross + item.margin.top,
++                    size: Some(item.target_size.height),
++                });
++            }
++            y = start + line.cross_size;
++        }
++    } else {
++        let Some(line) = flex_lines.first() else { return 0.0 };
++        let mut y = constants.content_box_inset.top;
++        for (i, item) in line.items.iter().enumerate() {
++            let start = y + item.offset_main;
++            let size = item.margin.top + item.target_size.height + item.margin.bottom;
++            runs.push(crate::FragRun { start, size });
++            items.push(crate::FragRunItem {
++                node: item.node,
++                first: i as u32,
++                last: i as u32,
++                offset: item.margin.top,
++                size: Some(item.target_size.height),
++            });
++            y = start + size;
++        }
++    }
++    let before: Vec<f32> = runs.iter().map(|r| r.start).collect();
++    tree.frag_place_runs(node, &mut runs, &items);
++    let mut prev = 0.0;
++    let mut k = 0;
++    for line in flex_lines.iter_mut() {
++        if constants.is_row {
++            let delta = (runs[k].start - before[k]).max(prev);
++            line.offset_cross += delta - prev;
++            prev = delta;
++            k += 1;
++        } else {
++            for item in line.items.iter_mut() {
++                let delta = (runs[k].start - before[k]).max(prev);
++                item.offset_main += delta - prev;
++                prev = delta;
++                k += 1;
++            }
++        }
++    }
++    prev
++}
++
+ /// Calculates the layout for a flex-item
+ #[allow(clippy::too_many_arguments)]
+ fn calculate_flex_item(
+@@ -2621,12 +2727,22 @@
+     #[cfg(feature = "content_size")] total_overflow_rect: &mut Rect<f32>,
+     #[cfg(feature = "content_size")] overflow_container: &ScrollableOverflowContainer,
+     constants: &AlgoConstants,
++    frag_node: Option<NodeId>,
+ ) {
+     let container_size = constants.container_size;
+     let node_inner_size = constants.node_inner_size;
+     let direction = constants.dir;
+     let layout_direction = constants.layout_direction;
+     let item_known_dimension_definiteness = item_known_dimension_definiteness(constants, item);
++    // ui4me patch P-008-5: the block offset the item's content is laid out at.
++    if let Some(container) = frag_node {
++        let y = if direction.is_row() {
++            total_offset_cross + item.offset_cross + line_offset_cross + item.margin.cross_start(direction)
++        } else {
++            *total_offset_main + item.offset_main + item.margin.main_start(direction)
++        };
++        tree.frag_begin_item(container, item.node, y);
++    }
+     let mut layout_output = tree.compute_child_layout(
+         item.node,
+         LayoutInput {
+@@ -2742,6 +2858,7 @@
+     #[cfg(feature = "content_size")] overflow_rect: &mut Rect<f32>,
+     #[cfg(feature = "content_size")] overflow_container: &ScrollableOverflowContainer,
+     constants: &AlgoConstants,
++    frag_node: Option<NodeId>,
+ ) {
+     let container_size = constants.container_size;
+     let padding_border = constants.content_box_inset;
+@@ -2772,6 +2889,7 @@
+                 #[cfg(feature = "content_size")]
+                 overflow_container,
+                 constants,
++                frag_node,
+             );
+         }
+     } else {
+@@ -2787,6 +2905,7 @@
+                 #[cfg(feature = "content_size")]
+                 overflow_container,
+                 constants,
++                frag_node,
+             );
+         }
+     }
+@@ -2802,6 +2921,7 @@
+     tree: &mut impl LayoutFlexboxContainer,
+     flex_lines: &mut [FlexLine],
+     constants: &AlgoConstants,
++    frag_node: Option<NodeId>,
+ ) -> Rect<f32> {
+     #[cfg(feature = "content_size")]
+     let overflow_container = ScrollableOverflowContainer {
+@@ -2832,6 +2952,7 @@
+                 #[cfg(feature = "content_size")]
+                 &overflow_container,
+                 constants,
++                frag_node,
+             );
+         }
+     } else {
+@@ -2845,6 +2966,7 @@
+                 #[cfg(feature = "content_size")]
+                 &overflow_container,
+                 constants,
++                frag_node,
+             );
+         }
+     }
+diff -ruN a/src/compute/grid/alignment.rs b/src/compute/grid/alignment.rs
+--- a/src/compute/grid/alignment.rs	2026-11-08 01:07:11.929928102 +0100
++++ b/src/compute/grid/alignment.rs	2026-11-08 01:07:11.937927849 +0100
+@@ -102,6 +102,8 @@
+     #[cfg(feature = "content_size")] padding_box_inset: Rect<f32>,
+     #[cfg(feature = "content_size")] overflow_container: &ScrollableOverflowContainer,
+     bubbled_candidates: &mut OofCandidates,
++    // ui4me patch P-008-5: the grid container when it is laid out in a fragmentation context
++    frag_container: Option<NodeId>,
+ ) -> (Rect<f32>, f32, f32, Option<f32>) {
+     let grid_area_size = Size { width: grid_area.right - grid_area.left, height: grid_area.bottom - grid_area.top };
+ 
+@@ -396,6 +398,29 @@
+         Size { width, height }
+     };
+ 
++    // ui4me patch P-008-5: the block offset the item's content is laid out at (from its alignment when its height
++    // is known, else at the start of its area).
++    if let Some(container) = frag_container {
++        if !position.is_out_of_flow() {
++            let y = match size.height {
++                Some(h) => {
++                    align_item_within_area(
++                        Line { start: grid_area.top, end: grid_area.bottom },
++                        alignment_styles.vertical,
++                        h,
++                        position,
++                        inset_vertical,
++                        margin.vertical_components(),
++                        baseline_shim,
++                        Direction::Ltr,
++                    )
++                    .0
++                }
++                None => grid_area.top + margin.top.unwrap_or(0.0) + baseline_shim,
++            };
++            tree.frag_begin_item(container, node, y);
++        }
++    }
+     let mut layout_output = tree.perform_child_layout(
+         node,
+         size,
+diff -ruN a/src/compute/grid/mod.rs b/src/compute/grid/mod.rs
+--- a/src/compute/grid/mod.rs	2026-11-08 01:07:11.933927977 +0100
++++ b/src/compute/grid/mod.rs	2026-11-08 01:07:11.937927849 +0100
+@@ -695,6 +695,34 @@
+         false,
+     );
+ 
++    // ui4me patch P-008-5: block fragmentation. The host may push rows (and the gutters after them) to the next
++    // fragmentainer and grow rows by what breaks inside their items add; an auto block size grows with them.
++    let frag_container = if run_mode == RunMode::PerformLayout && tree.frag_wants(node) { Some(node) } else { None };
++    if frag_container.is_some() {
++        let mut runs: Vec<crate::FragRun> =
++            rows.iter().map(|t| crate::FragRun { start: t.offset, size: t.base_size }).collect();
++        let frag_items: Vec<crate::FragRunItem> = items
++            .iter()
++            .map(|item| crate::FragRunItem {
++                node: item.node,
++                first: item.row_indexes.start as u32 + 1,
++                last: (item.row_indexes.end as u32).saturating_sub(1).max(item.row_indexes.start as u32 + 1),
++                offset: 0.0,
++                size: None,
++            })
++            .collect();
++        let old_end = rows.last().map_or(0.0, |t| t.offset + t.base_size);
++        tree.frag_place_runs(node, &mut runs, &frag_items);
++        for (track, run) in rows.iter_mut().zip(runs.iter()) {
++            track.offset = run.start;
++            track.base_size = run.size;
++        }
++        let grown = rows.last().map_or(0.0, |t| t.offset + t.base_size) - old_end;
++        if resolved_style_size.height.is_none() && grown > 0.0 {
++            container_border_box.height += grown;
++        }
++    }
++
+     // ui4me P-008-4: the subgrids lay their subgridded axes out on the aligned tracks
+     if has_subgrids {
+         subgrid::record_sizes(tree, &mut subgrids, AbstractAxis::Inline, &columns, true);
+@@ -764,6 +792,7 @@
+             #[cfg(feature = "content_size")]
+             &overflow_container,
+             &mut item.oof_candidates,
++            frag_container,
+         );
+         item.y_position = y_position;
+         item.height = height;
+diff -ruN a/src/tree/traits.rs b/src/tree/traits.rs
+--- a/src/tree/traits.rs	2026-11-08 01:07:11.933927977 +0100
++++ b/src/tree/traits.rs	2026-11-08 01:07:11.941927721 +0100
+@@ -201,6 +201,61 @@
+ 
+     /// Compute the specified node's size or full layout given the specified constraints
+     fn compute_child_layout(&mut self, node_id: NodeId, inputs: LayoutInput) -> LayoutOutput;
++
++    /// ui4me patch P-008-5 (flex and grid fragmentation, ui4me 015 STAB-1): whether the flex or grid container
++    /// `container`, about to run a `PerformLayout`, is laid out inside a block fragmentation context. Only then are
++    /// the other `frag_*` hooks called. The default is `false`.
++    fn frag_wants(&mut self, container: NodeId) -> bool {
++        let _ = container;
++        false
++    }
++
++    /// ui4me patch P-008-5: the extra block size breaks inside `item` (an item of `container`) add to it, from
++    /// the previous layout pass. Added to the item's hypothetical cross size (row flex) or flex base size
++    /// (column flex). The default is none.
++    fn frag_item_grow(&mut self, container: NodeId, item: NodeId) -> f32 {
++        let _ = (container, item);
++        0.0
++    }
++
++    /// ui4me patch P-008-5: the block-axis runs of `container` (flex lines of a row flex container, the items of a
++    /// single-line column flex container, the row tracks and gutters of a grid), in the container's border-box
++    /// space, and which runs each in-flow item lies in. The host may move runs down (a strut pushes a run and
++    /// everything after it) and, for a grid, grow a run; starts must stay in order. The default changes nothing.
++    fn frag_place_runs(&mut self, container: NodeId, runs: &mut [FragRun], items: &[FragRunItem]) {
++        let _ = (container, runs, items);
++    }
++
++    /// ui4me patch P-008-5: called before the final layout of the in-flow item `item` of `container` with the y
++    /// of its border box (without its relative offset) in the container's border-box space.
++    fn frag_begin_item(&mut self, container: NodeId, item: NodeId, y: f32) {
++        let _ = (container, item, y);
++    }
++}
++
++/// ui4me patch P-008-5: a block-axis run of a fragmented flex or grid container (see
++/// [`LayoutPartialTree::frag_place_runs`]).
++#[derive(Debug, Clone, Copy, PartialEq)]
++pub struct FragRun {
++    /// Block-start edge in the container's border-box space.
++    pub start: f32,
++    /// Block size.
++    pub size: f32,
++}
++
++/// ui4me patch P-008-5: an in-flow item of a fragmented flex or grid container and the runs it lies in.
++#[derive(Debug, Clone, Copy, PartialEq)]
++pub struct FragRunItem {
++    /// The item.
++    pub node: NodeId,
++    /// First run.
++    pub first: u32,
++    /// Last run (inclusive).
++    pub last: u32,
++    /// The item's border-box block offset from its first run's start.
++    pub offset: f32,
++    /// The item's border-box block size when known before its layout.
++    pub size: Option<f32>,
+ }
+ 
+ /// Extends [`LayoutPartialTree`] with the operations needed by the out-of-flow positioning pass

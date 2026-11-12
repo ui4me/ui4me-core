@@ -1,0 +1,34 @@
+[package]
+name = "ui4me-assets"
+description = "Bounded local assets, image decoding and font-source registry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ui4me-engine-types = { workspace = true }
+url = { workspace = true }
+sha2 = { workspace = true }
+image = { workspace = true }
+data-url = { workspace = true }
+usvg = { workspace = true }
+resvg = { workspace = true }
+roxmltree = { workspace = true }
+flate2 = { workspace = true }
+brotli-decompressor = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true }
+
+[build-dependencies]
+sha2 = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+skrifa = { workspace = true }
+

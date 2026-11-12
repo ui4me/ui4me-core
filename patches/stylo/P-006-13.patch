@@ -1,0 +1,34 @@
+# P-006-13: textarea visible overflow computes to auto in ui4me servo mode.
+# Applies to servo/stylo @ 37c1ed3b707c8f333304de2107c13b68fbc1057c after P-006-12 (patch -p1).
+# Licence: MPL-2.0; modified source is published in this repository.
+--- a/style/style_adjuster.rs
++++ b/style/style_adjuster.rs
+@@ -1042,6 +1042,7 @@
+         //     "Should always have an element around for non-pseudo styles"
+         // );
+ 
++        let authored_display_none = *self.style.get_box().get_display() == Display::None;
+         self.adjust_for_visited(element);
+         self.adjust_for_prohibited_display_contents(element);
+         #[cfg(feature = "gecko")]
+@@ -1054,6 +1055,20 @@
+         self.adjust_for_webkit_line_clamp();
+         self.adjust_for_position();
+         self.adjust_for_overflow();
++        // ui4me: textarea editing uses a scroll container even when an author
++        // specifies visible overflow. Preserve clip and other authored values.
++        if !authored_display_none && self.style.pseudo.is_none()
++            && element.is_some_and(|e| e.is_html_element() && e.local_name() == &*atom!("textarea"))
++        {
++            use crate::values::computed::Overflow;
++            let x = *self.style.get_box().get_overflow_x();
++            let y = *self.style.get_box().get_overflow_y();
++            if x == Overflow::Visible || y == Overflow::Visible {
++                let b = self.style.mutate_box();
++                if x == Overflow::Visible { b.set_overflow_x(Overflow::Auto); }
++                if y == Overflow::Visible { b.set_overflow_y(Overflow::Auto); }
++            }
++        }
+         #[cfg(feature = "gecko")]
+         {
+             self.adjust_for_contain();

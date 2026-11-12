@@ -1,0 +1,140 @@
+# P-006-5: the multicolumn and break properties in servo mode (ui4me 015 FRAG-2a, register UP-09; lane L-FRAG, AUTHORISATIONS E-029): `column-fill`, `column-rule-color|style|width` and the `column-rule` shorthand behind the pref layout.css.columns.enabled (like `column-count`); `break-before`, `break-after`, `break-inside` and the legacy `page-break-*` shorthands enabled; `break-before|after` gain the CSS Break 3 values `column`, `avoid-column` and `avoid-page` (not valid in the legacy shorthands)
+# Applies to: servo/stylo @ 37c1ed3b707c8f333304de2107c13b68fbc1057c after P-006-1, P-006-2, P-006-3 and P-006-4 (root of the checkout, `patch -p1`)
+# Licence: MPL-2.0 (modifications to MPL-2.0 files; the modified source is published with the repository, see engine/NOTICE)
+
+--- a/style/properties/longhands.toml
++++ b/style/properties/longhands.toml
+@@ -474,7 +474,6 @@
+ type = "BreakBetween"
+ initial = "computed::BreakBetween::Auto"
+ struct = "box"
+-engine = "gecko"
+ spec = "https://drafts.csswg.org/css-break/#propdef-break-after"
+ animation_type = "discrete"
+ affects = "layout"
+@@ -483,7 +482,6 @@
+ type = "BreakBetween"
+ initial = "computed::BreakBetween::Auto"
+ struct = "box"
+-engine = "gecko"
+ spec = "https://drafts.csswg.org/css-break/#propdef-break-before"
+ animation_type = "discrete"
+ affects = "layout"
+@@ -492,7 +490,6 @@
+ type = "BreakWithin"
+ initial = "computed::BreakWithin::Auto"
+ struct = "box"
+-engine = "gecko"
+ spec = "https://drafts.csswg.org/css-break/#propdef-break-inside"
+ animation_type = "discrete"
+ affects = "layout"
+@@ -592,7 +589,7 @@
+ type = "Color"
+ initial = "computed_value::T::currentcolor()"
+ struct = "column"
+-engine = "gecko"
++servo_pref = "layout.css.columns.enabled"
+ ignored_when_colors_disabled = true
+ spec = "https://drafts.csswg.org/css-multicol/#propdef-column-rule-color"
+ affects = "paint"
+@@ -601,7 +598,7 @@
+ type = "BorderStyle"
+ initial = "computed::BorderStyle::None"
+ struct = "column"
+-engine = "gecko"
++servo_pref = "layout.css.columns.enabled"
+ animation_type = "discrete"
+ spec = "https://drafts.csswg.org/css-multicol/#propdef-column-rule-style"
+ affects = "paint"
+@@ -610,7 +607,7 @@
+ type = "BorderSideWidth"
+ initial = "computed::BorderSideWidth::medium()"
+ struct = "column"
+-engine = "gecko"
++servo_pref = "layout.css.columns.enabled"
+ initial_specified_value = "specified::BorderSideWidth::medium()"
+ spec = "https://drafts.csswg.org/css-multicol/#propdef-column-rule-width"
+ affects = "layout"
+@@ -3751,7 +3748,7 @@
+ 
+ [column-fill]
+ struct = "column"
+-engine = "gecko"
++servo_pref = "layout.css.columns.enabled"
+ spec = "https://drafts.csswg.org/css-multicol/#propdef-column-fill"
+ animation_type = "discrete"
+ affects = "layout"
+--- a/style/properties/shorthands.toml
++++ b/style/properties/shorthands.toml
+@@ -218,19 +218,16 @@
+ spec = "https://drafts.csswg.org/css-inline-3/#transverse-alignment"
+ 
+ [page-break-before]
+-engine = "gecko"
+ flags = "IS_LEGACY_SHORTHAND"
+ sub_properties = ["break-before"]
+ spec = "https://drafts.csswg.org/css-break-3/#page-break-properties"
+ 
+ [page-break-after]
+-engine = "gecko"
+ flags = "IS_LEGACY_SHORTHAND"
+ sub_properties = ["break-after"]
+ spec = "https://drafts.csswg.org/css-break-3/#page-break-properties"
+ 
+ [page-break-inside]
+-engine = "gecko"
+ flags = "IS_LEGACY_SHORTHAND"
+ sub_properties = ["break-inside"]
+ spec = "https://drafts.csswg.org/css-break-3/#page-break-properties"
+@@ -476,7 +473,7 @@
+ servo_pref = "layout.css.columns.enabled"
+ 
+ [column-rule]
+-engine = "gecko"
++servo_pref = "layout.css.columns.enabled"
+ sub_properties = ["column-rule-width", "column-rule-style", "column-rule-color"]
+ spec = "https://drafts.csswg.org/css-multicol/#propdef-column-rule"
+ derive_serialize = true
+--- a/style/properties/shorthands.rs
++++ b/style/properties/shorthands.rs
+@@ -809,7 +809,6 @@
+     }
+ }
+ 
+-#[cfg(feature = "gecko")]
+ pub mod column_rule {
+     pub use crate::properties::generated::shorthands::column_rule::*;
+ 
+--- a/style/values/specified/box.rs
++++ b/style/values/specified/box.rs
+@@ -2015,6 +2015,10 @@
+     Avoid,
+     Left,
+     Right,
++    // ui4me patch P-006-5: the column values of CSS Break 3 (servo mode; Gecko does not parse them).
++    Column,
++    AvoidColumn,
++    AvoidPage,
+ }
+ 
+ impl BreakBetween {
+@@ -2030,7 +2034,9 @@
+             BreakBetween::Auto | BreakBetween::Avoid | BreakBetween::Left | BreakBetween::Right => {
+                 Ok(break_value)
+             },
+-            BreakBetween::Page => Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError)),
++            BreakBetween::Page | BreakBetween::Column | BreakBetween::AvoidColumn | BreakBetween::AvoidPage => {
++                Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError))
++            },
+         }
+     }
+ 
+@@ -2047,7 +2053,7 @@
+                 self.to_css(dest)
+             },
+             BreakBetween::Page => dest.write_str("always"),
+-            BreakBetween::Always => Ok(()),
++            BreakBetween::Always | BreakBetween::Column | BreakBetween::AvoidColumn | BreakBetween::AvoidPage => Ok(()),
+         }
+     }
+ }

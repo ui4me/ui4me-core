@@ -1,0 +1,107 @@
+# P-006-9: CSS Paged Media 3 in servo mode (ui4me 015 PAGE-1, register UP-13; lane L-PAGE, AUTHORISATIONS E-029): `@page` parsed behind the new static pref `layout.css.page-rule.enabled` (default false) instead of `cfg!(feature = "gecko")`; the 16 page-margin at-rules parsed in servo mode behind the existing pref `layout.css.margin-rules.enabled`; the page context and the margin boxes accept every property a style rule accepts (CSS Paged Media 3 sections 3.2 and 5.3); the `size` descriptor and the `page` property become servo-mode longhands, kept in the existing `box` struct (no new ComputedValues field, size test unchanged); `BreakBetween` gains `recto` and `verso` (CSS Break 3 section 3.1; not valid in the legacy `page-break-*`)
+# Applies to: servo/stylo @ 37c1ed3b707c8f333304de2107c13b68fbc1057c after P-006-1 .. P-006-8 (root of the checkout, `patch -p1`)
+# Licence: MPL-2.0 (modifications to MPL-2.0 files; the modified source is published with the repository, see engine/NOTICE)
+
+--- a/style/properties/longhands.toml
++++ b/style/properties/longhands.toml
+@@ -1644,9 +1644,9 @@ affects = "paint"
+ [page]
+ type = "PageName"
+ initial = "computed::PageName::auto()"
+-struct = "page"
+-engine = "gecko"
++struct = "box"  # ui4me P-006-9: servo mode, in an existing struct (no new ComputedValues field)
+ spec = "https://drafts.csswg.org/css-page-3/#using-named-pages"
++servo_restyle_damage = "rebuild_box"
+ animation_type = "discrete"
+ affects = "layout"
+ 
+@@ -1962,9 +1962,9 @@ affects = "layout"
+ [size]
+ type = "PageSize"
+ initial = "computed::PageSize::auto()"
+-struct = "page"
+-engine = "gecko"
++struct = "box"  # ui4me P-006-9: servo mode, in an existing struct (no new ComputedValues field)
+ spec = "https://drafts.csswg.org/css-page-3/#page-size-prop"
++servo_restyle_damage = "rebuild_box"
+ animation_type = "none"
+ rule_types_allowed = ["page"]
+ affects = "layout"
+--- a/style/properties/properties.mako.rs
++++ b/style/properties/properties.mako.rs
+@@ -423,7 +423,13 @@ impl NonCustomPropertyId {
+             0,
+             % endfor
+         ];
+-        MAP[self.0 as usize] & rule_types.bits() != 0
++        // ui4me P-006-9: the page context and the page-margin boxes (CSS Paged Media 3 sections 3.2 and 5.3)
++        // take the properties of a box as well as the page descriptors.
++        let mut bits = rule_types.bits();
++        if rule_types.intersects(CssRuleTypes::from_bits(CssRuleType::Page.bit() | CssRuleType::Margin.bit())) {
++            bits |= CssRuleType::Style.bit();
++        }
++        MAP[self.0 as usize] & bits != 0
+     }
+ 
+     pub(super) fn allowed_in(self, context: &ParserContext) -> bool {
+--- a/style/stylesheets/rule_parser.rs
++++ b/style/stylesheets/rule_parser.rs
+@@ -287,7 +287,7 @@ impl AtRuleType {
+             "keyframes" => Self::Keyframes(None),
+             "-webkit-keyframes" => Self::Keyframes(Some(VendorPrefix::WebKit)),
+             "-moz-keyframes" if cfg!(feature = "gecko") => Self::Keyframes(Some(VendorPrefix::Moz)),
+-            "page" if cfg!(feature = "gecko") => Self::Page,
++            "page" if crate::pref!("layout.css.page-rule.enabled", gecko = true) => Self::Page,
+             "property" if crate::pref!("layout.css.properties-and-values.enabled") => Self::Property,
+             "-moz-document" if cfg!(feature = "gecko") => Self::Document,
+             "import" => Self::Import,
+@@ -300,7 +300,7 @@ impl AtRuleType {
+             "view-transition" if crate::pref!("dom.viewTransitions.cross-document.enabled") => Self::ViewTransition,
+             _ => {
+                 // The margin at-rules supported within @page.
+-                if cfg!(feature = "gecko") && crate::pref!("layout.css.margin-rules.enabled")
++                if crate::pref!("layout.css.margin-rules.enabled")
+                     && let Some(rule_type) = MarginRuleType::from_name(name) {
+                         return Some(Self::Margin(rule_type));
+                     }
+--- a/style/values/specified/box.rs
++++ b/style/values/specified/box.rs
+@@ -2012,6 +2012,9 @@ pub enum BreakBetween {
+     Column,
+     AvoidColumn,
+     AvoidPage,
++    // ui4me patch P-006-9: the spread values of CSS Break 3 (paged media).
++    Recto,
++    Verso,
+ }
+ 
+ impl BreakBetween {
+@@ -2027,7 +2030,7 @@ impl BreakBetween {
+             BreakBetween::Auto | BreakBetween::Avoid | BreakBetween::Left | BreakBetween::Right => {
+                 Ok(break_value)
+             },
+-            BreakBetween::Page | BreakBetween::Column | BreakBetween::AvoidColumn | BreakBetween::AvoidPage => {
++            BreakBetween::Page | BreakBetween::Column | BreakBetween::AvoidColumn | BreakBetween::AvoidPage | BreakBetween::Recto | BreakBetween::Verso => {
+                 Err(ParseError::custom(StyleParseErrorKind::UnspecifiedError))
+             },
+         }
+@@ -2046,7 +2049,7 @@ impl BreakBetween {
+                 self.to_css(dest)
+             },
+             BreakBetween::Page => dest.write_str("always"),
+-            BreakBetween::Always | BreakBetween::Column | BreakBetween::AvoidColumn | BreakBetween::AvoidPage => Ok(()),
++            BreakBetween::Always | BreakBetween::Column | BreakBetween::AvoidColumn | BreakBetween::AvoidPage | BreakBetween::Recto | BreakBetween::Verso => Ok(()),
+         }
+     }
+ }
+--- a/stylo_static_prefs/preferences.toml
++++ b/stylo_static_prefs/preferences.toml
+@@ -48,6 +48,7 @@
+ "layout.css.math-properties.enabled" = false
+ "layout.css.motion-path-url.enabled" = false
+ "layout.css.motion-path.enabled" = false
++"layout.css.page-rule.enabled" = false
+ "layout.css.nth-child-of.enabled" = false
+ "layout.css.outline-offset.snapping" = 1
+ "layout.css.overflow-moz-hidden-unscrollable.enabled" = false

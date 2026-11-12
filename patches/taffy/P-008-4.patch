@@ -1,0 +1,2001 @@
+# P-008-4: CSS Grid Level 2 subgrid (ui4me 015 GRID-1; lane L-GRID, AUTHORISATIONS E-029): `grid-template-columns/rows: subgrid` (style fields + `GridContainerStyle::is_subgrid`, `gap_is_normal`, `GridItemStyle::is_subgrid_item`), `LayoutGridContainer::set_subgrid_info` / `subgrid_info` (no-op defaults: without them a subgridded axis behaves as `none`), the subgrid's grid built by its parent (`compute/grid/subgrid.rs`), its items' contributions sized in the parent's tracks as virtual items, and the subgrid laid out on the parent's lines. The non-subgrid path is unchanged (the grid build is moved into `build_grid`; items not in a subgrid take part in both axes as before)
+# Applies to: DioxusLabs/taffy @ fca167cf659b8bf48019d0dea90624109a78103f after P-008-1, P-008-2 and P-008-3 (root of the checkout, `patch -p1`)
+# Licence: MIT (modification to MIT files and one new file; the notice stays in LICENSE of the vendored tree and engine/NOTICE)
+
+diff -ruN a/src/compute/grid/alignment.rs b/src/compute/grid/alignment.rs
+--- a/src/compute/grid/alignment.rs	2026-11-07 10:00:18.791763214 +0100
++++ b/src/compute/grid/alignment.rs	2026-11-07 10:00:18.799762959 +0100
+@@ -96,6 +96,8 @@
+     containing_block_size: Size<f32>,
+     container_alignment_styles: InBothAbsAxis<AlignItems>,
+     baseline_shim: f32,
++    // ui4me P-008-4: the axes in which the item is a subgrid (always stretched there)
++    subgrid_axes: Size<bool>,
+     direction: Direction,
+     #[cfg(feature = "content_size")] padding_box_inset: Rect<f32>,
+     #[cfg(feature = "content_size")] overflow_container: &ScrollableOverflowContainer,
+@@ -205,6 +207,37 @@
+ 
+     drop(style);
+ 
++    // ui4me P-008-4: a subgrid is always stretched in a subgridded axis (CSS Grid 2 section 9): its
++    // self-alignment and size constraints are ignored there and its `auto` margins are zero
++    let (margin, inherent_size, min_size, max_size, alignment_styles) = if subgrid_axes.width || subgrid_axes.height {
++        let mut margin = margin;
++        let mut inherent_size = inherent_size;
++        let mut min_size = min_size;
++        let mut max_size = max_size;
++        let mut alignment_styles = alignment_styles;
++        if subgrid_axes.width {
++            margin.left = margin.left.or(Some(0.0));
++            margin.right = margin.right.or(Some(0.0));
++            let width = grid_area_size.width.maybe_sub(margin.left).maybe_sub(margin.right).max(0.0);
++            inherent_size.width = Some(f32_max(width, padding_border_size.width));
++            min_size.width = Some(padding_border_size.width);
++            max_size.width = None;
++            alignment_styles.horizontal = AlignSelf::STRETCH;
++        }
++        if subgrid_axes.height {
++            margin.top = margin.top.or(Some(0.0));
++            margin.bottom = margin.bottom.or(Some(0.0));
++            let height = grid_area_size.height.maybe_sub(margin.top).maybe_sub(margin.bottom).max(0.0);
++            inherent_size.height = Some(f32_max(height, padding_border_size.height));
++            min_size.height = Some(padding_border_size.height);
++            max_size.height = None;
++            alignment_styles.vertical = AlignSelf::STRETCH;
++        }
++        (margin, inherent_size, min_size, max_size, alignment_styles)
++    } else {
++        (margin, inherent_size, min_size, max_size, alignment_styles)
++    };
++
+     let grid_area_minus_item_margins_size = Size {
+         width: grid_area_size.width.maybe_sub(margin.left).maybe_sub(margin.right).max(0.0),
+         height: (grid_area_size.height.maybe_sub(margin.top).maybe_sub(margin.bottom) - baseline_shim).max(0.0),
+diff -ruN a/src/compute/grid/mod.rs b/src/compute/grid/mod.rs
+--- a/src/compute/grid/mod.rs	2026-11-07 10:00:18.775763725 +0100
++++ b/src/compute/grid/mod.rs	2026-11-07 10:00:18.799762959 +0100
+@@ -33,12 +33,14 @@
+ 
+ pub(crate) use types::{GridCoordinate, GridLine, OriginZeroLine, MAX_GRID_TRACKS, MAX_OZ_LINE, MIN_OZ_LINE};
+ 
++pub use subgrid::{SubgridAxisInfo, SubgridInfo};
+ pub use types::{GridLineNames, GridLineNamesIter};
+ 
+ mod alignment;
+ mod explicit_grid;
+ mod implicit_grid;
+ mod placement;
++mod subgrid;
+ mod track_sizing;
+ mod types;
+ mod util;
+@@ -300,102 +302,43 @@
+         None => AutoRepeatStrategy::MinRepetitionsThatDoOverflow,
+     });
+ 
+-    // Compute the number of rows and columns in the explicit grid *template*
+-    // (explicit tracks from grid_areas are computed separately below)
+-    let (col_auto_repetition_count, grid_template_col_count) = compute_explicit_grid_size_in_axis(
+-        &style,
+-        auto_fit_container_size.width,
+-        auto_repeat_fit_strategy.width,
+-        |val, basis| tree.calc(val, basis),
+-        AbsoluteAxis::Horizontal,
+-    );
+-    let (row_auto_repetition_count, grid_template_row_count) = compute_explicit_grid_size_in_axis(
+-        &style,
+-        auto_fit_container_size.height,
+-        auto_repeat_fit_strategy.height,
+-        |val, basis| tree.calc(val, basis),
+-        AbsoluteAxis::Vertical,
+-    );
+-
+-    // type CustomIdent<'a> = <<Tree as LayoutPartialTree>::CoreContainerStyle<'_> as CoreStyle>::CustomIdent;
+-    let mut name_resolver = NamedLineResolver::new(&style, col_auto_repetition_count, row_auto_repetition_count);
+-
+-    // Clamp the explicit grid to MAX_GRID_TRACKS tracks in each axis
+-    // https://www.w3.org/TR/css-grid-1/#overlarge-grids
+-    let explicit_col_count = grid_template_col_count.max(name_resolver.area_column_count()).min(MAX_GRID_TRACKS);
+-    let explicit_row_count = grid_template_row_count.max(name_resolver.area_row_count()).min(MAX_GRID_TRACKS);
+-
+-    name_resolver.set_explicit_column_count(explicit_col_count);
+-    name_resolver.set_explicit_row_count(explicit_row_count);
+-
+-    // Build the per-line names of the explicit grid from the name resolver's collected pairs
+-    let mut detailed_column_line_names = name_resolver.detailed_line_names(AbsoluteAxis::Horizontal);
+-    let mut detailed_row_line_names = name_resolver.detailed_line_names(AbsoluteAxis::Vertical);
+-
+-    // 3. Create the grid items (in document order) and resolve the named lines in their `grid-row`/`grid-column` styles
+-    // Absolutely positioned children do not take part in grid placement and do not create implicit tracks,
+-    // so they are excluded here. Each child's style is read and its named lines resolved exactly once; the
+-    // results drive both the grid size estimate and item placement below.
+-    let child_count = tree.child_count(node);
+-    let mut items: Vec<GridItem> = Vec::with_capacity(child_count);
+-    let mut placements: Vec<ItemPlacement> = Vec::with_capacity(child_count);
+-    for (index, child_node) in tree.child_ids(node).enumerate() {
+-        let child_style = tree.get_grid_child_style(child_node);
+-        if child_style.box_generation_mode() == BoxGenerationMode::None || child_style.position().is_out_of_flow() {
+-            continue;
+-        }
+-        placements.push(InBothAbsAxis {
+-            horizontal: name_resolver
+-                .resolve_column_names(&child_style.grid_column())
+-                .into_origin_zero(explicit_col_count),
+-            vertical: name_resolver.resolve_row_names(&child_style.grid_row()).into_origin_zero(explicit_row_count),
+-        });
+-        items.push(GridItem::new_with_style_and_order(
+-            child_node,
+-            child_style,
+-            align_items,
+-            justify_items,
+-            index as u16,
+-        ));
+-    }
+-
+-    // 4. Implicit Grid: Estimate Track Counts
+-    // Estimate the number of rows and columns in the implicit grid (= the entire grid)
+-    // This is necessary as part of placement. Doing it early here is a perf optimisation to reduce allocations.
+-    let (est_col_counts, est_row_counts) =
+-        compute_grid_size_estimate(explicit_col_count, explicit_row_count, &placements);
+-
+-    // 5. Grid Item Placement
+-    // Match items (children) to a definite grid position (row start/end and column start/end position)
+-    let mut cell_occupancy_matrix = CellOccupancyMatrix::with_track_counts(est_col_counts, est_row_counts);
+-    // `items` is in document order from here on (placement only fills in each item's grid area). The track
+-    // sizing and baseline passes sort references to the items rather than the items themselves.
+-    place_grid_items(&mut cell_occupancy_matrix, &mut items, &placements, style.grid_auto_flow());
+-
+-    // Extract track counts from previous step (auto-placement can expand the number of tracks)
+-    let final_col_counts = *cell_occupancy_matrix.track_counts(AbsoluteAxis::Horizontal);
+-    let final_row_counts = *cell_occupancy_matrix.track_counts(AbsoluteAxis::Vertical);
++    // ui4me P-008-4: what the parent grid recorded when this container is a subgrid (only for the axes that
++    // are `subgrid`; a box that is not a grid item has none and its subgridded axes behave as `none`)
++    let subgrid_info = if style.is_subgrid(AbsoluteAxis::Horizontal) || style.is_subgrid(AbsoluteAxis::Vertical) {
++        tree.subgrid_info(node).map(|mut info| {
++            if !style.is_subgrid(AbsoluteAxis::Horizontal) {
++                info.columns = None;
++            }
++            if !style.is_subgrid(AbsoluteAxis::Vertical) {
++                info.rows = None;
++            }
++            info
++        })
++    } else {
++        None
++    };
++    let subgrid_geometry =
++        subgrid_info.as_ref().map(|info| subgrid::SubgridGeometry::compute(tree, &style, inputs.parent_size.width, info));
+ 
+-    // 5. Initialize Tracks
+-    // Initialize (explicit and implicit) grid tracks (and gutters)
+-    // This resolves the min and max track sizing functions for all tracks and gutters
+-    let mut columns = GridTrackVec::new();
+-    let mut rows = GridTrackVec::new();
+-    initialize_grid_tracks(
+-        &mut columns,
++    let GridBuild {
++        mut items,
++        mut columns,
++        mut rows,
+         final_col_counts,
+-        &style,
+-        AbsoluteAxis::Horizontal,
+-        col_auto_repetition_count,
+-        |column_index| cell_occupancy_matrix.column_is_occupied(column_index),
+-    );
+-    initialize_grid_tracks(
+-        &mut rows,
+         final_row_counts,
++        name_resolver,
++        mut detailed_column_line_names,
++        mut detailed_row_line_names,
++    } = build_grid(
++        tree,
++        node,
+         &style,
+-        AbsoluteAxis::Vertical,
+-        row_auto_repetition_count,
+-        |row_index| cell_occupancy_matrix.row_is_occupied(row_index),
++        auto_fit_container_size,
++        auto_repeat_fit_strategy,
++        align_items,
++        justify_items,
++        subgrid_info.as_ref(),
++        subgrid_geometry.as_ref(),
+     );
+ 
+     drop(grid_template_rows);
+@@ -417,6 +360,20 @@
+     // Determine if the grid has any baseline aligned items
+     let has_baseline_aligned_item = items.iter().any(|item| item.participates_in_baseline_alignment());
+ 
++    // ui4me P-008-4: the subgrid items' own grids, whose items take part in this grid's track sizing as virtual
++    // items (appended after the real items while an axis is sized)
++    let mut subgrids = if items.iter().any(|item| item.subgrid_axes.width || item.subgrid_axes.height) {
++        subgrid::prepare_subgrids(tree, &items, &columns, &rows, &name_resolver, inner_node_size)
++    } else {
++        Vec::new()
++    };
++    let has_subgrids = !subgrids.is_empty();
++    let mut virtual_items = subgrid::VirtualItems::new(items.len());
++    if has_subgrids {
++        let fresh = subgrid::virtual_items(&subgrids, AbstractAxis::Inline, &columns);
++        virtual_items.replace(&mut items, AbstractAxis::Inline, fresh);
++    }
++
+     // Run track sizing algorithm for Inline axis
+     track_sizing_algorithm(
+         tree,
+@@ -437,6 +394,9 @@
+     );
+     let initial_column_sum = columns.iter().map(|track| track.base_size).sum::<f32>();
+     inner_node_size.width = inner_node_size.width.or_else(|| initial_column_sum.into());
++    if has_subgrids {
++        subgrid::record_sizes(tree, &mut subgrids, AbstractAxis::Inline, &columns, false);
++    }
+ 
+     // If only the container's width has been requested then we can skip sizing the rows entirely (which avoids
+     // measuring the height of every item), as column sizing is not re-run when only computing the container's size.
+@@ -448,6 +408,14 @@
+         return LayoutOutput::from_outer_size(Size { width, height: 0.0 });
+     }
+ 
++    // ui4me P-008-4: the virtual items of the rows (the area widths of those in a subgrid's own columns are
++    // known once those columns are sized)
++    if has_subgrids {
++        subgrid::prepass_columns(tree, &mut subgrids, &columns);
++        let fresh = subgrid::virtual_items(&subgrids, AbstractAxis::Block, &rows);
++        virtual_items.replace(&mut items, AbstractAxis::Block, fresh);
++    }
++
+     items.iter_mut().for_each(|item| item.grid_area_size_cache = None);
+ 
+     // Run track sizing algorithm for Block axis
+@@ -467,6 +435,9 @@
+         false, // TODO: Support baseline alignment in the vertical axis
+     );
+     let initial_row_sum = rows.iter().map(|track| track.base_size).sum::<f32>();
++    if has_subgrids {
++        subgrid::record_sizes(tree, &mut subgrids, AbstractAxis::Block, &rows, false);
++    }
+ 
+     debug_log!("initial_column_sum", dbg:initial_column_sum);
+     debug_log!(dbg: columns.iter().map(|track| track.base_size).collect::<Vec<_>>());
+@@ -512,11 +483,14 @@
+     let has_percentage_row = rows.iter().any(|track| track.uses_percentage());
+     let parent_width_indefinite = outer_node_size.width.is_none();
+     rerun_column_sizing = parent_width_indefinite && has_percentage_column;
++    if has_subgrids {
++        virtual_items.swap_in(&mut items, AbstractAxis::Inline);
++    }
+ 
+     if !rerun_column_sizing {
+         // Note: every item must be visited (no short-circuiting) as the closure updates each item's caches
+         intrinsic_column_contribution_changed =
+-            items.iter_mut().filter(|item| item.crosses_intrinsic_column).fold(false, |any_changed, item| {
++            items.iter_mut().filter(|item| item.crosses_intrinsic_column && item.participates(AbstractAxis::Inline)).fold(false, |any_changed, item| {
+                 let grid_area_size = item.grid_area_size(
+                     AbstractAxis::Inline,
+                     &columns,
+@@ -556,6 +530,9 @@
+     let parent_height_indefinite = outer_node_size.height.is_none();
+     let mut rerun_row_sizing = parent_height_indefinite && has_percentage_row;
+     let mut intrinsic_row_contribution_changed = false;
++    if has_subgrids {
++        virtual_items.swap_in(&mut items, AbstractAxis::Block);
++    }
+ 
+     if rerun_row_sizing {
+         // Clear intrinsic height caches
+@@ -568,6 +545,9 @@
+     }
+ 
+     if rerun_column_sizing {
++        if has_subgrids {
++            virtual_items.swap_in(&mut items, AbstractAxis::Inline);
++        }
+         // Re-run track sizing algorithm for Inline axis
+         track_sizing_algorithm(
+             tree,
+@@ -585,12 +565,23 @@
+             has_baseline_aligned_item,
+         );
+ 
++        // ui4me P-008-4: the subgrids' columns follow; the row virtual items are rebuilt against them
++        if has_subgrids {
++            subgrid::record_sizes(tree, &mut subgrids, AbstractAxis::Inline, &columns, false);
++            subgrid::prepass_columns(tree, &mut subgrids, &columns);
++            let fresh = subgrid::virtual_items(&subgrids, AbstractAxis::Block, &rows);
++            virtual_items.replace(&mut items, AbstractAxis::Block, fresh);
++            if rerun_row_sizing {
++                items.iter_mut().for_each(|item| item.grid_area_size_cache = None);
++            }
++        }
++
+         // The column widths may have changed, so the items' intrinsic height contributions need to be recomputed
+         // (unless row sizing is being re-run anyway, in which case the caches have already been cleared).
+         if !rerun_row_sizing {
+             // Note: every item must be visited (no short-circuiting) as the closure updates each item's caches
+             intrinsic_row_contribution_changed =
+-                items.iter_mut().filter(|item| item.crosses_intrinsic_row).fold(false, |any_changed, item| {
++                items.iter_mut().filter(|item| item.crosses_intrinsic_row && item.participates(AbstractAxis::Block)).fold(false, |any_changed, item| {
+                     let grid_area_size = item.grid_area_size(
+                         AbstractAxis::Block,
+                         &rows,
+@@ -617,6 +608,9 @@
+     }
+ 
+     if rerun_row_sizing {
++        if has_subgrids {
++            virtual_items.swap_in(&mut items, AbstractAxis::Block);
++        }
+         // Re-run track sizing algorithm for Block axis
+         track_sizing_algorithm(
+             tree,
+@@ -635,6 +629,14 @@
+         );
+     }
+ 
++    // ui4me P-008-4: the virtual items are only sizing inputs; the subgrids follow the final track sizes
++    if has_subgrids {
++        virtual_items.remove(&mut items);
++        if rerun_row_sizing {
++            subgrid::record_sizes(tree, &mut subgrids, AbstractAxis::Block, &rows, false);
++        }
++    }
++
+     if (intrinsic_column_contribution_changed && !has_percentage_column)
+         || (intrinsic_row_contribution_changed && !has_percentage_row)
+     {
+@@ -693,6 +695,13 @@
+         false,
+     );
+ 
++    // ui4me P-008-4: the subgrids lay their subgridded axes out on the aligned tracks
++    if has_subgrids {
++        subgrid::record_sizes(tree, &mut subgrids, AbstractAxis::Inline, &columns, true);
++        subgrid::record_sizes(tree, &mut subgrids, AbstractAxis::Block, &rows, true);
++    }
++    drop(subgrids);
++
+     // 9. Size, Align, and Position Grid Items
+ 
+     #[cfg_attr(not(feature = "content_size"), allow(unused_mut))]
+@@ -748,6 +757,7 @@
+             Size { width: grid_area.right - grid_area.left, height: grid_area.bottom - grid_area.top },
+             container_alignment_styles,
+             item.baseline_shim,
++            item.subgrid_axes,
+             direction,
+             #[cfg(feature = "content_size")]
+             padding_box_inset,
+@@ -869,19 +879,20 @@
+     // resolve the grid areas of out-of-flow boxes whose containing block is this grid
+     let areas =
+         name_resolver.populate_detailed_line_resolvers(&mut detailed_row_line_names, &mut detailed_column_line_names);
++    let mut detailed_rows =
++        DetailedGridTracksInfo::from_grid_tracks_and_track_count(final_row_counts, rows, detailed_row_line_names);
++    let mut detailed_columns =
++        DetailedGridTracksInfo::from_grid_tracks_and_track_count(final_col_counts, columns, detailed_column_line_names);
++    // ui4me P-008-4
++    if let Some(info) = subgrid_info.as_ref() {
++        detailed_columns.subgrid = info.columns.is_some();
++        detailed_rows.subgrid = info.rows.is_some();
++    }
+     tree.set_detailed_grid_info(
+         node,
+         DetailedGridInfo {
+-            rows: DetailedGridTracksInfo::from_grid_tracks_and_track_count(
+-                final_row_counts,
+-                rows,
+-                detailed_row_line_names,
+-            ),
+-            columns: DetailedGridTracksInfo::from_grid_tracks_and_track_count(
+-                final_col_counts,
+-                columns,
+-                detailed_column_line_names,
+-            ),
++            rows: detailed_rows,
++            columns: detailed_columns,
+             items: items.iter().map(DetailedGridItemsInfo::from_grid_item).collect(),
+             areas,
+         },
+@@ -983,6 +994,233 @@
+     output
+ }
+ 
++/// The grid of a container before track sizing: its items (placed, in document order), its tracks (with their
++/// sizing functions) and the line names (steps 2 to 5 of `compute_grid_layout`).
++struct GridBuild<S: CheapCloneStr> {
++    /// The in-flow items, in document order
++    items: Vec<GridItem>,
++    /// The column tracks and gutters
++    columns: GridTrackVec<GridTrack>,
++    /// The row tracks and gutters
++    rows: GridTrackVec<GridTrack>,
++    /// The final column counts (explicit and implicit)
++    final_col_counts: TrackCounts,
++    /// The final row counts (explicit and implicit)
++    final_row_counts: TrackCounts,
++    /// The line name resolver
++    name_resolver: NamedLineResolver<S>,
++    /// The per-line column names of the explicit grid
++    detailed_column_line_names: GridLineNames<S>,
++    /// The per-line row names of the explicit grid
++    detailed_row_line_names: GridLineNames<S>,
++}
++
++/// Resolve the explicit grid, place the items and initialise the tracks of `node` (steps 2 to 5 of
++/// `compute_grid_layout`). `subgrid` is the information the parent grid recorded for a subgrid (ui4me
++/// P-008-4): a subgridded axis has exactly the spanned tracks of the parent, with the given sizes when they are
++/// known, inherits the parent's line names and has no implicit tracks.
++#[allow(clippy::too_many_arguments)]
++fn build_grid<Tree: LayoutGridContainer>(
++    tree: &Tree,
++    node: NodeId,
++    style: &Tree::GridContainerStyle<'_>,
++    auto_fit_container_size: Size<Option<f32>>,
++    auto_repeat_fit_strategy: Size<AutoRepeatStrategy>,
++    align_items: AlignItems,
++    justify_items: AlignItems,
++    subgrid: Option<&subgrid::SubgridInfo<Tree::CustomIdent>>,
++    subgrid_geometry: Option<&subgrid::SubgridGeometry>,
++) -> GridBuild<Tree::CustomIdent> {
++    let sub_columns = subgrid.and_then(|info| info.columns.as_ref());
++    let sub_rows = subgrid.and_then(|info| info.rows.as_ref());
++
++    // Compute the number of rows and columns in the explicit grid *template*
++    // (explicit tracks from grid_areas are computed separately below)
++    let (mut col_auto_repetition_count, mut grid_template_col_count) = compute_explicit_grid_size_in_axis(
++        style,
++        auto_fit_container_size.width,
++        auto_repeat_fit_strategy.width,
++        |val, basis| tree.calc(val, basis),
++        AbsoluteAxis::Horizontal,
++    );
++    let (mut row_auto_repetition_count, mut grid_template_row_count) = compute_explicit_grid_size_in_axis(
++        style,
++        auto_fit_container_size.height,
++        auto_repeat_fit_strategy.height,
++        |val, basis| tree.calc(val, basis),
++        AbsoluteAxis::Vertical,
++    );
++    // ui4me P-008-4: a subgridded axis has exactly the tracks it spans in its parent grid
++    if let Some(info) = sub_columns {
++        col_auto_repetition_count = 0;
++        grid_template_col_count = info.track_count;
++    }
++    if let Some(info) = sub_rows {
++        row_auto_repetition_count = 0;
++        grid_template_row_count = info.track_count;
++    }
++
++    // type CustomIdent<'a> = <<Tree as LayoutPartialTree>::CoreContainerStyle<'_> as CoreStyle>::CustomIdent;
++    let mut name_resolver = NamedLineResolver::new(style, col_auto_repetition_count, row_auto_repetition_count);
++
++    // Clamp the explicit grid to MAX_GRID_TRACKS tracks in each axis
++    // https://www.w3.org/TR/css-grid-1/#overlarge-grids
++    let explicit_col_count = match sub_columns {
++        Some(info) => info.track_count,
++        None => grid_template_col_count.max(name_resolver.area_column_count()).min(MAX_GRID_TRACKS),
++    };
++    let explicit_row_count = match sub_rows {
++        Some(info) => info.track_count,
++        None => grid_template_row_count.max(name_resolver.area_row_count()).min(MAX_GRID_TRACKS),
++    };
++
++    name_resolver.set_explicit_column_count(explicit_col_count);
++    name_resolver.set_explicit_row_count(explicit_row_count);
++
++    // ui4me P-008-4: the line names of a subgridded axis: its own `<line-name-list>` (at most one name set per
++    // line, the excess is ignored) and the names of the parent's spanned lines
++    for (axis, info) in [(AbsoluteAxis::Horizontal, sub_columns), (AbsoluteAxis::Vertical, sub_rows)] {
++        let Some(info) = info else { continue };
++        let own_names = match axis {
++            AbsoluteAxis::Horizontal => style.grid_template_column_names(),
++            AbsoluteAxis::Vertical => style.grid_template_row_names(),
++        };
++        let mut own: Vec<(u32, Tree::CustomIdent)> = Vec::new();
++        if let Some(own_names) = own_names {
++            for (index, line_names) in own_names.enumerate() {
++                if index > info.track_count as usize {
++                    break;
++                }
++                for name in line_names.into_iter() {
++                    own.push((index as u32 + 1, name.clone()));
++                }
++            }
++        }
++        name_resolver.add_subgrid_line_names(axis, &own, true);
++        name_resolver.add_subgrid_line_names(axis, &info.line_names, false);
++    }
++
++    // Build the per-line names of the explicit grid from the name resolver's collected pairs
++    let detailed_column_line_names = name_resolver.detailed_line_names(AbsoluteAxis::Horizontal);
++    let detailed_row_line_names = name_resolver.detailed_line_names(AbsoluteAxis::Vertical);
++
++    // 3. Create the grid items (in document order) and resolve the named lines in their `grid-row`/`grid-column` styles
++    // Absolutely positioned children do not take part in grid placement and do not create implicit tracks,
++    // so they are excluded here. Each child's style is read and its named lines resolved exactly once; the
++    // results drive both the grid size estimate and item placement below.
++    let child_count = tree.child_count(node);
++    let mut items: Vec<GridItem> = Vec::with_capacity(child_count);
++    let mut placements: Vec<ItemPlacement> = Vec::with_capacity(child_count);
++    for (index, child_node) in tree.child_ids(node).enumerate() {
++        let child_style = tree.get_grid_child_style(child_node);
++        if child_style.box_generation_mode() == BoxGenerationMode::None || child_style.position().is_out_of_flow() {
++            continue;
++        }
++        placements.push(InBothAbsAxis {
++            horizontal: name_resolver
++                .resolve_column_names(&child_style.grid_column())
++                .into_origin_zero(explicit_col_count),
++            vertical: name_resolver.resolve_row_names(&child_style.grid_row()).into_origin_zero(explicit_row_count),
++        });
++        // ui4me P-008-4: an in-flow grid item whose tracks are `subgrid` is a subgrid (CSS Grid 2 section 9.1)
++        let subgrid_axes = Size {
++            width: child_style.is_subgrid_item(AbsoluteAxis::Horizontal),
++            height: child_style.is_subgrid_item(AbsoluteAxis::Vertical),
++        };
++        let mut item =
++            GridItem::new_with_style_and_order(child_node, child_style, align_items, justify_items, index as u16);
++        if subgrid_axes.width || subgrid_axes.height {
++            item.mark_subgrid(subgrid_axes);
++        }
++        items.push(item);
++    }
++
++    // ui4me P-008-4: in a subgridded axis, lines outside the subgrid are clamped into it before placement
++    // (so items placed past its last line compete for its last track, as in the reference browser)
++    if let Some(info) = sub_columns {
++        subgrid::clamp_placements_to_subgrid(&mut placements, AbsoluteAxis::Horizontal, info.track_count);
++    }
++    if let Some(info) = sub_rows {
++        subgrid::clamp_placements_to_subgrid(&mut placements, AbsoluteAxis::Vertical, info.track_count);
++    }
++
++    // 4. Implicit Grid: Estimate Track Counts
++    // Estimate the number of rows and columns in the implicit grid (= the entire grid)
++    // This is necessary as part of placement. Doing it early here is a perf optimisation to reduce allocations.
++    let (est_col_counts, est_row_counts) =
++        compute_grid_size_estimate(explicit_col_count, explicit_row_count, &placements);
++
++    // 5. Grid Item Placement
++    // Match items (children) to a definite grid position (row start/end and column start/end position)
++    let mut cell_occupancy_matrix = CellOccupancyMatrix::with_track_counts(est_col_counts, est_row_counts);
++    // `items` is in document order from here on (placement only fills in each item's grid area). The track
++    // sizing and baseline passes sort references to the items rather than the items themselves.
++    place_grid_items(&mut cell_occupancy_matrix, &mut items, &placements, style.grid_auto_flow());
++
++    // Extract track counts from previous step (auto-placement can expand the number of tracks)
++    let mut final_col_counts = *cell_occupancy_matrix.track_counts(AbsoluteAxis::Horizontal);
++    let mut final_row_counts = *cell_occupancy_matrix.track_counts(AbsoluteAxis::Vertical);
++
++    // ui4me P-008-4: a subgridded axis has no implicit tracks: each item's area is clamped to the explicit grid
++    if let Some(info) = sub_columns {
++        subgrid::clamp_items_to_subgrid(&mut items, AbstractAxis::Inline, info.track_count);
++        final_col_counts = TrackCounts::from_raw(0, info.track_count, 0);
++    }
++    if let Some(info) = sub_rows {
++        subgrid::clamp_items_to_subgrid(&mut items, AbstractAxis::Block, info.track_count);
++        final_row_counts = TrackCounts::from_raw(0, info.track_count, 0);
++    }
++
++    // 5. Initialize Tracks
++    // Initialize (explicit and implicit) grid tracks (and gutters)
++    // This resolves the min and max track sizing functions for all tracks and gutters
++    let mut columns = GridTrackVec::new();
++    let mut rows = GridTrackVec::new();
++    match sub_columns {
++        Some(info) => subgrid::initialize_subgrid_tracks(
++            &mut columns,
++            info,
++            subgrid_geometry.and_then(|g| g.track_gap(AbstractAxis::Inline)),
++            subgrid_geometry.map(|g| (g.edges.left, g.edges.right)).unwrap_or((0.0, 0.0)),
++        ),
++        None => initialize_grid_tracks(
++            &mut columns,
++            final_col_counts,
++            style,
++            AbsoluteAxis::Horizontal,
++            col_auto_repetition_count,
++            |column_index| cell_occupancy_matrix.column_is_occupied(column_index),
++        ),
++    }
++    match sub_rows {
++        Some(info) => subgrid::initialize_subgrid_tracks(
++            &mut rows,
++            info,
++            subgrid_geometry.and_then(|g| g.track_gap(AbstractAxis::Block)),
++            subgrid_geometry.map(|g| (g.edges.top, g.edges.bottom)).unwrap_or((0.0, 0.0)),
++        ),
++        None => initialize_grid_tracks(
++            &mut rows,
++            final_row_counts,
++            style,
++            AbsoluteAxis::Vertical,
++            row_auto_repetition_count,
++            |row_index| cell_occupancy_matrix.row_is_occupied(row_index),
++        ),
++    }
++
++    GridBuild {
++        items,
++        columns,
++        rows,
++        final_col_counts,
++        final_row_counts,
++        name_resolver,
++        detailed_column_line_names,
++        detailed_row_line_names,
++    }
++}
++
+ /// Resolve the static-position rectangle (the grid area determined by the grid-placement
+ /// properties) for an out-of-flow child of a positioned grid container.
+ ///
+@@ -1298,6 +1536,10 @@
+     /// [`DetailedGridTracksInfo::iter_line_names`] for indices relative to the full grid
+     /// (including implicit tracks). Empty if the grid has no named lines.
+     pub line_names: GridLineNames<S>,
++
++    /// ui4me P-008-4: whether the axis was laid out as a subgridded axis (its tracks are its parent grid's;
++    /// `line_names` are then the subgrid's own `<line-name-list>`)
++    pub subgrid: bool,
+ }
+ 
+ impl<S: CheapCloneStr> DetailedGridTracksInfo<S> {
+@@ -1337,6 +1579,7 @@
+             collapsed_tracks,
+             empty_axis_line,
+             line_names,
++            subgrid: false,
+         }
+     }
+ 
+diff -ruN a/src/compute/grid/subgrid.rs b/src/compute/grid/subgrid.rs
+--- a/src/compute/grid/subgrid.rs	1970-01-01 01:00:00.000000000 +0100
++++ b/src/compute/grid/subgrid.rs	2026-11-07 10:00:18.799762959 +0100
+@@ -0,0 +1,809 @@
++//! ui4me P-008-4: CSS Grid Level 2 subgrids (<https://www.w3.org/TR/css-grid-2/#subgrids>).
++//!
++//! A grid item whose `grid-template-columns` and/or `grid-template-rows` is `subgrid` (a *subgrid*) uses the
++//! tracks it spans in its parent grid in that axis (a *subgridded axis*) instead of defining its own:
++//!
++//!   - The parent grid builds the subgrid's grid (placement included) before sizing its own tracks
++//!     ([`prepare_subgrids`]) and records, through [`LayoutGridContainer::set_subgrid_info`], the number of
++//!     spanned tracks, their sizing functions, the parent's gap and the names of the spanned lines.
++//!   - The subgrid's items take part in the parent's track sizing as *virtual items* ([`flatten`]): their
++//!     placement is translated into the parent's lines and their contributions are increased by the subgrid's
++//!     margin, border and padding at the subgrid's edges and by half the difference between the subgrid's gap
++//!     and the parent's elsewhere. The subgrid itself does not take part in the sizing of a subgridded axis
++//!     (it is always stretched there).
++//!   - Once the parent has sized a subgridded axis it records the sizes ([`record_sizes`]); the subgrid then
++//!     lays itself out with fixed tracks in that axis whose lines sit on the parent's lines (its gutters are
++//!     centred in the parent's, its edge tracks are reduced by its margin, border and padding).
++//!   - A subgridded axis inherits the parent's line names (plus its own `<line-name-list>`) and has no implicit
++//!     tracks: an item placed outside the subgrid is clamped into it. A box that is not a grid item (or is
++//!     absolutely positioned) receives no information and its subgridded axis behaves as `none`.
++//!
++//! Only `horizontal-tb`, left-to-right subgrids are supported (orthogonal and RTL subgrids are not).
++
++use super::types::{GridItem, GridTrack, GridTrackKind};
++use super::{build_grid, compute_container_constants, GridBuild};
++use crate::geometry::{AbsoluteAxis, AbstractAxis, Line, Rect, Size};
++use crate::style::{AvailableSpace, MaxTrackSizingFunction, MinTrackSizingFunction};
++use crate::tree::{LayoutInput, LayoutPartialTreeExt, NodeId, RequestedAxis, RunMode, SizingMode};
++use crate::util::sys::{f32_max, GridTrackVec, Vec};
++use crate::util::{MaybeMath, ResolveOrZero};
++use crate::{CheapCloneStr, CoreStyle, GridContainerStyle, LayoutGridContainer, LengthPercentage};
++
++use super::explicit_grid::AutoRepeatStrategy;
++use super::track_sizing::{resolve_item_track_indexes, track_sizing_algorithm};
++use super::types::NamedLineResolver;
++use super::OriginZeroLine;
++
++/// What a parent grid records for a subgridded axis of one of its items
++#[derive(Clone, Debug, PartialEq)]
++pub struct SubgridAxisInfo<S: CheapCloneStr> {
++    /// The number of parent tracks the subgrid spans (its explicit track count)
++    pub track_count: u16,
++    /// The sizing functions of the spanned parent tracks (used while the sizes are not known yet)
++    pub track_sizing: Vec<(MinTrackSizingFunction, MaxTrackSizingFunction)>,
++    /// The parent's gap in this axis (px): the subgrid's gap when its own is `normal`
++    pub parent_gap: f32,
++    /// The sizes of the spanned parent tracks and of the gutters between them (`2 * track_count - 1` values:
++    /// track, gutter, track, ...) once the parent has sized them. A gutter includes the space distributed by
++    /// the parent's content alignment.
++    pub sizes: Option<Vec<f32>>,
++    /// The names of the spanned parent lines, as `(1-based subgrid line, name)` pairs
++    pub line_names: Vec<(u32, S)>,
++}
++
++/// What a parent grid records for a subgrid item: one entry per subgridded axis
++#[derive(Clone, Debug, PartialEq)]
++pub struct SubgridInfo<S: CheapCloneStr> {
++    /// The columns, if `grid-template-columns` is `subgrid`
++    pub columns: Option<SubgridAxisInfo<S>>,
++    /// The rows, if `grid-template-rows` is `subgrid`
++    pub rows: Option<SubgridAxisInfo<S>>,
++}
++
++impl<S: CheapCloneStr> SubgridInfo<S> {
++    /// The information of an axis
++    pub fn axis(&self, axis: AbstractAxis) -> Option<&SubgridAxisInfo<S>> {
++        match axis {
++            AbstractAxis::Inline => self.columns.as_ref(),
++            AbstractAxis::Block => self.rows.as_ref(),
++        }
++    }
++
++    /// The information of an axis (mutable)
++    fn axis_mut(&mut self, axis: AbstractAxis) -> Option<&mut SubgridAxisInfo<S>> {
++        match axis {
++            AbstractAxis::Inline => self.columns.as_mut(),
++            AbstractAxis::Block => self.rows.as_mut(),
++        }
++    }
++}
++
++/// The geometry of a subgrid's edges and gutters
++#[derive(Clone, Copy, Debug)]
++pub(super) struct SubgridGeometry {
++    /// Margin + border + padding at each edge
++    pub(super) edges: Rect<f32>,
++    /// The subgrid's own margins (part of `edges`)
++    pub(super) margins: Rect<f32>,
++    /// The subgrid's gap in each axis (px)
++    pub(super) gap: Size<f32>,
++    /// The parent's gap in each axis (px)
++    pub(super) parent_gap: Size<f32>,
++    /// Whether the subgrid's gap is `normal` in each axis (it then has the parent's gutters)
++    pub(super) gap_normal: Size<bool>,
++}
++
++impl SubgridGeometry {
++    /// Resolve the geometry of a subgrid. `area_width` is the percentage basis (the width of the subgrid's
++    /// grid area, if known).
++    pub(super) fn compute<Tree: LayoutGridContainer>(
++        tree: &Tree,
++        style: &Tree::GridContainerStyle<'_>,
++        area_width: Option<f32>,
++        info: &SubgridInfo<Tree::CustomIdent>,
++    ) -> Self {
++        let margins = style.margin().resolve_or_zero(area_width, |val, basis| tree.calc(val, basis));
++        let padding = style.padding().resolve_or_zero(area_width, |val, basis| tree.calc(val, basis));
++        let border = style.border().resolve_or_zero(area_width, |val, basis| tree.calc(val, basis));
++        let edges = margins + padding + border;
++        let parent_gap = Size {
++            width: info.columns.as_ref().map(|i| i.parent_gap).unwrap_or(0.0),
++            height: info.rows.as_ref().map(|i| i.parent_gap).unwrap_or(0.0),
++        };
++        let normal = style.gap_is_normal();
++        let own_gap = style.gap();
++        let content_width = area_width.map(|w| f32_max(w - edges.horizontal_axis_sum(), 0.0));
++        let resolve = |gap: LengthPercentage, basis: Option<f32>| {
++            gap.resolve_or_zero(basis.or(Some(0.0)), |val, basis| tree.calc(val, basis))
++        };
++        let gap = Size {
++            width: if normal.width { parent_gap.width } else { resolve(own_gap.width, content_width) },
++            height: if normal.height { parent_gap.height } else { resolve(own_gap.height, None) },
++        };
++        SubgridGeometry { edges, margins, gap, gap_normal: normal, parent_gap }
++    }
++
++    /// The edges of an axis (start, end)
++    fn edges(&self, axis: AbstractAxis) -> (f32, f32) {
++        match axis {
++            AbstractAxis::Inline => (self.edges.left, self.edges.right),
++            AbstractAxis::Block => (self.edges.top, self.edges.bottom),
++        }
++    }
++
++    /// The gap of the subgrid's tracks in `axis`: `None` when it is `normal` (the parent's gutters)
++    pub(super) fn track_gap(&self, axis: AbstractAxis) -> Option<f32> {
++        (!self.gap_normal.get(axis)).then(|| self.gap.get(axis))
++    }
++}
++
++/// Clamp the definite lines and spans of the items in `axis` to the subgrid's `track_count` tracks (CSS Grid 2 section 9: a
++/// subgridded axis has no implicit tracks; the area is clamped as in an overly large grid)
++pub(super) fn clamp_placements_to_subgrid(
++    placements: &mut [super::placement::ItemPlacement],
++    axis: AbsoluteAxis,
++    track_count: u16,
++) {
++    use crate::style::GenericGridPlacement as P;
++    let n = track_count as i16;
++    for placement in placements.iter_mut() {
++        let line = match axis {
++            AbsoluteAxis::Horizontal => &mut placement.horizontal,
++            AbsoluteAxis::Vertical => &mut placement.vertical,
++        };
++        if let P::Line(start) = &mut line.start {
++            start.0 = start.0.clamp(0, n - 1);
++        }
++        if let P::Line(end) = &mut line.end {
++            end.0 = end.0.clamp(1, n);
++        }
++        if let (P::Line(start), P::Line(end)) = (&mut line.start, &mut line.end) {
++            if end.0 <= start.0 {
++                // Both lines collapsed onto one side of the subgrid: the track next to it
++                if start.0 >= n - 1 {
++                    *start = OriginZeroLine(n - 1);
++                    *end = OriginZeroLine(n);
++                } else {
++                    *end = OriginZeroLine(start.0 + 1);
++                }
++            }
++        }
++        for side in [&mut line.start, &mut line.end] {
++            if let P::Span(span) = side {
++                *span = (*span).min(track_count).max(1);
++            }
++        }
++    }
++}
++
++/// Clamp each item's area in `axis` after placement (an auto-placed item can still land past the last line)
++pub(super) fn clamp_items_to_subgrid(items: &mut [GridItem], axis: AbstractAxis, track_count: u16) {
++    let n = track_count as i16;
++    for item in items {
++        let line = match axis {
++            AbstractAxis::Inline => &mut item.column,
++            AbstractAxis::Block => &mut item.row,
++        };
++        let start = line.start.0.clamp(0, n - 1);
++        let end = line.end.0.clamp(start + 1, n);
++        *line = Line { start: OriginZeroLine(start), end: OriginZeroLine(end) };
++    }
++}
++
++/// The tracks of a subgridded axis: the spanned parent tracks, with fixed sizes when the parent has sized them
++/// (the subgrid's lines on the parent's: its gutters, `gap` wide, centred in the parent's gutters, its edge
++/// tracks reduced by `edges`), and otherwise with the parent tracks' sizing functions.
++pub(super) fn initialize_subgrid_tracks<S: CheapCloneStr>(
++    tracks: &mut GridTrackVec<GridTrack>,
++    info: &SubgridAxisInfo<S>,
++    gap: Option<f32>,
++    edges: (f32, f32),
++) {
++    let n = info.track_count as usize;
++    tracks.clear();
++    tracks.reserve(n * 2 + 1);
++    let mut outer = GridTrack::gutter(LengthPercentage::length(0.0));
++    outer.collapse();
++    tracks.push(outer.clone());
++    match &info.sizes {
++        Some(sizes) if sizes.len() == n * 2 - 1 => {
++            // The parent's track edges relative to the start of the subgrid's area
++            let mut starts = Vec::with_capacity(n);
++            let mut ends = Vec::with_capacity(n);
++            let mut position = 0.0;
++            for k in 0..n {
++                starts.push(position);
++                position += sizes[2 * k];
++                ends.push(position);
++                if k + 1 < n {
++                    position += sizes[2 * k + 1];
++                }
++            }
++            let area = position;
++            // A subgrid whose gap is `normal` has the parent's gutters (with the space the parent's content
++            // alignment distributed into them); otherwise its gutters, `gap` wide, are centred in the parent's
++            // (as in the reference browser)
++            let start = |k: usize| match gap {
++                _ if k == 0 => edges.0,
++                None => starts[k],
++                Some(gap) => (ends[k - 1] + starts[k]) / 2.0 + gap / 2.0,
++            };
++            let end = |k: usize| match gap {
++                _ if k + 1 == n => area - edges.1,
++                None => ends[k],
++                Some(gap) => (ends[k] + starts[k + 1]) / 2.0 - gap / 2.0,
++            };
++            for k in 0..n {
++                let size = f32_max(end(k) - start(k), 0.0);
++                let mut track = GridTrack::new(MinTrackSizingFunction::length(size), MaxTrackSizingFunction::length(size));
++                track.base_size = size;
++                track.growth_limit = size;
++                tracks.push(track);
++                if k + 1 < n {
++                    // A track that the gap leaves no room for is empty at its start line, so the gutter runs
++                    // from there to the next track's start
++                    let gutter_size = f32_max(start(k + 1) - (start(k) + size), 0.0);
++                    let mut gutter = GridTrack::gutter(LengthPercentage::length(gutter_size));
++                    gutter.base_size = gutter_size;
++                    gutter.growth_limit = gutter_size;
++                    tracks.push(gutter);
++                }
++            }
++        }
++        _ => {
++            for (k, (min, max)) in info.track_sizing.iter().enumerate() {
++                tracks.push(GridTrack::new(*min, *max));
++                if k + 1 < n {
++                    tracks.push(GridTrack::gutter(LengthPercentage::length(gap.unwrap_or(info.parent_gap))));
++                }
++            }
++        }
++    }
++    tracks.push(outer);
++}
++
++/// A subgrid item of a grid, with its own grid built ahead of the parent's track sizing
++pub(super) struct SubgridPrep<S: CheapCloneStr> {
++    /// The index of the subgrid in its parent's items
++    item_index: usize,
++    /// The subgrid's node
++    node: NodeId,
++    /// The subgridded axes (width = columns, height = rows)
++    axes: Size<bool>,
++    /// The subgrid's placement in its parent (origin-zero lines and track vector indexes)
++    column: Line<OriginZeroLine>,
++    row: Line<OriginZeroLine>,
++    column_indexes: Line<u16>,
++    row_indexes: Line<u16>,
++    /// What the parent records for the subgrid
++    info: SubgridInfo<S>,
++    /// Its edges and gaps
++    geometry: SubgridGeometry,
++    /// Its grid (subgrid-local placement and tracks)
++    build: GridBuild<S>,
++    /// The subgrids among its items
++    children: Vec<SubgridPrep<S>>,
++    /// Whether `build.columns` has been sized (`prepass_columns`)
++    columns_sized: bool,
++    /// The container's preferred border-box width and its padding + border width (for `prepass_columns`)
++    preferred_width: Option<f32>,
++    padding_border_width: f32,
++    /// The container's content alignment (columns, rows)
++    justify_content: crate::style::AlignContent,
++    align_content: crate::style::AlignContent,
++}
++
++/// The information recorded for a subgridded axis of an item spanning `indexes` (track vector indexes) and
++/// `lines` (origin-zero) of `tracks`
++fn axis_info<S: CheapCloneStr>(
++    tracks: &[GridTrack],
++    indexes: Line<u16>,
++    lines: Line<OriginZeroLine>,
++    names: &NamedLineResolver<S>,
++    axis: AbsoluteAxis,
++    gap_basis: Option<f32>,
++    calc: &dyn Fn(*const (), f32) -> f32,
++) -> SubgridAxisInfo<S> {
++    let spanned = &tracks[(indexes.start as usize + 1)..(indexes.end as usize)];
++    let track_sizing = spanned
++        .iter()
++        .filter(|track| track.kind == GridTrackKind::Track)
++        .map(|track| (track.min_track_sizing_function, track.max_track_sizing_function))
++        .collect();
++    // The parent's gap: the first inner gutter that is not collapsed (all the parent's gutters have its gap)
++    let parent_gap = tracks
++        .iter()
++        .enumerate()
++        .filter(|(index, track)| *index > 0 && *index + 1 < tracks.len() && track.kind == GridTrackKind::Gutter)
++        .find(|(_, track)| !track.is_collapsed)
++        .and_then(|(_, track)| track.min_track_sizing_function.definite_value(gap_basis.or(Some(0.0)), calc))
++        .unwrap_or(0.0);
++    SubgridAxisInfo {
++        track_count: (lines.end.0 - lines.start.0).max(1) as u16,
++        track_sizing,
++        parent_gap,
++        sizes: None,
++        line_names: names.line_names_in_range(axis, lines.start.0, lines.end.0),
++    }
++}
++
++/// Build the grids of the subgrid items of a grid (recursively) and record their information
++pub(super) fn prepare_subgrids<Tree: LayoutGridContainer>(
++    tree: &mut Tree,
++    items: &[GridItem],
++    columns: &[GridTrack],
++    rows: &[GridTrack],
++    names: &NamedLineResolver<Tree::CustomIdent>,
++    inner_node_size: Size<Option<f32>>,
++) -> Vec<SubgridPrep<Tree::CustomIdent>> {
++    let mut preps = Vec::new();
++    for (index, item) in items.iter().enumerate() {
++        if !(item.subgrid_axes.width || item.subgrid_axes.height) || item.virtual_axis.is_some() {
++            continue;
++        }
++        let calc = |val: *const (), basis: f32| tree.calc(val, basis);
++        let info = SubgridInfo {
++            columns: item.subgrid_axes.width.then(|| {
++                axis_info(
++                    columns,
++                    item.column_indexes,
++                    item.column,
++                    names,
++                    AbsoluteAxis::Horizontal,
++                    inner_node_size.width,
++                    &calc,
++                )
++            }),
++            rows: item.subgrid_axes.height.then(|| {
++                axis_info(rows, item.row_indexes, item.row, names, AbsoluteAxis::Vertical, inner_node_size.height, &calc)
++            }),
++        };
++        preps.push(prepare_subgrid(tree, index, item, info, inner_node_size.width));
++    }
++    preps
++}
++
++/// Build the grid of one subgrid item and of its own subgrids
++fn prepare_subgrid<Tree: LayoutGridContainer>(
++    tree: &mut Tree,
++    item_index: usize,
++    item: &GridItem,
++    info: SubgridInfo<Tree::CustomIdent>,
++    area_width: Option<f32>,
++) -> SubgridPrep<Tree::CustomIdent> {
++    let node = item.node;
++    tree.set_subgrid_info(node, Some(info.clone()));
++
++    let (geometry, constants, mut build) = {
++        let style = tree.get_grid_container_style(node);
++        let geometry = SubgridGeometry::compute(tree, &style, area_width, &info);
++        let inputs = LayoutInput {
++            run_mode: RunMode::ComputeSize,
++            sizing_mode: SizingMode::InherentSize,
++            axis: RequestedAxis::Both,
++            known_dimensions: Size::NONE,
++            known_dimensions_are_definite: Size { width: true, height: true },
++            parent_size: Size { width: area_width, height: None },
++            available_space: Size { width: AvailableSpace::MaxContent, height: AvailableSpace::MaxContent },
++            vertical_margins_are_collapsible: Line::FALSE,
++        };
++        let constants = compute_container_constants(tree, &style, inputs);
++        let auto_fit_container_size = constants
++            .outer_node_size
++            .or(constants.max_size)
++            .or(constants.min_size)
++            .maybe_clamp(constants.min_size, constants.max_size)
++            .maybe_max(constants.padding_border_size)
++            .maybe_sub(constants.content_box_inset.sum_axes());
++        let auto_repeat_fit_strategy = constants.outer_node_size.or(constants.max_size).map(|val| match val {
++            Some(_) => AutoRepeatStrategy::MaxRepetitionsThatDoNotOverflow,
++            None => AutoRepeatStrategy::MinRepetitionsThatDoOverflow,
++        });
++        let build = build_grid(
++            tree,
++            node,
++            &style,
++            auto_fit_container_size,
++            auto_repeat_fit_strategy,
++            constants.align_items,
++            constants.justify_items,
++            Some(&info),
++            Some(&geometry),
++        );
++        (geometry, constants, build)
++    };
++    resolve_item_track_indexes(&mut build.items, build.final_col_counts, build.final_row_counts);
++    super::track_sizing::determine_if_item_crosses_flexible_or_intrinsic_tracks(
++        &mut build.items,
++        &build.columns,
++        &build.rows,
++    );
++
++    let children = if build.items.iter().any(|item| item.subgrid_axes.width || item.subgrid_axes.height) {
++        let content_width = area_width.map(|w| f32_max(w - geometry.edges.horizontal_axis_sum(), 0.0));
++        prepare_subgrids(
++            tree,
++            &build.items,
++            &build.columns,
++            &build.rows,
++            &build.name_resolver,
++            Size { width: content_width, height: None },
++        )
++    } else {
++        Vec::new()
++    };
++
++    SubgridPrep {
++        item_index,
++        node,
++        axes: item.subgrid_axes,
++        column: item.column,
++        row: item.row,
++        column_indexes: item.column_indexes,
++        row_indexes: item.row_indexes,
++        info,
++        geometry,
++        build,
++        children,
++        columns_sized: false,
++        preferred_width: constants.preferred_size.width,
++        padding_border_width: constants.content_box_inset.horizontal_axis_sum(),
++        justify_content: constants.justify_content,
++        align_content: constants.align_content,
++    }
++}
++
++impl<S: CheapCloneStr> SubgridPrep<S> {
++    /// The subgrid's placement in its parent in `axis` (origin-zero lines, track vector indexes)
++    fn placement(&self, axis: AbstractAxis) -> (Line<OriginZeroLine>, Line<u16>) {
++        match axis {
++            AbstractAxis::Inline => (self.column, self.column_indexes),
++            AbstractAxis::Block => (self.row, self.row_indexes),
++        }
++    }
++
++    /// The subgrid's own tracks in `axis`
++    fn tracks(&self, axis: AbstractAxis) -> &[GridTrack] {
++        match axis {
++            AbstractAxis::Inline => &self.build.columns,
++            AbstractAxis::Block => &self.build.rows,
++        }
++    }
++}
++
++/// The size of the area spanning `indexes` of `tracks`: their sizes when `sized`, otherwise the sum of their
++/// fixed sizes (`None` if a track is not fixed)
++fn area_size(tracks: &[GridTrack], indexes: Line<u16>, sized: bool) -> Option<f32> {
++    tracks[(indexes.start as usize + 1)..(indexes.end as usize)]
++        .iter()
++        .map(|track| {
++            if sized {
++                return Some(track.base_size);
++            }
++            let min = track.min_track_sizing_function.definite_value(None, |_, _| 0.0)?;
++            let max = track.max_track_sizing_function.definite_value(None, |_, _| 0.0)?;
++            (min == max).then_some(min)
++        })
++        .sum()
++}
++
++/// Translate a virtual item from a subgrid's coordinates into its parent's in `axis`, adding the subgrid's
++/// edge and gap adjustments to its extra margin
++fn translate<S: CheapCloneStr>(item: &mut GridItem, axis: AbstractAxis, prep: &SubgridPrep<S>) {
++    let track_count = prep.info.axis(axis).map(|info| info.track_count).unwrap_or(1) as i16;
++    let (lines, indexes) = prep.placement(axis);
++    let (edge_start, edge_end) = prep.geometry.edges(axis);
++    let half_gap_difference = (prep.geometry.gap.get(axis) - prep.geometry.parent_gap.get(axis)) / 2.0;
++    let (item_lines, item_indexes) = match axis {
++        AbstractAxis::Inline => (&mut item.column, &mut item.column_indexes),
++        AbstractAxis::Block => (&mut item.row, &mut item.row_indexes),
++    };
++    // A spacer (an empty edge item) carries the edge only
++    let inner = if item.spacer { 0.0 } else { half_gap_difference };
++    let start = if item_lines.start.0 <= 0 { edge_start } else { inner };
++    let end = if item_lines.end.0 >= track_count { edge_end } else { inner };
++    match axis {
++        AbstractAxis::Inline => {
++            item.extra_margin.left += start;
++            item.extra_margin.right += end;
++        }
++        AbstractAxis::Block => {
++            item.extra_margin.top += start;
++            item.extra_margin.bottom += end;
++        }
++    }
++    *item_lines = Line {
++        start: OriginZeroLine(item_lines.start.0 + lines.start.0),
++        end: OriginZeroLine(item_lines.end.0 + lines.start.0),
++    };
++    *item_indexes = Line { start: item_indexes.start + indexes.start, end: item_indexes.end + indexes.start };
++}
++
++/// The virtual items of a subgrid for its parent's track sizing in `axis` (a subgridded axis of `prep`), in the
++/// parent's coordinates: its items, and recursively those of its own subgrids in that axis
++pub(super) fn flatten<S: CheapCloneStr>(prep: &SubgridPrep<S>, axis: AbstractAxis) -> Vec<GridItem> {
++    let mut out = Vec::new();
++    if !prep.axes.get(axis) {
++        return out;
++    }
++    let other = axis.other();
++    let mut local: Vec<GridItem> = Vec::new();
++    for (index, item) in prep.build.items.iter().enumerate() {
++        if item.subgrid_axes.get(axis) {
++            if let Some(child) = prep.children.iter().find(|child| child.item_index == index) {
++                local.extend(flatten(child, axis));
++            }
++        } else {
++            let mut copy = item.virtual_copy(axis);
++            copy.subgrid_axes = Size { width: false, height: false };
++            local.push(copy);
++        }
++    }
++    // The margin, border and padding at each edge of a non-empty subgrid are contributed to the edge track by an
++    // empty item even when the items there contribute less (or no item touches that edge), as in the reference
++    // browser
++    if let Some(first) = local.first() {
++        let track_count = prep.info.axis(axis).map(|info| info.track_count).unwrap_or(1) as i16;
++        let mut phantoms = Vec::new();
++        let edge_tracks: &[i16] = if track_count == 1 { &[0] } else { &[0, track_count - 1] };
++        for &line in edge_tracks {
++            let mut phantom = first.virtual_copy(axis);
++            phantom.make_empty_spacer(axis);
++            let lines = Line { start: OriginZeroLine(line), end: OriginZeroLine(line + 1) };
++            let indexes = Line { start: 2 * line as u16, end: 2 * (line as u16 + 1) };
++            match axis {
++                AbstractAxis::Inline => {
++                    phantom.column = lines;
++                    phantom.column_indexes = indexes;
++                }
++                AbstractAxis::Block => {
++                    phantom.row = lines;
++                    phantom.row_indexes = indexes;
++                }
++            }
++            phantoms.push(phantom);
++        }
++        local.extend(phantoms);
++    }
++    {
++        for mut virtual_item in local {
++            translate(&mut virtual_item, axis, prep);
++            if virtual_item.area_override.is_none() {
++                if prep.axes.get(other) {
++                    translate(&mut virtual_item, other, prep);
++                } else {
++                    let indexes = match other {
++                        AbstractAxis::Inline => virtual_item.column_indexes,
++                        AbstractAxis::Block => virtual_item.row_indexes,
++                    };
++                    let sized = other == AbstractAxis::Inline && prep.columns_sized;
++                    virtual_item.area_override = Some(area_size(prep.tracks(other), indexes, sized));
++                }
++            }
++            out.push(virtual_item);
++        }
++    }
++    out
++}
++
++/// The virtual items of all the subgrids of a grid for its track sizing in `axis`, with their crossing flags
++/// computed against the grid's tracks
++pub(super) fn virtual_items<S: CheapCloneStr>(
++    preps: &[SubgridPrep<S>],
++    axis: AbstractAxis,
++    axis_tracks: &[GridTrack],
++) -> Vec<GridItem> {
++    let mut out = Vec::new();
++    for prep in preps {
++        out.extend(flatten(prep, axis));
++    }
++    for item in out.iter_mut() {
++        let range = item.track_range_excluding_lines(axis);
++        let flexible = axis_tracks[range.clone()].iter().any(|track| track.is_flexible());
++        let intrinsic = axis_tracks[range].iter().any(|track| track.has_intrinsic_sizing_function());
++        match axis {
++            AbstractAxis::Inline => {
++                item.crosses_flexible_column = flexible;
++                item.crosses_intrinsic_column = intrinsic;
++            }
++            AbstractAxis::Block => {
++                item.crosses_flexible_row = flexible;
++                item.crosses_intrinsic_row = intrinsic;
++            }
++        }
++    }
++    out
++}
++
++/// The sizes of the tracks spanning `indexes` and of the gutters between them: from their base sizes, or (when
++/// `from_offsets`, after track alignment) with each gutter measured between the tracks' offsets
++fn spanned_sizes(tracks: &[GridTrack], indexes: Line<u16>, from_offsets: bool) -> Vec<f32> {
++    let range = (indexes.start as usize + 1)..(indexes.end as usize);
++    let mut sizes = Vec::with_capacity(range.len());
++    for index in range.clone() {
++        let track = &tracks[index];
++        if track.kind == GridTrackKind::Gutter && from_offsets {
++            let previous = &tracks[index - 1];
++            let next = &tracks[index + 1];
++            sizes.push(f32_max(next.offset - (previous.offset + previous.base_size), 0.0));
++        } else {
++            sizes.push(track.base_size);
++        }
++    }
++    sizes
++}
++
++/// Record the sizes of a grid's tracks in `axis` in the information of the subgrids that span them
++pub(super) fn record_sizes<Tree: LayoutGridContainer>(
++    tree: &mut Tree,
++    preps: &mut [SubgridPrep<Tree::CustomIdent>],
++    axis: AbstractAxis,
++    axis_tracks: &[GridTrack],
++    from_offsets: bool,
++) {
++    for prep in preps.iter_mut() {
++        if !prep.axes.get(axis) {
++            continue;
++        }
++        let (_, indexes) = prep.placement(axis);
++        let sizes = spanned_sizes(axis_tracks, indexes, from_offsets);
++        let parent_gap = (sizes.len() > 1 && !from_offsets).then(|| sizes[1]);
++        if let Some(info) = prep.info.axis_mut(axis) {
++            info.sizes = Some(sizes);
++            if let Some(gap) = parent_gap {
++                info.parent_gap = gap;
++            }
++        }
++        tree.set_subgrid_info(prep.node, Some(prep.info.clone()));
++    }
++}
++
++/// Size the own columns of the subgrids whose rows are subgridded (and recursively of their subgrids), given
++/// the grid's sized columns: the area widths of their items in the rows are then known for the row sizing of
++/// the grid (the subgrid's width is its area's, as it is stretched)
++pub(super) fn prepass_columns<Tree: LayoutGridContainer>(
++    tree: &mut Tree,
++    preps: &mut [SubgridPrep<Tree::CustomIdent>],
++    columns: &[GridTrack],
++) {
++    for prep in preps.iter_mut() {
++        if !prep.axes.height {
++            continue;
++        }
++        let area = area_size(columns, prep.column_indexes, true).unwrap_or(0.0);
++        let sizes = prep.axes.width.then(|| spanned_sizes(columns, prep.column_indexes, false));
++        prepass_one(tree, prep, area, sizes);
++    }
++}
++
++/// `prepass_columns` for one subgrid whose column area is `area` wide (`sizes`: the spanned parent column sizes
++/// when its columns are subgridded)
++fn prepass_one<Tree: LayoutGridContainer>(
++    tree: &mut Tree,
++    prep: &mut SubgridPrep<Tree::CustomIdent>,
++    area: f32,
++    sizes: Option<Vec<f32>>,
++) {
++    if prep.axes.width {
++        if let Some(info) = prep.info.columns.as_ref() {
++            let mut info = info.clone();
++            info.sizes = sizes;
++            initialize_subgrid_tracks(
++                &mut prep.build.columns,
++                &info,
++                prep.geometry.track_gap(AbstractAxis::Inline),
++                (prep.geometry.edges.left, prep.geometry.edges.right),
++            );
++        }
++    } else {
++        let content_width = match prep.preferred_width {
++            Some(width) => f32_max(width - prep.padding_border_width, 0.0),
++            None => f32_max(area - prep.geometry.edges.horizontal_axis_sum(), 0.0),
++        };
++        let real_count = prep.build.items.len();
++        let mut virtual_columns = Vec::new();
++        for child in prep.children.iter() {
++            virtual_columns.extend(flatten(child, AbstractAxis::Inline));
++        }
++        prep.build.items.extend(virtual_columns);
++        for item in prep.build.items[real_count..].iter_mut() {
++            let range = item.track_range_excluding_lines(AbstractAxis::Inline);
++            item.crosses_flexible_column = prep.build.columns[range.clone()].iter().any(|t| t.is_flexible());
++            item.crosses_intrinsic_column =
++                prep.build.columns[range].iter().any(|t| t.has_intrinsic_sizing_function());
++        }
++        track_sizing_algorithm(
++            tree,
++            AbstractAxis::Inline,
++            None,
++            None,
++            prep.justify_content,
++            prep.align_content,
++            Size { width: AvailableSpace::Definite(content_width), height: AvailableSpace::MaxContent },
++            Size { width: Some(content_width), height: None },
++            &mut prep.build.columns,
++            &mut prep.build.rows,
++            &mut prep.build.items,
++            |track: &GridTrack, parent_size: Option<f32>, tree: &Tree| {
++                track.max_track_sizing_function.definite_value(parent_size, |val, basis| tree.calc(val, basis))
++            },
++            false,
++        );
++        prep.build.items.truncate(real_count);
++        // The intrinsic caches of the subgrid's items are only valid for this pass
++        for item in prep.build.items.iter_mut() {
++            item.grid_area_size_cache = None;
++            item.known_dimensions_cache = None;
++            item.min_content_contribution_cache = Size::NONE;
++            item.max_content_contribution_cache = Size::NONE;
++            item.minimum_contribution_cache = Size::NONE;
++        }
++    }
++    prep.columns_sized = true;
++
++    let columns = &prep.build.columns;
++    let mut child_inputs = Vec::with_capacity(prep.children.len());
++    for child in prep.children.iter() {
++        let child_area = area_size(columns, child.column_indexes, true).unwrap_or(0.0);
++        let child_sizes = child.axes.width.then(|| spanned_sizes(columns, child.column_indexes, false));
++        child_inputs.push((child_area, child_sizes));
++    }
++    for (child, (child_area, child_sizes)) in prep.children.iter_mut().zip(child_inputs) {
++        prepass_one(tree, child, child_area, child_sizes);
++    }
++}
++
++/// The virtual items of a grid's subgrids: those of one axis are in the grid's items (after its real items),
++/// those of the other axis wait here with their caches
++pub(super) struct VirtualItems {
++    /// The number of real items
++    real_count: usize,
++    /// The axis whose virtual items are in the grid's items
++    current: Option<AbstractAxis>,
++    /// The waiting virtual items (columns, rows)
++    store: [Vec<GridItem>; 2],
++}
++
++impl VirtualItems {
++    /// No virtual items yet
++    pub(super) fn new(real_count: usize) -> Self {
++        VirtualItems { real_count, current: None, store: [Vec::new(), Vec::new()] }
++    }
++
++    /// The store slot of an axis
++    fn slot(axis: AbstractAxis) -> usize {
++        match axis {
++            AbstractAxis::Inline => 0,
++            AbstractAxis::Block => 1,
++        }
++    }
++
++    /// Put the virtual items of `axis` in `items`, keeping the other axis's (with their caches) here
++    pub(super) fn swap_in(&mut self, items: &mut Vec<GridItem>, axis: AbstractAxis) {
++        if self.current == Some(axis) {
++            return;
++        }
++        let current: Vec<GridItem> = items.drain(self.real_count..).collect();
++        if let Some(current_axis) = self.current {
++            self.store[Self::slot(current_axis)] = current;
++        }
++        items.append(&mut self.store[Self::slot(axis)]);
++        self.current = Some(axis);
++    }
++
++    /// Replace the virtual items of `axis` with `fresh` ones and put them in `items`
++    pub(super) fn replace(&mut self, items: &mut Vec<GridItem>, axis: AbstractAxis, fresh: Vec<GridItem>) {
++        self.store[Self::slot(axis)] = fresh;
++        if self.current == Some(axis) {
++            items.truncate(self.real_count);
++            self.current = None;
++        }
++        self.swap_in(items, axis);
++    }
++
++    /// Remove the virtual items from `items` (before the items are positioned)
++    pub(super) fn remove(&mut self, items: &mut Vec<GridItem>) {
++        items.truncate(self.real_count);
++        self.current = None;
++    }
++}
+diff -ruN a/src/compute/grid/track_sizing.rs b/src/compute/grid/track_sizing.rs
+--- a/src/compute/grid/track_sizing.rs	2026-11-07 10:00:18.791763214 +0100
++++ b/src/compute/grid/track_sizing.rs	2026-11-07 10:00:18.799762959 +0100
+@@ -464,7 +464,7 @@
+     // Sort items by track in the other axis (row) start position so that we can iterate items in groups which
+     // are in the same track in the other axis (row)
+     let other_axis = axis.other();
+-    let mut items: Vec<&mut GridItem> = items.iter_mut().collect();
++    let mut items: Vec<&mut GridItem> = items.iter_mut().filter(|item| item.participates(axis)).collect();
+     items.sort_by_key(|item| item.placement(other_axis).start);
+ 
+     // Iterate over grid rows
+@@ -570,9 +570,14 @@
+     // Items that cross a flexible track are all processed together in a single batch (regardless of their span), so
+     // they only need to be moved to the end of the list. And the order in which items within a batch are processed
+     // does not affect the result, so the remaining items only need to be sorted if any of them span more than one track.
+-    let mut partitioned_items: FrontBackVecBuilder<&mut GridItem> = FrontBackVecBuilder::with_capacity(items.len());
++    let participating_count = items.iter().filter(|item| item.participates(axis)).count();
++    let mut partitioned_items: FrontBackVecBuilder<&mut GridItem> = FrontBackVecBuilder::with_capacity(participating_count);
+     let mut needs_sort = false;
+     for item in items.iter_mut() {
++        // ui4me P-008-4: subgrids in a subgridded axis and virtual items of the other axis do not take part
++        if !item.participates(axis) {
++            continue;
++        }
+         if item.crosses_flexible_track(axis) {
+             partitioned_items.push_back(item);
+         } else {
+@@ -1300,7 +1305,7 @@
+                 // that the item crosses and a space to fill of the item’s max-content contribution.
+                 items
+                     .iter_mut()
+-                    .filter(|item| item.crosses_flexible_track(axis))
++                    .filter(|item| item.crosses_flexible_track(axis) && item.participates(axis))
+                     .map(|item| {
+                         let max_content_contribution = item_sizer.max_content_contribution(item, axis_tracks);
+                         let tracks = &axis_tracks[item.track_range_excluding_lines(axis)];
+diff -ruN a/src/compute/grid/types/grid_item.rs b/src/compute/grid/types/grid_item.rs
+--- a/src/compute/grid/types/grid_item.rs	2026-11-07 10:00:18.775763725 +0100
++++ b/src/compute/grid/types/grid_item.rs	2026-11-07 10:00:18.799762959 +0100
+@@ -108,6 +108,22 @@
+     /// Out-of-flow candidates bubbled out of this item's subtree (anchors relative to the
+     /// container's border box)
+     pub oof_candidates: OofCandidates,
++
++    /// ui4me P-008-4 (CSS Grid 2 section 9): the axes (width = columns, height = rows) in which this item is a
++    /// subgrid. A subgrid does not take part in the track sizing of a subgridded axis (its own items do,
++    /// through virtual items) and is stretched in it.
++    pub subgrid_axes: Size<bool>,
++    /// ui4me P-008-4: `Some(axis)` for a virtual item: an item of a descendant subgrid that takes part in this
++    /// grid's track sizing in `axis` only (it is never positioned by this grid).
++    pub virtual_axis: Option<AbstractAxis>,
++    /// ui4me P-008-4: the size of a virtual item's area in the axis it does not take part in, when that axis is
++    /// not subgridded up to this grid (the area is then in the subgrid's own tracks).
++    pub area_override: Option<Option<f32>>,
++    /// ui4me P-008-4: an extra (possibly negative) margin of a virtual item: the subgrid's margin, border and
++    /// padding at its edges and half the difference between the subgrid's and the parent's gaps elsewhere.
++    pub extra_margin: Rect<f32>,
++    /// ui4me P-008-4: an empty virtual item that only carries a subgrid's edge margin, border and padding
++    pub spacer: bool,
+ }
+ 
+ impl GridItem {
+@@ -154,6 +170,117 @@
+             y_position: 0.0,
+             height: 0.0,
+             oof_candidates: OofCandidates::NONE,
++            subgrid_axes: Size { width: false, height: false },
++            virtual_axis: None,
++            area_override: None,
++            extra_margin: Rect::ZERO,
++            spacer: false,
++        }
++    }
++
++    /// ui4me P-008-4: whether the item takes part in the track sizing of `axis`
++    #[inline(always)]
++    pub fn participates(&self, axis: AbstractAxis) -> bool {
++        match self.virtual_axis {
++            Some(virtual_axis) => virtual_axis == axis,
++            None => !self.subgrid_axes.get(axis),
++        }
++    }
++
++    /// ui4me P-008-4: mark the item as a subgrid in `axes`. In a subgridded axis the subgrid is always
++    /// stretched: its self-alignment and its size constraints are ignored and its `auto` margins are zero.
++    pub fn mark_subgrid(&mut self, axes: Size<bool>) {
++        self.subgrid_axes = axes;
++        if axes.width {
++            self.size.width = Dimension::auto();
++            self.min_size.width = LengthPercentageAuto::auto();
++            self.max_size.width = LengthPercentageAuto::auto();
++            self.justify_self = AlignSelf::STRETCH;
++            if self.margin.left.is_auto() {
++                self.margin.left = LengthPercentageAuto::length(0.0);
++            }
++            if self.margin.right.is_auto() {
++                self.margin.right = LengthPercentageAuto::length(0.0);
++            }
++        }
++        if axes.height {
++            self.size.height = Dimension::auto();
++            self.min_size.height = LengthPercentageAuto::auto();
++            self.max_size.height = LengthPercentageAuto::auto();
++            self.align_self = AlignSelf::STRETCH;
++            if self.margin.top.is_auto() {
++                self.margin.top = LengthPercentageAuto::length(0.0);
++            }
++            if self.margin.bottom.is_auto() {
++                self.margin.bottom = LengthPercentageAuto::length(0.0);
++            }
++        }
++    }
++
++    /// ui4me P-008-4: turn a virtual item into an empty item whose contribution in `axis` is its extra margin
++    /// only (a subgrid's edge margin, border and padding where no item touches that edge)
++    pub fn make_empty_spacer(&mut self, axis: AbstractAxis) {
++        self.size.set(axis, Dimension::length(0.0));
++        self.min_size.set(axis, LengthPercentageAuto::auto());
++        self.max_size.set(axis, LengthPercentageAuto::auto());
++        self.padding = Rect::zero();
++        self.border = Rect::zero();
++        self.margin = Rect::zero();
++        self.aspect_ratio = None;
++        self.is_replaced = false;
++        self.is_compressible_replaced = false;
++        self.box_sizing = BoxSizing::BorderBox;
++        self.extra_margin = Rect::ZERO;
++        self.spacer = true;
++    }
++
++    /// ui4me P-008-4: a virtual copy of the item for the track sizing of an ancestor grid in `axis`
++    /// (placement, indexes and extra margins are then translated by the caller). Caches start empty.
++    pub fn virtual_copy(&self, axis: AbstractAxis) -> GridItem {
++        let mut align_self = self.align_self;
++        // Baseline alignment is resolved by the subgrid itself, not by the ancestor
++        if align_self.keyword == AlignItemsKeyword::Baseline {
++            align_self = AlignSelf::START;
++        }
++        GridItem {
++            node: self.node,
++            source_order: self.source_order,
++            row: self.row,
++            column: self.column,
++            is_compressible_replaced: self.is_compressible_replaced,
++            is_replaced: self.is_replaced,
++            overflow: self.overflow,
++            box_sizing: self.box_sizing,
++            size: self.size,
++            min_size: self.min_size,
++            max_size: self.max_size,
++            aspect_ratio: self.aspect_ratio,
++            padding: self.padding,
++            border: self.border,
++            margin: self.margin,
++            align_self,
++            justify_self: self.justify_self,
++            baseline: None,
++            baseline_shim: 0.0,
++            row_indexes: self.row_indexes,
++            column_indexes: self.column_indexes,
++            crosses_flexible_row: false,
++            crosses_flexible_column: false,
++            crosses_intrinsic_row: false,
++            crosses_intrinsic_column: false,
++            grid_area_size_cache: None,
++            known_dimensions_cache: None,
++            min_content_contribution_cache: Size::NONE,
++            minimum_contribution_cache: Size::NONE,
++            max_content_contribution_cache: Size::NONE,
++            y_position: 0.0,
++            height: 0.0,
++            oof_candidates: OofCandidates::NONE,
++            subgrid_axes: self.subgrid_axes,
++            virtual_axis: Some(axis),
++            area_override: self.area_override,
++            extra_margin: self.extra_margin,
++            spacer: self.spacer,
+         }
+     }
+ 
+@@ -479,6 +606,12 @@
+                 .sum::<Option<f32>>(),
+         );
+ 
++        // ui4me P-008-4: a virtual item whose other axis is not subgridded up to this grid
++        if let Some(area) = self.area_override {
++            size.set(axis.other(), area);
++            return size;
++        }
++
+         size.set(
+             axis.other(),
+             other_axis_tracks[self.track_range_excluding_lines(axis.other())]
+@@ -525,14 +658,19 @@
+         inner_node_width: Option<f32>,
+         tree: &impl LayoutPartialTree,
+     ) -> Size<f32> {
+-        Rect {
++        let margins = Rect {
+             left: self.margin.left.resolve_or_zero(Some(0.0), |val, basis| tree.calc(val, basis)),
+             right: self.margin.right.resolve_or_zero(Some(0.0), |val, basis| tree.calc(val, basis)),
+             top: self.margin.top.resolve_or_zero(inner_node_width, |val, basis| tree.calc(val, basis))
+                 + self.baseline_shim,
+             bottom: self.margin.bottom.resolve_or_zero(inner_node_width, |val, basis| tree.calc(val, basis)),
+         }
+-        .sum_axes()
++        .sum_axes();
++        // ui4me P-008-4: the extra margin of a virtual item (zero for every other item)
++        if self.virtual_axis.is_some() {
++            return margins + self.extra_margin.sum_axes();
++        }
++        margins
+     }
+ 
+     /// Compute the item's min content contribution from the provided parameters
+@@ -637,7 +775,11 @@
+         if available_space.width.is_none() && available_space.height.is_none() {
+             return available_space;
+         }
+-        let margin = self.margin.resolve_or_zero(grid_area_size.width, |val, basis| tree.calc(val, basis));
++        let mut margin = self.margin.resolve_or_zero(grid_area_size.width, |val, basis| tree.calc(val, basis));
++        // ui4me P-008-4: the extra margin of a virtual item
++        if self.virtual_axis.is_some() {
++            margin = margin + self.extra_margin;
++        }
+         Size {
+             width: available_space.width.map(|width| f32_max(width - margin.horizontal_axis_sum(), 0.0)),
+             height: available_space
+diff -ruN a/src/compute/grid/types/named.rs b/src/compute/grid/types/named.rs
+--- a/src/compute/grid/types/named.rs	2026-11-07 10:00:18.775763725 +0100
++++ b/src/compute/grid/types/named.rs	2026-11-07 10:00:18.799762959 +0100
+@@ -9,7 +9,7 @@
+ use super::{GridLine, OriginZeroLine, MAX_GRID_TRACKS};
+ use crate::geometry::AbsoluteAxis;
+ use crate::sys::DefaultCheapStr;
+-use crate::sys::{Map, Vec};
++use crate::sys::{Map, String, Vec};
+ use smallvec::{smallvec, SmallVec};
+ 
+ /// Wrap an `AsRef<str>` type with a type which implements Hash by first
+@@ -365,8 +365,15 @@
+             }
+         }
+ 
++        // ui4me P-008-4: the line names of a subgridded axis are added by `add_subgrid_line_names` (the
++        // `<line-name-list>` names lines, not tracks), and are ignored when the axis falls back to `none`
++        let column_tracks_with_names =
++            if style.is_subgrid(AbsoluteAxis::Horizontal) { None } else { style.grid_template_columns() };
++        let row_tracks_with_names =
++            if style.is_subgrid(AbsoluteAxis::Vertical) { None } else { style.grid_template_rows() };
++
+         let mut current_line = 0;
+-        if let Some(mut column_tracks) = style.grid_template_columns() {
++        if let Some(mut column_tracks) = column_tracks_with_names {
+             if let Some(column_line_names_iter) = style.grid_template_column_names() {
+                 for line_names in column_line_names_iter {
+                     current_line += 1;
+@@ -432,7 +439,7 @@
+         }
+ 
+         let mut current_line = 0;
+-        if let Some(mut row_tracks) = style.grid_template_rows() {
++        if let Some(mut row_tracks) = row_tracks_with_names {
+             if let Some(row_line_names_iter) = style.grid_template_row_names() {
+                 for line_names in row_line_names_iter {
+                     current_line += 1;
+@@ -598,6 +605,67 @@
+         self.areas
+     }
+ 
++    /// ui4me P-008-4: add the line names of a subgridded axis: `(1-based line, name)` pairs. `own` names (the
++    /// subgrid's `<line-name-list>`) are also reported in the detailed line names; inherited names (the
++    /// parent's names of the spanned lines, including its areas' implicit `-start` / `-end` names) are only
++    /// resolvable.
++    pub(crate) fn add_subgrid_line_names(&mut self, axis: AbsoluteAxis, names: &[(u32, S)], own: bool) {
++        let (map, pairs, area_axis) = match axis {
++            AbsoluteAxis::Horizontal => (&mut self.column_lines, &mut self.column_line_name_pairs, GridAreaAxis::Column),
++            AbsoluteAxis::Vertical => (&mut self.row_lines, &mut self.row_line_name_pairs, GridAreaAxis::Row),
++        };
++        for (line, name) in names {
++            if own {
++                pairs.push((*line, name.clone()));
++            }
++            upsert_line_name_map(map, &mut self.areas, area_axis, name.clone(), *line);
++        }
++        for lines in map.values_mut() {
++            lines.sort_unstable();
++            lines.dedup();
++        }
++    }
++
++    /// ui4me P-008-4: the names of the lines `start..=end` (origin-zero) in `axis`, as `(line - start + 1, name)`
++    /// pairs: the names a subgrid spanning those lines inherits (CSS Grid 2 section 9), including the implicit
++    /// `<area>-start` / `<area>-end` names of the areas of `grid-template-areas`.
++    pub(crate) fn line_names_in_range(&self, axis: AbsoluteAxis, start: i16, end: i16) -> Vec<(u32, S)> {
++        let (map, area_axis) = match axis {
++            AbsoluteAxis::Horizontal => (&self.column_lines, GridAreaAxis::Column),
++            AbsoluteAxis::Vertical => (&self.row_lines, GridAreaAxis::Row),
++        };
++        let local = |line: u32| -> Option<u32> {
++            let oz = line as i32 - 1;
++            (oz >= start as i32 && oz <= end as i32).then(|| (oz - start as i32 + 1) as u32)
++        };
++        let mut out: Vec<(u32, S)> = Vec::new();
++        for (name, lines) in map.iter() {
++            for line in lines.iter() {
++                if let Some(l) = local(*line) {
++                    out.push((l, name.0.clone()));
++                }
++            }
++        }
++        for (name, area) in self.areas.iter() {
++            for (end_kind, suffix) in [(GridAreaEnd::Start, "-start"), (GridAreaEnd::End, "-end")] {
++                if let Some(line) = area.line(area_axis, end_kind) {
++                    if *line == 0 {
++                        continue;
++                    }
++                    if let Some(l) = local(*line) {
++                        let mut edge_name = String::from(name.0.as_ref());
++                        edge_name.push_str(suffix);
++                        out.push((l, S::from(edge_name)));
++                    }
++                }
++            }
++        }
++        // Deterministic order (the maps are hash maps)
++        out.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.as_ref().cmp(b.1.as_ref())));
++        out.dedup_by(|a, b| a.0 == b.0 && a.1.as_ref() == b.1.as_ref());
++        out
++    }
++
+     /// Get the number of columns defined by the grid areas
+     pub(crate) fn area_column_count(&self) -> u16 {
+         self.area_column_count
+diff -ruN a/src/compute/mod.rs b/src/compute/mod.rs
+--- a/src/compute/mod.rs	2026-11-07 10:00:18.775763725 +0100
++++ b/src/compute/mod.rs	2026-11-07 10:00:18.799762959 +0100
+@@ -489,7 +489,7 @@
+ pub mod detailed_info {
+     #[cfg(feature = "grid")]
+     pub use super::grid::{
+-        DetailedGridInfo, DetailedGridItemsInfo, DetailedGridTracksInfo, GridLineNames, GridLineNamesIter,
++        DetailedGridInfo, DetailedGridItemsInfo, DetailedGridTracksInfo, GridLineNames, GridLineNamesIter, SubgridAxisInfo, SubgridInfo,
+     };
+ }
+ 
+diff -ruN a/src/style/grid.rs b/src/style/grid.rs
+--- a/src/style/grid.rs	2026-11-07 10:00:18.779763597 +0100
++++ b/src/style/grid.rs	2026-11-07 10:00:18.799762959 +0100
+@@ -250,6 +250,20 @@
+         Style::<Self::CustomIdent>::DEFAULT.justify_items
+     }
+ 
++    /// ui4me P-008-4: whether `grid-template-columns` (horizontal) or `grid-template-rows` (vertical) is
++    /// `subgrid` (CSS Grid 2 section 9). A subgridded axis takes its tracks from the parent grid when the
++    /// box is a grid item (see `LayoutGridContainer::subgrid_info`); otherwise it behaves as `none`.
++    #[inline(always)]
++    fn is_subgrid(&self, _axis: AbsoluteAxis) -> bool {
++        false
++    }
++    /// ui4me P-008-4: whether `column-gap` (width) / `row-gap` (height) is `normal`: a subgrid then uses
++    /// its parent's gap in that axis.
++    #[inline(always)]
++    fn gap_is_normal(&self) -> Size<bool> {
++        Size { width: false, height: false }
++    }
++
+     /// Get a grid item's row or column placement depending on the axis passed
+     #[inline(always)]
+     fn grid_template_tracks(&self, axis: AbsoluteAxis) -> Option<Self::TemplateTrackList<'_>> {
+@@ -300,6 +314,12 @@
+         Style::<Self::CustomIdent>::DEFAULT.justify_self
+     }
+ 
++    /// ui4me P-008-4: whether this item is a grid container whose tracks in `axis` are `subgrid`
++    #[inline(always)]
++    fn is_subgrid_item(&self, _axis: AbsoluteAxis) -> bool {
++        false
++    }
++
+     /// Get a grid item's row or column placement depending on the axis passed
+     #[inline(always)]
+     fn grid_placement(&self, axis: AbsoluteAxis) -> Line<GridPlacement<Self::CustomIdent>> {
+diff -ruN a/src/style/mod.rs b/src/style/mod.rs
+--- a/src/style/mod.rs	2026-11-07 10:00:18.779763597 +0100
++++ b/src/style/mod.rs	2026-11-07 10:00:18.799762959 +0100
+@@ -50,7 +50,7 @@
+ use core::fmt::Debug;
+ 
+ #[cfg(feature = "grid")]
+-use crate::geometry::Line;
++use crate::geometry::{AbsoluteAxis, Line};
+ #[cfg(feature = "serde")]
+ use crate::style_helpers;
+ #[cfg(feature = "grid")]
+@@ -861,6 +861,16 @@
+     /// The named lines between the rows
+     #[cfg(feature = "grid")]
+     pub grid_template_row_names: GridTrackVec<GridTrackVec<S>>,
++    /// ui4me P-008-4: `grid-template-columns: subgrid` (CSS Grid 2 section 9). The subgrid's own
++    /// `<line-name-list>` is `grid_template_column_names` and `grid_template_columns` is empty.
++    #[cfg(feature = "grid")]
++    pub grid_template_columns_subgrid: bool,
++    /// ui4me P-008-4: `grid-template-rows: subgrid` (names in `grid_template_row_names`)
++    #[cfg(feature = "grid")]
++    pub grid_template_rows_subgrid: bool,
++    /// ui4me P-008-4: whether `column-gap` / `row-gap` is `normal` (a subgrid then uses its parent's gap)
++    #[cfg(feature = "grid")]
++    pub gap_is_normal: Size<bool>,
+ 
+     // Grid child properties
+     /// Defines which row in the grid the item should start and end at
+@@ -938,6 +948,12 @@
+         #[cfg(feature = "grid")]
+         grid_template_row_names: GridTrackVec::new(),
+         #[cfg(feature = "grid")]
++        grid_template_columns_subgrid: false,
++        #[cfg(feature = "grid")]
++        grid_template_rows_subgrid: false,
++        #[cfg(feature = "grid")]
++        gap_is_normal: Size { width: false, height: false },
++        #[cfg(feature = "grid")]
+         grid_auto_rows: GridTrackVec::new(),
+         #[cfg(feature = "grid")]
+         grid_auto_columns: GridTrackVec::new(),
+@@ -1438,6 +1454,17 @@
+         self.gap
+     }
+     #[inline(always)]
++    fn is_subgrid(&self, axis: AbsoluteAxis) -> bool {
++        match axis {
++            AbsoluteAxis::Horizontal => self.grid_template_columns_subgrid,
++            AbsoluteAxis::Vertical => self.grid_template_rows_subgrid,
++        }
++    }
++    #[inline(always)]
++    fn gap_is_normal(&self) -> Size<bool> {
++        self.gap_is_normal
++    }
++    #[inline(always)]
+     fn align_content(&self) -> AlignContent {
+         self.align_content
+     }
+@@ -1560,6 +1587,14 @@
+         (*self).gap()
+     }
+     #[inline(always)]
++    fn is_subgrid(&self, axis: AbsoluteAxis) -> bool {
++        (*self).is_subgrid(axis)
++    }
++    #[inline(always)]
++    fn gap_is_normal(&self) -> Size<bool> {
++        (*self).gap_is_normal()
++    }
++    #[inline(always)]
+     fn align_content(&self) -> AlignContent {
+         (*self).align_content()
+     }
+@@ -1597,6 +1632,17 @@
+     fn justify_self(&self) -> Option<AlignSelf> {
+         self.justify_self
+     }
++    #[inline(always)]
++    fn is_subgrid_item(&self, axis: AbsoluteAxis) -> bool {
++        // A grid item that establishes an independent formatting context (layout or paint containment) is not
++        // a subgrid (CSS Grid 2 section 9.1)
++        self.display == Display::Grid
++            && !CoreStyle::contain(self).establishes_independent_formatting_context()
++            && match axis {
++                AbsoluteAxis::Horizontal => self.grid_template_columns_subgrid,
++                AbsoluteAxis::Vertical => self.grid_template_rows_subgrid,
++            }
++    }
+ }
+ 
+ #[cfg(feature = "grid")]
+@@ -1617,6 +1663,10 @@
+     fn justify_self(&self) -> Option<AlignSelf> {
+         (*self).justify_self()
+     }
++    #[inline(always)]
++    fn is_subgrid_item(&self, axis: AbsoluteAxis) -> bool {
++        (*self).is_subgrid_item(axis)
++    }
+ }
+ 
+ #[cfg(test)]
+@@ -1688,6 +1738,12 @@
+             #[cfg(feature = "grid")]
+             grid_template_row_names: Default::default(),
+             #[cfg(feature = "grid")]
++            grid_template_columns_subgrid: false,
++            #[cfg(feature = "grid")]
++            grid_template_rows_subgrid: false,
++            #[cfg(feature = "grid")]
++            gap_is_normal: Size { width: false, height: false },
++            #[cfg(feature = "grid")]
+             grid_template_column_names: Default::default(),
+             #[cfg(feature = "grid")]
+             grid_template_areas: Default::default(),
+diff -ruN a/src/tree/traits.rs b/src/tree/traits.rs
+--- a/src/tree/traits.rs	2026-11-07 10:00:18.795763087 +0100
++++ b/src/tree/traits.rs	2026-11-07 10:00:18.799762959 +0100
+@@ -139,7 +139,7 @@
+ use crate::{BlockContainerStyle, BlockContext, BlockItemStyle};
+ 
+ #[cfg(feature = "grid")]
+-use crate::compute::grid::DetailedGridInfo;
++use crate::compute::grid::{DetailedGridInfo, SubgridInfo};
+ 
+ /// Taffy's abstraction for downward tree traversal.
+ ///
+@@ -351,6 +351,18 @@
+     fn set_detailed_grid_info(&mut self, _node_id: NodeId, _detailed_grid_info: DetailedGridInfo<Self::CustomIdent>) {
+         debug_log!("LayoutGridContainer::set_detailed_grid_info called");
+     }
++
++    /// ui4me P-008-4: record what a grid recorded for one of its items that is a subgrid (CSS Grid 2 section 9),
++    /// or `None`. The grid algorithm of the subgrid reads it back with [`LayoutGridContainer::subgrid_info`].
++    ///
++    /// Implementing this method (with `subgrid_info`) is optional: without it every subgridded axis behaves as
++    /// `none`. An implementation that caches layouts must clear the node's cache when the information changes.
++    fn set_subgrid_info(&mut self, _node_id: NodeId, _info: Option<SubgridInfo<Self::CustomIdent>>) {}
++
++    /// ui4me P-008-4: the information last recorded with [`LayoutGridContainer::set_subgrid_info`]
++    fn subgrid_info(&self, _node_id: NodeId) -> Option<SubgridInfo<Self::CustomIdent>> {
++        None
++    }
+ }
+ 
+ #[cfg(feature = "block_layout")]

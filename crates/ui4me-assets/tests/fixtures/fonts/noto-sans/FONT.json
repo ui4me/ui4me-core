@@ -1,0 +1,20 @@
+{
+  "fonts": [
+    {
+      "bytes": 512672,
+      "family": "Noto Sans",
+      "file": "NotoSans-Regular.ttf",
+      "full_name": "Noto Sans Regular",
+      "postscript_name": "NotoSans-Regular",
+      "sha256": "89c3c497f618fdaa0b2d1e98fef93582f28c71debd2c4a8cdf41f190ced2909d",
+      "subfamily": "Regular",
+      "version_string": "Version 2.004; ttfautohint (v1.8.3) -l 8 -r 50 -G 200 -x 14 -D latn -f none -a qsq -X \"\""
+    }
+  ],
+  "licence": "OFL-1.1",
+  "licence_file": "OFL.txt",
+  "licence_sha256": "6c09752e18a03c31a892ae5896858c7ba1afda5db39e274f8f703f86116e9b14",
+  "schema_version": 1,
+  "source": "Debian/Ubuntu package fonts-noto-core (/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf); upstream https://github.com/googlei18n/noto-fonts",
+  "test_only": true
+}

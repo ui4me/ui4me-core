@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>UI4ME desktop workspace</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body id="workspace" class="dark">
+  <header class="topbar">
+    <img src="mark.svg" width="36" height="36" alt="UI4ME">
+    <div><strong>Desktop workspace</strong><p class="muted">HTML · CSS · Python</p></div>
+    <span class="spacer"></span>
+    <button id="theme" class="secondary" type="button">Change palette</button>
+    <button id="quit" class="secondary" type="button">Quit</button>
+  </header>
+  <main class="layout">
+    <aside class="sidebar">
+      <p class="eyebrow">YOUR WORKSPACE</p>
+      <h1>A small native application.</h1>
+      <p class="muted">Edit a field, add an item, or open another document. The interface comes from local files.</p>
+      <img class="landscape" src="landscape.png" alt="Blue mountain illustration">
+      <button id="second-window" class="secondary wide" type="button">Open second window</button>
+      <button id="choose-file" class="secondary wide" type="button">Choose a file</button>
+      <button id="show-dialog" class="secondary wide" type="button">About this workspace</button>
+      <button id="show-popover" class="secondary wide" type="button">Quick help</button>
+      <details id="more"><summary>About this application</summary><p>Python handles the buttons. Rust handles document layout, input, rendering and the operating system.</p></details>
+      <p class="muted small">Unicode sample: Příliš žluťoučký kůň · 日本語 · 😀</p>
+    </aside>
+    <section class="content">
+      <div class="heading"><div><p class="eyebrow">LOCAL DOCUMENT</p><h2>New item</h2></div><span class="badge"><span class="pulse"></span> Ready</span></div>
+      <form id="entry-form" class="card">
+        <div class="form-grid">
+          <label class="field">Name<input id="name" type="text" value="A useful desktop tool" placeholder="Name your item" required></label>
+          <label class="field">Priority<select id="priority"><option value="Normal">Normal</option><option value="High">High</option><option value="Low">Low</option></select></label>
+          <label class="field full">Notes<textarea id="notes" rows="3" placeholder="Try selection, clipboard, or your input method."></textarea></label>
+          <label class="field">Estimate<input id="estimate" type="number" min="1" max="100" value="3"></label>
+          <label class="field">Progress<input id="progress" type="range" min="0" max="100" value="35"></label>
+          <label class="check"><input id="notify" type="checkbox" checked> Include notification flag</label>
+          <div class="radio-group"><label><input id="personal" name="kind" type="radio" value="personal" checked> Personal</label><label><input id="work" name="kind" type="radio" value="work"> Work</label></div>
+          <label class="field full">Attachment<input id="attachment" type="file" accept=".txt,.md,.html"></label>
+        </div>
+        <div class="form-footer"><p class="muted">Preview: <span id="name-preview">A useful desktop tool</span></p><button id="add-row" type="button">Add row</button></div>
+      </form>
+      <section class="card items"><div class="heading"><h2>Items</h2><span class="badge"><span id="row-count">2</span> rows</span></div>
+        <div id="table-scroll" class="table-scroll"><table><thead><tr><th>#</th><th>Name</th><th>Priority</th><th>Flag</th></tr></thead><tbody id="rows"><tr id="row-1"><td>01</td><td>Load HTML and a stylesheet</td><td>Normal</td><td>Yes</td></tr><tr id="row-2"><td>02</td><td>Connect an application callback</td><td>High</td><td>Yes</td></tr></tbody></table></div>
+      </section>
+      <p id="status" class="status" role="status">Ready. Your changes stay in this application.</p>
+    </section>
+  </main>
+  <dialog id="about-dialog"><h2>A local desktop document</h2><p>The application window and lifecycle belong to Rust. The interface comes from HTML and CSS; Python handles application actions.</p><button id="close-dialog" type="button">Close</button></dialog>
+  <div id="help-popover" popover="auto"><h2>Try the form</h2><p>Enter a name, select a priority, then choose Add row. Press Escape to dismiss this help.</p></div>
+</body>
+</html>

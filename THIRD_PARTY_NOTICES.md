@@ -37,7 +37,8 @@ writing system.
 ## Distribution
 
 Source dependencies are downloaded by Cargo rather than vendored into this
-archive, with three exceptions documented in third_party/README.md, each the
+archive, with host exceptions documented in third_party/README.md and the renderer
+source trees documented in patches/README.md, each the
 exact pinned package with a minimal patch: winit-wayland 0.31.0-beta.4
 (Apache-2.0; clipboard MIME types), softbuffer 0.4.8 (MIT OR Apache-2.0;
 non-blocking Wayland buffers) and accesskit_atspi_common 0.21.1 (MIT OR
@@ -46,3 +47,30 @@ licenses are retained. Preserve their required notices when distributing compile
 The included font notice must accompany copies of that font. This source
 repository does not itself constitute a published binary product or app store
 submission.
+
+## Migrated renderer
+
+The following source/runtime components are now also used. Cargo.lock and
+workspace manifests specify exact versions and sources; their upstream license
+declarations and included notices govern those components.
+
+| Component | Role | Source/license reference |
+| --- | --- | --- |
+| html5ever / markup5ever | HTML parsing | Servo projects; crate manifests/notices |
+| Stylo / selectors | CSS parser, cascade and selectors | `patches/stylo`, predominantly MPL-2.0 |
+| Taffy | Layout primitives and algorithms | `patches/taffy`, MIT |
+| Parley / Fontique / HarfRust / Skrifa | Shaping, font selection and outlines | Linebender projects; crate manifests/notices |
+| Vello CPU / peniko / kurbo | CPU paint and geometry | Linebender projects; crate manifests/notices |
+| image / usvg / resvg | Local raster and static SVG resources | image-rs and svg projects; crate manifests/notices |
+
+The renderer also carries a Noto Sans last-resort font and test/example fonts
+with their OFL notices, hyphenation data at
+`crates/ui4me-renderer/src/text/data/hyphenation/NOTICES.txt`, UA stylesheet
+provenance at `crates/ui4me-renderer/src/style/ua/PROVENANCE.md`, and parser test
+fixtures with their WPT notice. These data notices are preserved in the source
+archive. The example's `@font-face` font has its own adjacent FONT-LICENSE.txt.
+
+The root MIT license describes original UI4ME code; it does not relicense the
+carried Stylo, Taffy, font or other third-party source/data. The source of the
+carried modifications is included here. Retain applicable source and notices
+when packaging downstream binary distributions.

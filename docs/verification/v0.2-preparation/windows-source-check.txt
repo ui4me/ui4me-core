@@ -1,0 +1,14 @@
+Windows Rust source/type/lint check only.
+Mirrored repository workspace, library/executable/unit/integration-test/example sources; same dependency features, patches and lockfile. Only host build.rs disabled.
+NOT VERIFIED: Windows host resources, executable linking, native execution, RDP, named-pipe security or Job Object runtime behavior.
+Recorded UTC: 2026-11-12T15:43:10.027994+00:00
+Cargo.lock SHA-256: 0ec7039e29cb0c85ac919d68bb123ae57dca20028cb1d9e0011f346fb88d68d6
+
+$ cargo clippy --locked --workspace --target x86_64-pc-windows-msvc --all-targets -j 2 --offline -- -D warnings
+
+    Checking ui4me-renderer v0.2.0 (/workspace/scratch/3c4bbc64a9f5/ui4me-core/.local/windows-source-workspace/crates/ui4me-renderer)
+    Checking ui4me-host v0.2.0 (/workspace/scratch/3c4bbc64a9f5/ui4me-core/.local/windows-source-workspace/crates/ui4me-host)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.85s
+
+Exit code: 0
+Result: PASS

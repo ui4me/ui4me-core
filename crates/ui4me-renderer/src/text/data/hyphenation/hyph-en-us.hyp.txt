@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: LicenseRef-hyph-en-us-all-permissive
+# Ported-From: https://github.com/hyphenation/tex-hyphen@5684c0f51c0b81133db2efbe60a408b4155a3ff5:hyph-utf8/tex/generic/hyph-utf8/patterns/txt/hyph-en-us.hyp.txt
+# Modifications: none to the patterns (these three comment lines added); licences in NOTICES.txt
+as-so-ciate
+as-so-ciates
+dec-li-na-tion
+oblig-a-tory
+phil-an-thropic
+present
+presents
+project
+projects
+reci-procity
+re-cog-ni-zance
+ref-or-ma-tion
+ret-ri-bu-tion
+ta-ble

@@ -1,0 +1,4 @@
+$ cargo clippy --locked --workspace --all-targets -- -D warnings
+    Checking ui4me-renderer v0.2.0 (/workspace/scratch/3c4bbc64a9f5/ui4me-core/crates/ui4me-renderer)
+    Checking ui4me-host v0.2.0 (/workspace/scratch/3c4bbc64a9f5/ui4me-core/crates/ui4me-host)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 15.92s

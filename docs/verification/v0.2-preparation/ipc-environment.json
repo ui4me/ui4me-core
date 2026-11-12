@@ -1,0 +1,6 @@
+{
+  "unix_socket_bind": "BLOCKED",
+  "errno": 1,
+  "error": "[Errno 1] Operation not permitted",
+  "scope": "Current preparation container; not a UI4ME application test"
+}

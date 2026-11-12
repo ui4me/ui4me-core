@@ -1,20 +1,37 @@
 #!/usr/bin/env python3
-"""Type/lint check the actual Windows Rust sources from a non-Windows host.
+"""Check Windows Rust sources from another OS, omitting only host SDK resources.
 
-This deliberately omits build.rs/resource compilation and cannot qualify a
-Windows executable. Native Windows verification must use the real workspace.
+The complete source workspace is mirrored into a stable generated directory. Only the
+host package's build.rs is disabled, because it needs the Windows resource SDK.
+All engine crates, patches, features and the lockfile remain the supplied ones.
+This is a source/type/lint check, never Windows native qualification.
 """
 import argparse
-import json
+from datetime import datetime, timezone
+import hashlib
 import os
 from pathlib import Path
 import re
 import shutil
 import subprocess
-import tempfile
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
+EXCLUDED = {"target", ".git", "verification", "evidence", ".local", "dist", "__pycache__", ".venv", ".ssh"}
+
+
+def source_copy(source: Path, destination: Path) -> None:
+    def ignore(_directory, names):
+        return [name for name in names if name in EXCLUDED or name.startswith(".env")
+                or name.endswith((".pyc", ".log", ".credentials.json", ".local.json", ".secret", ".pem", ".key"))]
+    shutil.copytree(source, destination, ignore=ignore)
+    manifest = destination / "crates/ui4me-host/Cargo.toml"
+    text = manifest.read_text(encoding="utf-8")
+    if re.search(r'(?m)^build\s*=', text):
+        text = re.sub(r'(?m)^build\s*=.*$', "build = false", text)
+    else:
+        text = text.replace("[package]", "[package]\nbuild = false", 1)
+    manifest.write_text(text, encoding="utf-8")
 
 
 def main():
@@ -25,56 +42,59 @@ def main():
     parser.add_argument("--output", type=Path, default=ROOT / "verification/windows-source-check.txt")
     args = parser.parse_args()
     if os.name == "nt":
-        parser.error("On Windows, run the actual workspace's tools/verify.py and native acceptance.")
+        parser.error("On Windows, use the actual workspace's tools/verify.py and native acceptance.")
     if args.jobs < 1:
         parser.error("--jobs must be positive")
-    crate = ROOT / "crates/ui4me-host"
-    workspace = tomllib.loads((ROOT / "Cargo.toml").read_text())["workspace"]["package"]
-    source = (crate / "Cargo.toml").read_text()
-    source = re.sub(r'^build\s*=\s*".*"\s*$', "", source, flags=re.M)
-    for key in ("version", "edition", "rust-version", "license"):
-        source = re.sub(r"(?m)^" + re.escape(key) + r"\.workspace\s*=\s*true\s*$",
-                        lambda _: key + " = " + json.dumps(workspace[key]), source)
-    source = re.sub(r"(?ms)^\[lib\]\n.*?(?=^\[|\Z)",
-                    lambda _: '[lib]\nname = "ui4me_host"\npath = '
-                    + json.dumps(str(crate / "src/lib.rs")) + "\n\n", source)
-    source = source.replace('path = "src/main.rs"',
-                            "path = " + json.dumps(str(crate / "src/main.rs")))
-    for folder, kind in (("tests", "test"), ("examples", "example")):
-        for path in sorted((crate / folder).glob("*.rs")):
-            source += f"\n[[{kind}]]\nname = {json.dumps(path.stem)}\npath = {json.dumps(str(path))}\n"
-    # Explicit workspace prevents any accidental parent workspace inheritance.
-    source += "\n[workspace]\n"
-    # Keep the workspace's vendored dependency patches so the lockfile matches.
-    for name, spec in tomllib.loads((ROOT / "Cargo.toml").read_text()).get("patch", {}).get("crates-io", {}).items():
-        if not source.endswith("[patch.crates-io]\n") and "[patch.crates-io]" not in source:
-            source += "\n[patch.crates-io]\n"
-        source += f"{name} = {{ path = {json.dumps(str((ROOT / spec['path']).resolve()))} }}\n"
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="ui4me-windows-source-") as temporary:
-        directory = Path(temporary)
-        (directory / "Cargo.toml").write_text(source)
-        shutil.copy2(ROOT / "Cargo.lock", directory / "Cargo.lock")
-        command = ["cargo", "clippy", "--locked", "--target", "x86_64-pc-windows-msvc",
-                   "--all-targets", "-j", str(args.jobs)]
-        if args.offline:
-            command.append("--offline")
-        command += ["--", "-D", "warnings"]
-        env = os.environ.copy()
-        env["RUSTUP_TOOLCHAIN"] = tomllib.loads((ROOT / "rust-toolchain.toml").read_text())["toolchain"]["channel"]
-        env["CARGO_TARGET_DIR"] = str(args.target_dir.resolve())
+    command = ["cargo", "clippy", "--locked", "--workspace", "--target", "x86_64-pc-windows-msvc",
+               "--all-targets", "-j", str(args.jobs)]
+    if args.offline:
+        command.append("--offline")
+    command += ["--", "-D", "warnings"]
+    env = os.environ.copy()
+    env["RUSTUP_TOOLCHAIN"] = tomllib.loads((ROOT / "rust-toolchain.toml").read_text())["toolchain"]["channel"]
+    env["CARGO_TARGET_DIR"] = str(args.target_dir.resolve())
+    # Cargo includes absolute source paths in dependency fingerprints. A new
+    # temporary directory would rebuild the entire style engine every time.
+    # The generated mirror has one stable path and a kernel-held process lock;
+    # an interrupted checker releases its lock automatically.
+    import fcntl
+    generated = ROOT / ".local"
+    generated.mkdir(exist_ok=True)
+    directory = generated / "windows-source-workspace"
+    marker = directory / ".ui4me-generated-source-mirror"
+    owner = generated / "windows-source-workspace.owner"
+    ownership = "UI4ME Windows source mirror v1\n"
+    with (generated / "windows-source-check.lock").open("a+b") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            parser.exit(2, "Another Windows source check owns the generated mirror; wait for it to finish.\n")
+        if directory.exists():
+            if not marker.is_file() and (not owner.is_file() or owner.read_text(encoding="utf-8") != ownership):
+                parser.exit(2, f"Refusing to replace unowned directory: {directory}\n")
+        # The ownership record lives outside the mirror so a killed copy can be
+        # safely resumed; it does not turn an already-existing unknown directory
+        # into ours because the ownership check above precedes this write.
+        owner.write_text(ownership, encoding="utf-8")
+        if directory.exists():
+            shutil.rmtree(directory)
+        source_copy(ROOT, directory)
+        marker.write_text("Generated by tools/windows_source_check.py. No user files belong here.\n", encoding="utf-8")
         result = subprocess.run(command, cwd=directory, env=env,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     notice = (
         "Windows Rust source/type/lint check only.\n"
-        "Actual repository lib, executable, unit/integration-test and example sources; "
-        "same dependency features and lockfile.\n"
-        "NOT VERIFIED: build.rs, Windows resources, executable linking, native execution, "
-        "RDP, named-pipe security or Job Object runtime behavior.\n\n"
+        "Mirrored repository workspace, library/executable/unit/integration-test/example sources; "
+        "same dependency features, patches and lockfile. Only host build.rs disabled.\n"
+        "NOT VERIFIED: Windows host resources, executable linking, native execution, "
+        "RDP, named-pipe security or Job Object runtime behavior.\n"
+        f"Recorded UTC: {datetime.now(timezone.utc).isoformat()}\n"
+        f"Cargo.lock SHA-256: {hashlib.sha256((ROOT / 'Cargo.lock').read_bytes()).hexdigest()}\n\n"
     )
     args.output.write_text(notice + "$ " + " ".join(command) + "\n\n" + result.stdout
                            + f"\nExit code: {result.returncode}\nResult: "
-                           + ("PASS" if result.returncode == 0 else "FAIL") + "\n")
+                           + ("PASS" if result.returncode == 0 else "FAIL") + "\n", encoding="utf-8")
     print(result.stdout, end="")
     print(notice + "Report: " + str(args.output))
     return result.returncode
