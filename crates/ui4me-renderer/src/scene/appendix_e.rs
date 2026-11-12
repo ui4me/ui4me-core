@@ -654,7 +654,7 @@ impl Builder {
         let content = self.content_scope(b, scope);
         let saved_clip = self.narrow_hit_clip(b);
         self.children(b, &mut ctx, content);
-        self.paint_replaced(b, &mut ctx.inline, content);
+        self.paint_replaced(b, &mut ctx.inline, content, scope);
         self.hit_shapes = saved_clip;
         if !is_root {
             self.scrollbar_hits(b, &mut ctx.regions.overlay);
@@ -686,13 +686,28 @@ impl Builder {
         ctx
     }
 
-    /// The picture of a replaced element (step 7: foreground content of the box).
-    fn paint_replaced(&mut self, b: &PaintBox, out: &mut Vec<Pending>, scope: Option<ScopeId>) {
+    /// The picture of a replaced element (step 7: foreground content of the box). `scope` is the
+    /// box's content scope (its overflow clip); `box_scope` is the scope of the box itself.
+    fn paint_replaced(
+        &mut self,
+        b: &PaintBox,
+        out: &mut Vec<Pending>,
+        scope: Option<ScopeId>,
+        box_scope: Option<ScopeId>,
+    ) {
         if let Some(m) = &b.extras.marker_symbol {
             replaced::push_marker_symbol(b.node, m, out, scope);
         }
         if let Some(c) = &b.extras.control {
-            controls::push_foreground(b, c, out, scope);
+            // A drop-down's chevron lies in the right padding, outside the control's content-box
+            // clip (`clip_content_box`); clipping it there would leave a sliver whenever the author
+            // padding is wider than the chevron's inset.
+            let parts = if c.facts.kind == crate::scene::inputs::ControlKind::Select {
+                box_scope
+            } else {
+                scope
+            };
+            controls::push_foreground(b, c, out, parts);
         }
         if b.extras.replaced.is_none() {
             return;
@@ -848,7 +863,7 @@ impl Builder {
             let content = self.content_scope(c, scope);
             let saved_clip = self.narrow_hit_clip(c);
             self.children(c, ctx, content);
-            self.paint_replaced(c, &mut ctx.inline, content);
+            self.paint_replaced(c, &mut ctx.inline, content, scope);
             self.hit_shapes = saved_clip;
             self.scrollbar_hits(c, &mut ctx.regions.overlay);
             crate::scene::paint::scrollbar::push(c, &mut ctx.outline, scope);

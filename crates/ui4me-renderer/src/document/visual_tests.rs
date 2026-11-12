@@ -385,3 +385,27 @@ fn visual_profile_rows_and_reason_codes() {
     );
     assert!(reported("corner-shape:bevel").contains(&"css.property.corner-shape".into()));
 }
+
+/// The closed drop-down chevron sits in the right padding of a `select`, which lies outside the
+/// control's content-box clip. With author padding wider than the chevron's inset it must still
+/// paint whole (the local reference application uses 11px padding).
+#[test]
+fn select_chevron_paints_outside_the_content_clip() {
+    let dark = |p: u32| [16, 8, 0].iter().all(|s| ((p >> s) & 255) < 200);
+    for padding in [2, 11, 16] {
+        let (_d, px) = page(&format!(
+            "<select style=\"position:absolute;left:0;top:0;box-sizing:border-box;width:160px;height:40px;\
+             padding:6px {padding}px;border:1px solid #888;background:#fff;color:#000\">\
+             <option>Normal</option></select>"
+        ));
+        // The chevron spans about 8px around x = 150 (border-box right minus 10) and y = 20.
+        let inked = (140..=158)
+            .flat_map(|x| (14..=26).map(move |y| (x, y)))
+            .filter(|&(x, y)| dark(at(&px, x, y)))
+            .count();
+        assert!(
+            inked >= 12,
+            "padding {padding}px: only {inked} chevron pixels painted"
+        );
+    }
+}

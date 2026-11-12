@@ -67,6 +67,27 @@ patch about 3.8 KiB per cycle. The remainder is zbus 5.19 keeping the empty
 intermediate object-path node `/org/a11y/atspi/accessible/<adapter>` and its child
 map; zbus exposes no API to prune it, so it is recorded as a residual limit.
 
+## winit-win32 0.31.0-beta.4
+
+`winit-win32-0.31.0-beta.4/` is the exact crates.io package pinned by
+`Cargo.lock` (package SHA-256
+`cf3b2326760dad4a8fe721a8c8a40fd4f7efb338ef468f340794ea1efcd5261e`), added during
+0.2 qualification. Its only change is in `src/window.rs`, `request_ime_update`.
+
+Upstream updates the window state and then calls `ImmAssociateContextEx`
+(through `ImeContext::set_ime_allowed`) while still holding the window-state
+mutex. When a Text Services Framework composition is active, dissociating or
+associating the input context makes TSF complete the composition synchronously
+and send `WM_IME_COMPOSITION`/`WM_IME_ENDCOMPOSITION` to the same window
+procedure, whose handlers lock that mutex: the GUI thread deadlocked
+(`Mutex::lock_contended` under `CtfImmGenerateMessage`). Reproduced on Windows
+Server 2022 with Microsoft Pinyin on 2026-11-12 by moving focus to another field
+during a composition (mouse click, Tab or UI Automation `SetFocus`). The patch
+copies what it needs, releases the mutex, and only then calls into IMM.
+
+Drop this patch when an upstream release no longer holds the window state across
+IMM calls. Licensed Apache-2.0 (LICENSE).
+
 ## Version 0.2 merge of renderer accessibility behavior
 
 The 0.2 tree preserves the qualified `adapter.rs` teardown patch above and also

@@ -115,6 +115,26 @@ pub struct States {
     pub read_only: bool,
     pub modal: bool,
     pub multiselectable: bool,
+    /// Live-region politeness: explicit `aria-live`, else the role's implicit value (`status` and
+    /// `log` polite, `alert` assertive). Descendants inherit it in AccessKit.
+    #[serde(skip_serializing_if = "LivePoliteness::is_off")]
+    pub live: LivePoliteness,
+}
+
+/// Live-region politeness of a node (ARIA `aria-live`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LivePoliteness {
+    #[default]
+    Off,
+    Polite,
+    Assertive,
+}
+
+impl LivePoliteness {
+    fn is_off(&self) -> bool {
+        *self == LivePoliteness::Off
+    }
 }
 
 /// What an assistive technology may ask a node to do (013 actions.md §1, beta subset).
@@ -460,6 +480,11 @@ fn ak_node(n: &A11yNode, scale: f64) -> Node {
     }
     if s.multiselectable {
         a.set_multiselectable();
+    }
+    match s.live {
+        LivePoliteness::Off => {}
+        LivePoliteness::Polite => a.set_live(accesskit::Live::Polite),
+        LivePoliteness::Assertive => a.set_live(accesskit::Live::Assertive),
     }
     for act in &n.actions {
         a.add_action(act.to_accesskit());

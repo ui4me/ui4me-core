@@ -282,6 +282,44 @@ impl AnimationEngine {
         }
     }
 
+    /// The connected elements (not pseudo-elements) with a CSS animation that is still in force.
+    pub(crate) fn elements_with_css_animations(&self, doc: &Document) -> Vec<NodeId> {
+        self.set
+            .sets
+            .read()
+            .iter()
+            .filter(|(k, set)| {
+                k.pseudo_element.is_none()
+                    && set.animations.iter().any(|a| {
+                        !matches!(a.state, AnimationState::Canceled | AnimationState::Finished)
+                    })
+            })
+            .filter_map(|(k, _)| resolve(doc, k))
+            .collect()
+    }
+
+    /// Cancel the CSS animations of `node` whose name is not in `names` (its `animation-name` in
+    /// force); returns whether any was cancelled.
+    pub(crate) fn cancel_unlisted(&mut self, node: NodeId, names: &[String]) -> bool {
+        let key = key_of(node, None);
+        let mut sets = self.set.sets.write();
+        let Some(set) = sets.get_mut(&key) else {
+            return false;
+        };
+        let mut any = false;
+        for a in set.animations.iter_mut().filter(|a| {
+            !matches!(a.state, AnimationState::Canceled | AnimationState::Finished)
+                && !names.iter().any(|n| n.as_str() == &*a.name.to_string())
+        }) {
+            a.state = AnimationState::Canceled;
+            any = true;
+        }
+        if any {
+            set.dirty = true;
+        }
+        any
+    }
+
     /// Discard the sets of `nodes` (a re-inserted subtree starts afresh), with no events.
     pub(crate) fn discard_nodes(&self, nodes: &[NodeId]) {
         let mut sets = self.set.sets.write();
@@ -664,6 +702,30 @@ impl StyleBridge {
         let nodes = self.anim.cancel_infinite(doc);
         for &node in &nodes {
             self.add_hint(doc, node, RestyleHint::RECASCADE_SELF);
+        }
+        nodes
+    }
+
+    /// After a rebuild with a fresh stylist (an environment change such as
+    /// `prefers-reduced-motion`), the adopted animations were never compared with a previous
+    /// style, so an animation that the new rules remove would keep running. Cancel every CSS
+    /// animation whose name the element's `animation-name` in force no longer lists; returns the
+    /// affected elements, marked for re-sampling.
+    pub fn cancel_unstyled_animations(&mut self, doc: &Document) -> Vec<NodeId> {
+        let mut nodes = Vec::new();
+        for node in self.anim.elements_with_css_animations(doc) {
+            let Ok(list) = self.computed_value(doc, node, "animation-name") else {
+                continue;
+            };
+            let names: Vec<String> = list
+                .split(',')
+                .map(|n| n.trim().trim_matches('"').trim_matches('\'').to_owned())
+                .filter(|n| !n.is_empty() && n != "none")
+                .collect();
+            if self.anim.cancel_unlisted(node, &names) {
+                self.add_hint(doc, node, RestyleHint::RECASCADE_SELF);
+                nodes.push(node);
+            }
         }
         nodes
     }

@@ -464,3 +464,56 @@ fn timing_functions_steps_cubic_bezier_and_linear() {
     let piecewise = width_at("linear(0, 0.1 50%, 1)", 496);
     assert!((8..=12).contains(&piecewise), "{piecewise}");
 }
+
+/// An infinite keyframe animation removed by `prefers-reduced-motion: reduce` must stop asking
+/// for frames once the preference is applied; otherwise an idle window keeps repainting (the
+/// reference application's status pulse cost a third of a core with motion reduced).
+#[test]
+fn reduced_motion_media_query_stops_animation_wakeups() {
+    const CSS: &str = "#p{display:inline-block;width:6px;height:6px;background:#0a0;\
+         animation:pulse 2s ease-in-out infinite}\
+         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}\
+         @media (prefers-reduced-motion: reduce){#p{animation:none}}";
+    for manual in [true, false] {
+        let mut d = Document::parse(&format!(
+            "<!doctype html><style>body{{margin:0;background:#fff}}{CSS}</style><span id=p></span>"
+        ))
+        .unwrap();
+        if manual {
+            d.use_manual_clock();
+        }
+        d.render(W as u32, 80, 1.0).unwrap();
+        assert!(
+            d.next_wake_in().is_some(),
+            "manual={manual}: the pulse animates"
+        );
+        // An unrelated environment change also rebuilds the stylist; the listed animation
+        // must survive it.
+        assert!(d.set_app_environment(Some(Some(true)), None).unwrap());
+        d.render(W as u32, 80, 1.0).unwrap();
+        assert!(
+            d.next_wake_in().is_some(),
+            "manual={manual}: a dark-mode change keeps the pulse"
+        );
+        assert!(d.set_app_environment(None, Some(Some(true))).unwrap());
+        for _ in 0..3 {
+            if manual {
+                d.advance_clock(16.0).unwrap();
+            }
+            d.render(W as u32, 80, 1.0).unwrap();
+            d.drain_events();
+        }
+        assert_eq!(
+            d.next_wake_in(),
+            None,
+            "manual={manual}: no animation remains after reduced motion"
+        );
+        assert!(!d.needs_repaint(), "manual={manual}: nothing left to paint");
+        assert!(d.set_app_environment(None, Some(Some(false))).unwrap());
+        d.render(W as u32, 80, 1.0).unwrap();
+        assert!(
+            d.next_wake_in().is_some(),
+            "manual={manual}: motion allowed again restarts the pulse"
+        );
+    }
+}

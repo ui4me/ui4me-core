@@ -117,7 +117,6 @@ def main():
                 })
                 set_status("Selection cancelled" if result["cancelled"] else "Selected: " + ", ".join(result["paths"]))
 
-            doc.on("click", add_row, element="add-row")
             doc.on("click", change_theme, element="theme")
             doc.on("click", open_details, element="second-window")
             doc.on("click", choose_file, element="choose-file")
@@ -128,8 +127,10 @@ def main():
             doc.on("input", lambda event: doc.set_text("name-preview", event.get("value", "")), element="name")
             doc.on("change", lambda _: set_status("File input: " + ", ".join(doc.command("get_files", element="attachment")["files"])),
                    element="attachment")
-            # Submission stays local and is reported to the backend. Prevention
-            # is registered before dispatch, never attempted in a late callback.
+            # Add row is the form's submit button, so a click, Space/Enter on the
+            # button and Enter in a single-line field (implicit submission) all
+            # reach Python as one `submit`. Submission stays local: prevention is
+            # registered before dispatch, never attempted in a late callback.
             doc.prevent_default("entry-form", "submit")
             doc.on("submit", add_row, element="entry-form")
 

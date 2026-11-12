@@ -94,7 +94,9 @@ def source_identity():
             path = Path(directory) / name
             if path.suffix not in {".pyc", ".log"}:
                 paths.append(path)
-    for path in sorted(paths):
+    # Order by the relative POSIX path: Windows paths compare case-insensitively,
+    # which would otherwise give the same tree a different identity per OS.
+    for path in sorted(paths, key=lambda p: p.relative_to(ROOT).as_posix()):
         digest.update(path.relative_to(ROOT).as_posix().encode("utf-8") + b"\0")
         digest.update(hashlib.sha256(path.read_bytes()).digest())
     return digest.hexdigest()

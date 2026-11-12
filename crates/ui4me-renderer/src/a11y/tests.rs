@@ -513,3 +513,35 @@ fn requests_execute_on_a_rendered_document() {
         Some("Ada")
     );
 }
+
+/// Live regions reach AccessKit: implicit (`role=status|log` polite, `alert` assertive) and
+/// explicit `aria-live`, including an explicit `off` overriding the role. Without this, a status
+/// line updated by the application is never announced by a screen reader.
+#[test]
+fn live_regions_map_implicit_and_explicit_politeness() {
+    let t = tree(
+        r#"<body><p id="s" role="status">Ready</p><div id="a" role="alert">Oops</div>
+        <ul id="l" role="log"><li>one</li></ul><div id="p" aria-live="assertive">x</div>
+        <p id="q" role="status" aria-live="off">quiet</p><p id="n">plain</p></body>"#,
+    );
+    let live = |id: &str| by_html_id(&t, id).states.live;
+    assert_eq!(live("s"), super::LivePoliteness::Polite);
+    assert_eq!(live("a"), super::LivePoliteness::Assertive);
+    assert_eq!(live("l"), super::LivePoliteness::Polite);
+    assert_eq!(live("p"), super::LivePoliteness::Assertive);
+    assert_eq!(live("q"), super::LivePoliteness::Off);
+    assert_eq!(live("n"), super::LivePoliteness::Off);
+    let full = full_update(&t);
+    let ak = |id: &str| {
+        let want = by_html_id(&t, id).id;
+        full.nodes
+            .iter()
+            .find(|(n, _)| n.0 == want)
+            .unwrap()
+            .1
+            .live()
+    };
+    assert_eq!(ak("s"), Some(accesskit::Live::Polite));
+    assert_eq!(ak("a"), Some(accesskit::Live::Assertive));
+    assert_eq!(ak("n"), None);
+}

@@ -311,6 +311,10 @@ impl Probe {
         if caret - self.scroll_x < 0.0 {
             self.scroll_x = caret;
         }
+        // Never scroll further than needed to show the end of the value (including any
+        // composition): after the text shrinks, a stale offset would hide its first glyphs.
+        let content = Self::advance(&self.text, 19.0 * s) + Self::advance(&self.preedit, 19.0 * s);
+        self.scroll_x = self.scroll_x.min((content - available).max(0.0));
         let mut canvas = Canvas {
             pixels,
             width: width as i32,
@@ -684,5 +688,31 @@ mod tests {
         assert_eq!(p.selection(), 1..4);
         p.insert("é");
         assert_eq!(p.text, "aéz");
+    }
+    /// Replacing a long, horizontally scrolled value with text that fits must scroll back:
+    /// the caret stays visible either way, but a stale offset hides the first glyphs.
+    #[test]
+    fn shrinking_text_returns_the_editor_to_its_left_edge() {
+        let mut p = Probe::default();
+        let mut pixels = vec![0; 900 * 560];
+        p.set_text(&"long text ".repeat(40)).unwrap();
+        p.render(&mut pixels, 900, 560, 1.0, "scroll test");
+        assert!(p.scroll_x > 0.0, "a long value scrolls to its caret");
+        p.select_all();
+        p.insert("IME short");
+        p.render(&mut pixels, 900, 560, 1.0, "scroll test");
+        assert_eq!(p.scroll_x, 0.0, "a value that fits is shown from its start");
+        // A long value scrolled to its caret never scrolls past the end of the text.
+        p.set_text(&"wide ".repeat(60)).unwrap();
+        p.render(&mut pixels, 900, 560, 1.0, "scroll test");
+        let end = p.scroll_x;
+        p.insert("x");
+        p.render(&mut pixels, 900, 560, 1.0, "scroll test");
+        assert!(p.scroll_x >= end);
+        p.delete(true);
+        p.delete(true);
+        p.render(&mut pixels, 900, 560, 1.0, "scroll test");
+        let total = Probe::advance(&p.text, 19.0);
+        assert!(p.scroll_x <= (total - (900.0 - 80.0)).max(0.0) + 0.01);
     }
 }

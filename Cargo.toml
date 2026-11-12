@@ -84,6 +84,7 @@ ui4me-renderer = { path = "crates/ui4me-renderer" }
 winit-wayland = { path = "third_party/winit-wayland-0.31.0-beta.4" }
 softbuffer = { path = "third_party/softbuffer-0.4.8" }
 accesskit_atspi_common = { path = "third_party/accesskit_atspi_common-0.21.1" }
+winit-win32 = { path = "third_party/winit-win32-0.31.0-beta.4" }
 
 [profile.release]
 lto = "thin"

@@ -103,7 +103,7 @@ Treat native events as the authoritative indication of observed changes.
 | probe.set_text | window_id, text | updated: true |
 | probe.get_text | window_id | text, cursor, anchor, preedit, focused |
 | clipboard.write_text | text | written: true |
-| clipboard.read_text | Empty object, request ID required | text |
+| clipboard.read_text | Empty object, request ID required | text (empty when the clipboard is empty or holds no plain text, e.g. only an image) |
 | dialog.open_files | Dialog options below | cancelled and paths array |
 | dialog.save_file | Dialog options below | cancelled and paths array (zero or one path) |
 | dialog.choose_folder | Dialog options below | cancelled and paths array (zero or one path) |

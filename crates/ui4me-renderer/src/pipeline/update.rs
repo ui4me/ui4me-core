@@ -455,7 +455,12 @@ impl DocumentPipeline {
         // S1
         self.injected(Stage::Cascade)?;
         stages_run.push(Stage::Cascade);
-        let report = self.style.restyle(&self.doc, seg)?;
+        let mut report = self.style.restyle(&self.doc, seg)?;
+        if rebuild && !self.style.cancel_unstyled_animations(&self.doc).is_empty() {
+            // Re-sample the elements whose animation the new rules removed.
+            let again = self.style.restyle(&self.doc, &cold_segment)?;
+            report.restyled_elements += again.restyled_elements;
+        }
         let t_a = t_style.elapsed();
         self.sync_font_faces(dom_revision);
         let mut style = self.style.snapshot();

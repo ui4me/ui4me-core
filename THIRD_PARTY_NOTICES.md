@@ -41,8 +41,9 @@ archive, with host exceptions documented in third_party/README.md and the render
 source trees documented in patches/README.md, each the
 exact pinned package with a minimal patch: winit-wayland 0.31.0-beta.4
 (Apache-2.0; clipboard MIME types), softbuffer 0.4.8 (MIT OR Apache-2.0;
-non-blocking Wayland buffers) and accesskit_atspi_common 0.21.1 (MIT OR
-Apache-2.0; AT-SPI interface unregistration). Their license files or declared
+non-blocking Wayland buffers), accesskit_atspi_common 0.21.1 (MIT OR
+Apache-2.0; AT-SPI interface unregistration) and winit-win32 0.31.0-beta.4
+(Apache-2.0; no window-state lock held across IMM calls). Their license files or declared
 licenses are retained. Preserve their required notices when distributing compiled products.
 The included font notice must accompany copies of that font. This source
 repository does not itself constitute a published binary product or app store

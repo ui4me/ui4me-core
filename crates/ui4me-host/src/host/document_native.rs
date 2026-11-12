@@ -37,12 +37,23 @@ pub(super) fn update_ime(engine: &Document, native: &mut NativeWindow) {
     let Some(surrounding) = engine.ime_surrounding() else {
         return;
     };
+    let (x, y, width, height) = ime.cursor_area;
+    let scale = native.window.scale_factor();
+    let state = super::ImeState::new(
+        &surrounding.text,
+        surrounding.cursor,
+        surrounding.anchor,
+        (x * scale, y * scale, width * scale, height * scale),
+        ime.password,
+    );
+    if native.ime_enabled && native.ime_sent.as_ref() == Some(&state) {
+        return;
+    }
     let Ok(surrounding) =
         ImeSurroundingText::new(surrounding.text, surrounding.cursor, surrounding.anchor)
     else {
         return;
     };
-    let (x, y, width, height) = ime.cursor_area;
     let (hint, purpose) = if ime.password {
         (
             ImeHint::HIDDEN_TEXT | ImeHint::SENSITIVE_DATA,
@@ -71,7 +82,10 @@ pub(super) fn update_ime(engine: &Document, native: &mut NativeWindow) {
         ImeRequest::Enable(enable)
     };
     match native.window.request_ime_update(request) {
-        Ok(()) => native.ime_enabled = true,
+        Ok(()) => {
+            native.ime_enabled = true;
+            native.ime_sent = Some(state);
+        }
         Err(error) => tracing::debug!(%error, "Document IME unavailable"),
     }
 }

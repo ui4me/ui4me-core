@@ -376,6 +376,7 @@ impl Host {
                 ime_resets: 0,
                 ime_quiet_until: None,
                 preedit_cleared: false,
+                ime_sent: None,
             };
             native::update_ime(&probe, &mut native);
             native.window.set_visible(request.visible);

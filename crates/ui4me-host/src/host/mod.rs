@@ -54,6 +54,41 @@ struct NativeWindow {
     ime_resets: u64,
     ime_quiet_until: Option<Instant>,
     preedit_cleared: bool,
+    /// The IME state last sent while enabled. An unchanged state is not sent again: input
+    /// methods answer every text-input update (for example by re-sending a pending dead-key
+    /// preedit), and re-sending on each redraw turned that into an unbounded IME/redraw loop.
+    ime_sent: Option<ImeState>,
+}
+
+/// IME-visible state of the focused editor: surrounding text, cursor and anchor (bytes), the
+/// cursor area in physical pixels and whether the field is a password.
+#[derive(Clone, Debug, PartialEq)]
+struct ImeState {
+    text: String,
+    cursor: usize,
+    anchor: usize,
+    area: (i64, i64, i64, i64),
+    password: bool,
+}
+
+impl ImeState {
+    fn new(
+        text: &str,
+        cursor: usize,
+        anchor: usize,
+        area: (f64, f64, f64, f64),
+        password: bool,
+    ) -> Self {
+        // Sub-pixel jitter of the caret rectangle is not a change an input method can use.
+        let px = |v: f64| v.round() as i64;
+        Self {
+            text: text.to_owned(),
+            cursor,
+            anchor,
+            area: (px(area.0), px(area.1), px(area.2), px(area.3)),
+            password,
+        }
+    }
 }
 
 struct WindowRecord {
@@ -1331,5 +1366,32 @@ mod tests {
         assert_eq!(host.lifecycle.phase(), Phase::Stopped);
         assert_eq!(host.exit_code.load(Ordering::Relaxed), 1);
         assert!(host.windows.is_empty());
+    }
+
+    /// Redraws re-derive the IME state; only a real change may be sent to the input method
+    /// (an unchanged resend made fcitx5 answer with its pending dead-key preedit forever).
+    #[test]
+    fn ime_state_ignores_subpixel_jitter_but_not_real_changes() {
+        let base = ImeState::new("ab", 1, 1, (10.2, 20.0, 2.0, 26.0), false);
+        assert_eq!(
+            base,
+            ImeState::new("ab", 1, 1, (10.4, 19.8, 2.0, 26.0), false)
+        );
+        assert_ne!(
+            base,
+            ImeState::new("ab", 2, 2, (10.2, 20.0, 2.0, 26.0), false)
+        );
+        assert_ne!(
+            base,
+            ImeState::new("abc", 1, 1, (10.2, 20.0, 2.0, 26.0), false)
+        );
+        assert_ne!(
+            base,
+            ImeState::new("ab", 1, 1, (30.0, 20.0, 2.0, 26.0), false)
+        );
+        assert_ne!(
+            base,
+            ImeState::new("ab", 1, 1, (10.2, 20.0, 2.0, 26.0), true)
+        );
     }
 }

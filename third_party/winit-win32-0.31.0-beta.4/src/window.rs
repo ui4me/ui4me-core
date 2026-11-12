@@ -1091,16 +1091,25 @@ impl CoreWindow for Window {
         let state = self.window_state.clone();
         self.thread_executor.execute_in_thread(move || unsafe {
             let hwnd = window.hwnd();
-            let mut state = state.lock().unwrap();
+            // UI4ME patch: update the window state under its lock, then release the lock
+            // before calling into IMM. Associating or dissociating the input context while a
+            // composition is active makes TSF complete it synchronously and send
+            // WM_IME_COMPOSITION / WM_IME_ENDCOMPOSITION to this window procedure, whose
+            // handlers lock the same window state: holding it here deadlocked the GUI thread
+            // whenever focus moved during an active composition.
+            let mut state_guard = state.lock().unwrap();
+            let scale_factor = state_guard.scale_factor;
             let (capabilities, request_data) = match &request {
                 ImeRequest::Enable(enable) => {
                     let capabilities = *enable.capabilities();
-                    state.ime_capabilities = Some(capabilities);
+                    state_guard.ime_capabilities = Some(capabilities);
+                    drop(state_guard);
                     ImeContext::set_ime_allowed(hwnd, true);
                     (capabilities, enable.request_data())
                 },
                 ImeRequest::Update(request_data) => {
-                    if let Some(capabilities) = state.ime_capabilities {
+                    if let Some(capabilities) = state_guard.ime_capabilities {
+                        drop(state_guard);
                         (capabilities, request_data)
                     } else {
                         warn!("ime update without IME enabled.");
@@ -1108,7 +1117,8 @@ impl CoreWindow for Window {
                     }
                 },
                 ImeRequest::Disable => {
-                    state.ime_capabilities = None;
+                    state_guard.ime_capabilities = None;
+                    drop(state_guard);
                     ImeContext::set_ime_allowed(window.hwnd(), false);
                     return;
                 },
@@ -1117,7 +1127,6 @@ impl CoreWindow for Window {
 
             if let Some((spot, size)) = request_data.cursor_area {
                 if capabilities.cursor_area() {
-                    let scale_factor = state.scale_factor;
                     ImeContext::current(window.hwnd()).set_ime_cursor_area(
                         spot,
                         size,

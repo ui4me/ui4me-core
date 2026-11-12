@@ -277,7 +277,9 @@ python3 tools/renderer_acceptance.py --automated --output verification/renderer-
 The automated subset checks window creation, host communication, clipboard
 self-round-trip and quit. It deliberately leaves the 15 real desktop checks
 BLOCKED until observations exist. It never converts compilation or the automated
-subset into full qualification.
+subset into full qualification. The clipboard check restores only the previous
+*plain text*: a non-text clipboard (an image copied elsewhere) is replaced. Save
+it first if it matters.
 
 The renderer ledger adds R01–R12 from
 [RENDERER_ACCEPTANCE.md](../docs/RENDERER_ACCEPTANCE.md), separately from N01–N15.

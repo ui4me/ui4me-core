@@ -24,10 +24,14 @@ pub(super) fn update_ime(probe: &Probe, native: &mut NativeWindow) {
         return;
     }
     let (text, cursor, anchor) = probe.surrounding();
+    let (x, y, width, height) = probe.caret_rect(native.window.scale_factor());
+    let state = ImeState::new(&text, cursor, anchor, (x, y, width, height), false);
+    if native.ime_enabled && native.ime_sent.as_ref() == Some(&state) {
+        return;
+    }
     let Ok(surrounding) = ImeSurroundingText::new(text, cursor, anchor) else {
         return;
     };
-    let (x, y, width, height) = probe.caret_rect(native.window.scale_factor());
     let data = ImeRequestData::default()
         .with_hint_and_purpose(ImeHint::NONE, ImePurpose::Normal)
         .with_cursor_area(
@@ -48,7 +52,10 @@ pub(super) fn update_ime(probe: &Probe, native: &mut NativeWindow) {
         ImeRequest::Enable(enable)
     };
     match native.window.request_ime_update(request) {
-        Ok(()) => native.ime_enabled = true,
+        Ok(()) => {
+            native.ime_enabled = true;
+            native.ime_sent = Some(state);
+        }
         Err(error) => tracing::debug!(%error, "IME request unavailable"),
     }
 }
@@ -111,13 +118,36 @@ impl Host {
                 return self.finish_transfer(target, Err(RpcError::unavailable(error.to_string())))
             }
         };
+        let mut after_own_write = false;
         if let Some((before, written)) = self.clipboard_written {
-            if current == before && written.elapsed() < Duration::from_secs(1) {
-                self.deferred_clipboard_reads.push(target);
+            if written.elapsed() < Duration::from_secs(1) {
+                if current == before {
+                    self.deferred_clipboard_reads.push(target);
+                    return;
+                }
+                after_own_write = true;
+            } else {
+                self.clipboard_written = None;
+            }
+        }
+        // A selection without plain text (for example an image copied elsewhere) has no
+        // text to read: that is an empty result, like an empty clipboard, not a failure.
+        // Right after this host's own text write, such an offer is a stale announcement
+        // (Wayland re-sends the current selection on focus), so wait for ours instead.
+        if let Some(id) = current {
+            let has_text = event_loop
+                .data_transfer(id)
+                .is_ok_and(|data| data.has_type(&TypeHint::Plaintext));
+            if !has_text {
+                if after_own_write {
+                    self.deferred_clipboard_reads.push(target);
+                } else {
+                    self.finish_transfer(target, Ok(String::new()));
+                }
                 return;
             }
-            self.clipboard_written = None;
         }
+        self.clipboard_written = None;
         match current {
             Some(id) => match event_loop.fetch_data_transfer(id, &TypeHint::Plaintext) {
                 Ok(serial) => {

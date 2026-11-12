@@ -7,8 +7,8 @@
 //! row groups, unnamed `section`/`form`, ...) are flattened: their children join the parent.
 
 use super::{
-    A11yAction, A11yNode, A11yTree, Bounds, Checked, Numeric, ROOT_ID, RunText, States, TextSel,
-    node_key,
+    A11yAction, A11yNode, A11yTree, Bounds, Checked, LivePoliteness, Numeric, ROOT_ID, RunText,
+    States, TextSel, node_key,
 };
 use accesskit::Role;
 use std::collections::{BTreeMap, HashMap};
@@ -590,10 +590,17 @@ impl<'a> Builder<'a> {
         let focusable = crate::interaction::focus::is_focusable(self.d, n);
         let role = self.role_of(n, e, focusable);
         let Some(role) = role else {
-            // Generic: flattened unless focusable or named by ARIA.
+            // Generic: flattened unless focusable, named by ARIA or a live region (its text
+            // children must keep a live ancestor to be announced).
             let named = e.attr("aria-label").is_some_and(|v| !v.trim().is_empty())
                 || e.attr("aria-labelledby").is_some();
-            if !(focusable || named) {
+            let live = e.attr("aria-live").is_some_and(|v| {
+                matches!(
+                    v.trim().to_ascii_lowercase().as_str(),
+                    "polite" | "assertive"
+                )
+            });
+            if !(focusable || named || live) {
                 return self.walk_children(n);
             }
             return self.make(n, e, Role::GenericContainer, focusable);
@@ -1358,6 +1365,21 @@ impl<'a> Builder<'a> {
                     .contains(ui4me_document::ui_state::UiFlags::MODAL));
         let multiselectable = (local == "select" && self.d.select_is_multiple(n))
             || attr_true(e, "aria-multiselectable");
+        let live = match e
+            .attr("aria-live")
+            .map(|v| v.trim().to_ascii_lowercase())
+            .as_deref()
+        {
+            Some("polite") => LivePoliteness::Polite,
+            Some("assertive") => LivePoliteness::Assertive,
+            Some("off") => LivePoliteness::Off,
+            // ARIA implicit values: status and log are polite live regions, alert is assertive.
+            _ => match role {
+                Role::Status | Role::Log => LivePoliteness::Polite,
+                Role::Alert => LivePoliteness::Assertive,
+                _ => LivePoliteness::Off,
+            },
+        };
         States {
             focusable: focusable && !disabled,
             focused: false,
@@ -1370,6 +1392,7 @@ impl<'a> Builder<'a> {
             read_only,
             modal,
             multiselectable,
+            live,
         }
     }
 
