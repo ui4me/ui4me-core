@@ -67,9 +67,14 @@ pub struct MimeType {
 const TEXT_URI_LIST: &str = "text/uri-list";
 // Plaintext
 const TEXT_PLAIN: &str = "text/plain";
+// UI4ME patch: the conventional Wayland/X11 spelling, without a space. GTK
+// requests and prefers it; without it, GTK clients cannot read offered text and
+// their own `text/plain` offer (ASCII with escapes) is chosen instead.
+const TEXT_PLAIN_CHARSET_UTF8_CANONICAL: &str = "text/plain;charset=utf-8";
 const TEXT_PLAIN_CHARSET_UTF8: &str = "text/plain; charset=utf-8";
 // HTML
 const TEXT_HTML: &str = "text/html";
+const TEXT_HTML_CHARSET_UTF8_CANONICAL: &str = "text/html;charset=utf-8";
 const TEXT_HTML_CHARSET_UTF8: &str = "text/html; charset=utf-8";
 // RTF
 const APPLICATION_RTF: &str = "application/rtf";
@@ -111,10 +116,12 @@ impl MimeType {
     const MIME_HINT_MAP: &[(&str, TypeHint)] = &[
         // Files
         (TEXT_URI_LIST, TypeHint::UriList),
-        // Plaintext
+        // Plaintext. UTF-8 types come first: offers are made in this order.
+        (TEXT_PLAIN_CHARSET_UTF8_CANONICAL, TypeHint::Plaintext),
         (TEXT_PLAIN, TypeHint::Plaintext),
         (TEXT_PLAIN_CHARSET_UTF8, TypeHint::Plaintext),
         // HTML
+        (TEXT_HTML_CHARSET_UTF8_CANONICAL, TypeHint::Html),
         (TEXT_HTML, TypeHint::Html),
         (TEXT_HTML_CHARSET_UTF8, TypeHint::Html),
         // RTF

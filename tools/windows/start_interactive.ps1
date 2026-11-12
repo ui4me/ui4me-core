@@ -25,7 +25,11 @@ try {
         Start-Sleep -Seconds 1
         $task = Get-ScheduledTask -TaskName $taskName
         $info = Get-ScheduledTaskInfo -TaskName $taskName
-        if ($info.LastRunTime -ge $started.AddSeconds(-1) -and $task.State -ne 'Running') {
+        # The task is new and uniquely named, so its result leaves the "has not
+        # run" (0x41303) and "running" (0x41301) codes only once it finished.
+        # LastRunTime is not used: it was observed stale on Windows Server 2022.
+        $finished = $info.LastTaskResult -notin @(267011, 267009)
+        if ($finished -and $task.State -ne 'Running') {
             if ($info.LastTaskResult -ne 0) { throw "Interactive task failed: $($info.LastTaskResult). Inspect its own output files." }
             Write-Output 'Interactive task completed successfully.'
             exit 0

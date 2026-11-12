@@ -190,6 +190,43 @@ fn unauthenticated_backend_is_stopped_at_the_startup_deadline() {
 }
 
 #[test]
+fn activation_during_primary_startup_is_forwarded_after_ready() {
+    let harness = Harness::new();
+    let manifest = harness.directory.path().join("app.toml");
+    let runtime = harness.directory.path().join("runtime");
+    let secondary = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !manifest.exists() {
+            assert!(
+                Instant::now() < deadline,
+                "primary manifest was not written"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        // The fixture holds app.ready for two seconds; launch inside that window.
+        std::thread::sleep(Duration::from_millis(500));
+        let started = Instant::now();
+        let status = Command::new(env!("CARGO_BIN_EXE_ui4me-host"))
+            .args(["run", "--headless", "--app"])
+            .arg(&manifest)
+            .env("XDG_RUNTIME_DIR", &runtime)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .unwrap();
+        (status, started.elapsed())
+    });
+    harness.run("slow_ready_activation", 0);
+    let (status, waited) = secondary.join().unwrap();
+    assert!(status.success(), "secondary launch failed: {status}");
+    assert!(
+        waited >= Duration::from_millis(500),
+        "secondary returned before the primary was ready"
+    );
+}
+
+#[test]
 fn startup_window_can_be_closed_before_the_backend_becomes_ready() {
     Harness::new().run("startup_close", 0);
 }
@@ -409,6 +446,16 @@ fn backend_fixture() {
             client.decide(&quit, true);
             client.method("app.shutdown");
             checkpoint(&scenario);
+        }
+        "slow_ready_activation" => {
+            client.hello();
+            client.call("window.create", json!({}));
+            std::thread::sleep(Duration::from_secs(2));
+            client.call("app.ready", json!({}));
+            let activated = client.method("app.activated");
+            assert!(activated["params"]["args"].is_array(), "{activated}");
+            checkpoint(&scenario);
+            client.quit();
         }
         "authentication" => {
             assert_eq!(

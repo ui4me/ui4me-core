@@ -113,7 +113,10 @@ number of application windows.
 
 window.set accepts title, width, height, visible, resizable, minimized,
 maximized, fullscreen, focus, and x/y. Position requires both x and y and is
-only available on Windows. Unsupported placement on Wayland is an error.
+only available on Windows. Unsupported placement on Wayland is an error, as is
+minimized: false (xdg-shell cannot restore a minimized window; the user or
+compositor does). A focus request on Wayland uses xdg-activation and may be
+declined by compositor focus-stealing prevention.
 Properties are native requests, not a promise that compositor policy can be
 overridden.
 

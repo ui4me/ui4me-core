@@ -78,8 +78,11 @@ def main():
         client.on_request("app.before_quit", lambda _: {"allow": True})
 
         dialogs, dialog_lock = {}, threading.Lock()
+        key_input = threading.Event()
         def window_event(params):
             event_type, data = params.get("type"), params.get("data", {})
+            if event_type == "key":
+                key_input.set()
             if event_type in ("text", "focused", "dropped_files", "dropped_text", "close_requested"):
                 print("window.event", json.dumps(params, ensure_ascii=False), flush=True)
             if event_type != "key" or data.get("state") not in (None, "pressed"):
@@ -132,10 +135,24 @@ def main():
                 future.result(10)
             record("concurrent_requests")
             if args.native_test:
+                # Wayland grants clipboard ownership only to a focused client
+                # with a recent input serial; a refusal is retried only after
+                # real native key input, never treated as a pass.
                 original = client.call("clipboard.read_text")
+                changed = False
                 try:
                     marker = "UI4ME native clipboard π — žluťoučký — 😀"
-                    client.call("clipboard.write_text", {"text": marker})
+                    try:
+                        client.call("clipboard.write_text", {"text": marker})
+                    except RpcError as error:
+                        if key_input.is_set():
+                            raise
+                        print(f"Clipboard write needs user input first ({error}). "
+                              "Press any key in a UI4ME window within 30 s.", flush=True)
+                        if not key_input.wait(30):
+                            raise AssertionError("No native key input arrived for the clipboard check") from error
+                        client.call("clipboard.write_text", {"text": marker})
+                    changed = True
                     actual = client.call("clipboard.read_text")
                     if isinstance(actual, dict):
                         actual = actual.get("text")
@@ -143,8 +160,9 @@ def main():
                         raise AssertionError(f"Clipboard round trip mismatch: {actual!r}")
                     record("native_clipboard_round_trip")
                 finally:
-                    old = original.get("text", "") if isinstance(original, dict) else original
-                    client.call("clipboard.write_text", {"text": old or ""})
+                    if changed:
+                        old = original.get("text", "") if isinstance(original, dict) else original
+                        client.call("clipboard.write_text", {"text": old or ""})
             else:
                 record("native_desktop_checks", "BLOCKED", "Headless mode cannot qualify native desktop behavior")
             client.call("window.request_close", {"window_id": second_id})

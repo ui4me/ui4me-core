@@ -121,7 +121,7 @@ impl Server {
             .name("ui4me-ipc-terminal".into())
             .spawn(move || {
                 while !terminal_state.stop.load(Ordering::Acquire) {
-                    match terminal_receiver.recv_timeout(Duration::from_millis(50)) {
+                    match terminal_receiver.recv_timeout(Duration::from_millis(100)) {
                         Ok(event) => {
                             let delivered = emit(&terminal_state, event);
                             terminal_state
@@ -247,7 +247,8 @@ impl Server {
             peer.control.shutdown();
         }
         drop(peers);
-        // Native accept checks the stop flag at a bounded polling interval.
+        // Native accept and the terminal thread observe the stop flag within
+        // their bounded 100 ms waits.
         if let Some(thread) = self.accept_thread.take() {
             let _ = thread.join();
         }

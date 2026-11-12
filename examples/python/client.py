@@ -57,11 +57,15 @@ class SocketStream:
 
 
 class NamedPipeStream:
-    """Synchronous Windows pipe handle used by dedicated I/O threads.
+    """Overlapped Windows pipe handle shared by dedicated reader/writer threads.
 
-    Closing cancels synchronous reads/writes on their actual native thread IDs;
-    no private asyncio API or assumptions about overlapped handles are involved.
+    Windows serializes all I/O on a synchronous file object, so a blocked read
+    would stall every write on the same pipe. Each operation therefore uses its
+    own OVERLAPPED/event, and close cancels in-flight operations with CancelIoEx
+    before closing the handle once no operation still uses it.
     """
+
+    _ABORTED = (6, 109, 232, 233, 995)
 
     def __init__(self, name: str, timeout: float = 15.0):
         if os.name != "nt":
@@ -70,11 +74,17 @@ class NamedPipeStream:
             raise ValueError("A local named-pipe path is required")
         from ctypes import wintypes
 
+        class OVERLAPPED(ctypes.Structure):
+            _fields_ = [("Internal", ctypes.c_size_t), ("InternalHigh", ctypes.c_size_t),
+                        ("Offset", wintypes.DWORD), ("OffsetHigh", wintypes.DWORD),
+                        ("hEvent", wintypes.HANDLE)]
+
+        self._overlapped = OVERLAPPED
         self._wintypes = wintypes
         self._dll = ctypes.WinDLL("kernel32", use_last_error=True)
         self._lock = threading.Lock()
         self._idle = threading.Condition(self._lock)
-        self._threads: set[int] = set()
+        self._in_flight = 0
         self._closed = False
         k = self._dll
         k.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
@@ -86,18 +96,22 @@ class NamedPipeStream:
         for name_ in ("ReadFile", "WriteFile"):
             f = getattr(k, name_)
             f.argtypes = [wintypes.HANDLE, wintypes.LPVOID, wintypes.DWORD,
-                          ctypes.POINTER(wintypes.DWORD), wintypes.LPVOID]
+                          ctypes.POINTER(wintypes.DWORD), ctypes.POINTER(OVERLAPPED)]
             f.restype = wintypes.BOOL
-        k.OpenThread.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-        k.OpenThread.restype = wintypes.HANDLE
-        k.CancelSynchronousIo.argtypes = [wintypes.HANDLE]
-        k.CancelSynchronousIo.restype = wintypes.BOOL
+        k.GetOverlappedResult.argtypes = [wintypes.HANDLE, ctypes.POINTER(OVERLAPPED),
+                                          ctypes.POINTER(wintypes.DWORD), wintypes.BOOL]
+        k.GetOverlappedResult.restype = wintypes.BOOL
+        k.CreateEventW.argtypes = [wintypes.LPVOID, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR]
+        k.CreateEventW.restype = wintypes.HANDLE
+        k.CancelIoEx.argtypes = [wintypes.HANDLE, wintypes.LPVOID]
+        k.CancelIoEx.restype = wintypes.BOOL
         k.CloseHandle.argtypes = [wintypes.HANDLE]
         k.CloseHandle.restype = wintypes.BOOL
         deadline = time.monotonic() + timeout
         invalid = ctypes.c_void_p(-1).value
         while True:
-            handle = k.CreateFileW(name, 0x80000000 | 0x40000000, 0, None, 3, 0, None)
+            handle = k.CreateFileW(name, 0x80000000 | 0x40000000, 0, None, 3,
+                                   0x40000000, None)  # FILE_FLAG_OVERLAPPED
             if handle != invalid:
                 self._handle = handle
                 return
@@ -108,44 +122,58 @@ class NamedPipeStream:
             if error == 2:
                 time.sleep(0.025)
 
-    def _begin(self):
-        tid = threading.get_native_id()
+    def _transfer(self, function, buffer, length: int) -> tuple[int, int]:
+        """Run one overlapped operation; return (error, transferred)."""
         with self._lock:
             if self._closed:
                 raise DisconnectedError("Named pipe closed")
-            self._threads.add(tid)
-            return tid, self._handle
-
-    def _end(self, tid):
-        with self._lock:
-            self._threads.discard(tid)
-            self._idle.notify_all()
+            self._in_flight += 1
+        k = self._dll
+        event = k.CreateEventW(None, True, False, None)
+        try:
+            if not event:
+                raise ctypes.WinError(ctypes.get_last_error())
+            overlapped = self._overlapped(hEvent=event)
+            count = self._wintypes.DWORD()
+            error = 0
+            if not function(self._handle, buffer, length, None, ctypes.byref(overlapped)):
+                error = ctypes.get_last_error()
+                if error != 997:  # ERROR_IO_PENDING
+                    return error, 0
+            # Waiting here keeps `buffer` and `overlapped` alive until the
+            # kernel has finished with them, including after cancellation.
+            if not k.GetOverlappedResult(self._handle, ctypes.byref(overlapped),
+                                         ctypes.byref(count), True):
+                return ctypes.get_last_error(), count.value
+            return 0, count.value
+        finally:
+            if event:
+                k.CloseHandle(event)
+            with self._lock:
+                self._in_flight -= 1
+                self._idle.notify_all()
 
     def read(self, size: int) -> bytes:
-        tid, handle = self._begin()
+        buffer = ctypes.create_string_buffer(min(size, 65536))
         try:
-            buffer = ctypes.create_string_buffer(min(size, 65536))
-            count = self._wintypes.DWORD()
-            if not self._dll.ReadFile(handle, buffer, len(buffer), ctypes.byref(count), None):
-                error = ctypes.get_last_error()
-                if error in (109, 232, 233, 995, 6):
-                    return b""
-                raise ctypes.WinError(error)
-            return buffer.raw[:count.value]
-        finally:
-            self._end(tid)
+            error, count = self._transfer(self._dll.ReadFile, buffer, len(buffer))
+        except DisconnectedError:
+            return b""
+        if error in self._ABORTED:
+            return b""
+        if error and error != 234:  # ERROR_MORE_DATA still delivered `count`
+            raise ctypes.WinError(error)
+        return buffer.raw[:count]
 
     def write(self, data: bytes | memoryview) -> int:
-        tid, handle = self._begin()
-        try:
-            part = bytes(data[:65536])
-            buffer = ctypes.create_string_buffer(part)
-            count = self._wintypes.DWORD()
-            if not self._dll.WriteFile(handle, buffer, len(part), ctypes.byref(count), None):
-                raise ctypes.WinError(ctypes.get_last_error())
-            return count.value
-        finally:
-            self._end(tid)
+        part = bytes(data[:65536])
+        buffer = ctypes.create_string_buffer(part, len(part))
+        error, count = self._transfer(self._dll.WriteFile, buffer, len(part))
+        if error in self._ABORTED:
+            raise DisconnectedError("Named pipe closed")
+        if error:
+            raise ctypes.WinError(error)
+        return count
 
     def close(self) -> None:
         with self._lock:
@@ -153,27 +181,20 @@ class NamedPipeStream:
                 return
             self._closed = True
         if not self._close_when_idle(time.monotonic() + 1):
-            # Never close/reuse a handle while a synchronous call still owns it.
-            # Keep cancellation alive without blocking the application forever.
+            # Never close/reuse a handle while an operation still owns it.
             threading.Thread(target=self._close_when_idle, args=(None,),
                              name="ui4me-pipe-close", daemon=True).start()
 
     def _close_when_idle(self, deadline):
         while True:
             with self._lock:
-                tids = tuple(self._threads)
-                if not tids:
+                if not self._in_flight:
                     self._dll.CloseHandle(self._handle)
                     return True
-            # Repeat: close can race the short interval between _begin() and the
-            # actual ReadFile/WriteFile call. CancelSynchronousIo is not sticky.
-            for tid in tids:
-                thread = self._dll.OpenThread(0x0001, False, tid)  # THREAD_TERMINATE
-                if thread:
-                    self._dll.CancelSynchronousIo(thread)
-                    self._dll.CloseHandle(thread)
+            # Repeat: an operation may be issued just after a cancellation.
+            self._dll.CancelIoEx(self._handle, None)
             with self._idle:
-                if self._threads:
+                if self._in_flight:
                     self._idle.wait(0.01)
             if deadline is not None and time.monotonic() >= deadline:
                 return False

@@ -608,6 +608,26 @@ fn root_window(current_state: &TreeState) -> Option<NodeRef<'_>> {
 
 impl Drop for Adapter {
     fn drop(&mut self) {
+        // UI4ME patch: release every interface registered by register_tree()
+        // and later updates. Upstream only announced the window's removal, so
+        // each destroyed window left its D-Bus objects registered (memory
+        // growth per window and stale objects on the accessibility bus).
+        let registered = {
+            fn add_children(node: NodeRef<'_>, out: &mut Vec<(FullNodeId, InterfaceSet)>) {
+                for child in node.filtered_children(&filter) {
+                    out.push((child.id(), NodeWrapper(&child).interfaces()));
+                    add_children(child, out);
+                }
+            }
+            let tree = self.context.read_tree();
+            let root = tree.state().root();
+            let mut nodes = vec![(root.id(), NodeWrapper(&root).interfaces())];
+            add_children(root, &mut nodes);
+            nodes
+        };
+        for (id, interfaces) in registered {
+            self.unregister_interfaces(id, interfaces);
+        }
         let root_id = self.context.read_tree().state().root_id();
         self.window_destroyed(root_id);
         // Note: We deliberately do the following here, not in a Drop
@@ -625,6 +645,7 @@ mod tests {
         ActionHandler, ActionRequest, Node, NodeId, Role, TreeId, TreeInfo, TreeUpdate,
     };
     use accesskit_consumer::FullNodeId;
+    use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
     #[derive(Clone, Copy, Debug, PartialEq)]
@@ -635,11 +656,24 @@ mod tests {
 
     struct CapturingCallback {
         ops: Arc<Mutex<Vec<CacheOp>>>,
+        registered: Arc<Mutex<HashMap<FullNodeId, InterfaceSet>>>,
     }
 
     impl AdapterCallback for CapturingCallback {
-        fn register_interfaces(&self, _: &Adapter, _: FullNodeId, _: InterfaceSet) {}
-        fn unregister_interfaces(&self, _: &Adapter, _: FullNodeId, _: InterfaceSet) {}
+        fn register_interfaces(&self, _: &Adapter, id: FullNodeId, interfaces: InterfaceSet) {
+            let mut registered = self.registered.lock().unwrap();
+            let entry = registered.entry(id).or_insert_with(InterfaceSet::empty);
+            *entry = *entry | interfaces;
+        }
+        fn unregister_interfaces(&self, _: &Adapter, id: FullNodeId, interfaces: InterfaceSet) {
+            let mut registered = self.registered.lock().unwrap();
+            if let Some(entry) = registered.get_mut(&id) {
+                *entry = *entry ^ (*entry & interfaces);
+                if *entry == InterfaceSet::empty() {
+                    registered.remove(&id);
+                }
+            }
+        }
         fn emit_event(&self, _: &Adapter, event: Event) {
             let mut ops = self.ops.lock().unwrap();
             match event {
@@ -662,17 +696,46 @@ mod tests {
     }
 
     fn build(initial: TreeUpdate) -> (Adapter, Arc<Mutex<Vec<CacheOp>>>) {
+        build_tracking(initial).0
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn build_tracking(
+        initial: TreeUpdate,
+    ) -> (
+        (Adapter, Arc<Mutex<Vec<CacheOp>>>),
+        Arc<Mutex<HashMap<FullNodeId, InterfaceSet>>>,
+    ) {
         let ops = Arc::new(Mutex::new(Vec::new()));
+        let registered = Arc::new(Mutex::new(HashMap::new()));
         let app_context = AppContext::new(None);
         let adapter = Adapter::new(
             &app_context,
-            CapturingCallback { ops: ops.clone() },
+            CapturingCallback {
+                ops: ops.clone(),
+                registered: registered.clone(),
+            },
             initial,
             false,
             WindowBounds::default(),
             NoOpActionHandler,
         );
-        (adapter, ops)
+        ((adapter, ops), registered)
+    }
+
+    #[test]
+    fn dropping_adapter_unregisters_every_registered_interface() {
+        let ((mut adapter, _ops), registered) = build_tracking(initial_tree());
+        adapter.update(update(vec![
+            (
+                NodeId(0),
+                with_children(Role::Window, &[NodeId(1), NodeId(2)]),
+            ),
+            (NodeId(2), Node::new(Role::TextInput)),
+        ]));
+        assert_eq!(registered.lock().unwrap().len(), 3, "root and two children");
+        drop(adapter);
+        assert!(registered.lock().unwrap().is_empty());
     }
 
     fn initial_tree() -> TreeUpdate {

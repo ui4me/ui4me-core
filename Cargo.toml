@@ -13,3 +13,14 @@ lto = "thin"
 codegen-units = 1
 strip = "debuginfo"
 
+
+# Exact pinned winit-wayland release with a minimal clipboard MIME fix
+# (canonical "text/plain;charset=utf-8"); see third_party/README.md.
+[patch.crates-io]
+winit-wayland = { path = "third_party/winit-wayland-0.31.0-beta.4" }
+# Exact pinned softbuffer release whose Wayland backend no longer blocks the
+# GUI thread waiting for buffer release; see third_party/README.md.
+softbuffer = { path = "third_party/softbuffer-0.4.8" }
+# Exact pinned accesskit_atspi_common release whose adapters unregister their
+# AT-SPI interfaces when dropped; see third_party/README.md.
+accesskit_atspi_common = { path = "third_party/accesskit_atspi_common-0.21.1" }

@@ -320,9 +320,18 @@ impl Host {
                 .create_window(attributes)
                 .map_err(|e| RpcError::unavailable(format!("Create native window: {e}")))?
                 .into();
-            let context = softbuffer::Context::new(event_loop.owned_display_handle())
-                .map_err(|e| RpcError::unavailable(format!("Create presentation context: {e}")))?;
-            let surface = Surface::new(&context, window.clone())
+            // One presentation context per host. On Wayland each context binds
+            // a registry and wl_shm (v1 has no destroy request), so a context per
+            // window grew memory with every window created.
+            if self.presentation.is_none() {
+                self.presentation = Some(
+                    softbuffer::Context::new(event_loop.owned_display_handle()).map_err(|e| {
+                        RpcError::unavailable(format!("Create presentation context: {e}"))
+                    })?,
+                );
+            }
+            let context = self.presentation.as_ref().expect("presentation context");
+            let surface = Surface::new(context, window.clone())
                 .map_err(|e| RpcError::unavailable(format!("Create presentation surface: {e}")))?;
             let size = window.surface_size();
             let accessibility = NativeAccessibility::new(
@@ -346,6 +355,7 @@ impl Host {
                 modifiers: ModifiersState::empty(),
                 ime_enabled: false,
                 drag_selecting: false,
+                presented: false,
             };
             native::update_ime(&probe, &mut native);
             native.window.set_visible(request.visible);
@@ -381,7 +391,7 @@ impl Host {
         )
     }
 
-    fn set_window(&mut self, params: Value) -> Result<Value, RpcError> {
+    pub(super) fn set_window(&mut self, params: Value) -> Result<Value, RpcError> {
         let request: SetWindow = decode(params)?;
         let window = self
             .windows
@@ -402,6 +412,13 @@ impl Host {
         if !cfg!(target_os = "windows") && request.x.is_some() {
             return Err(RpcError::unsupported(
                 "Wayland compositor owns top-level window placement",
+            ));
+        }
+        if !cfg!(target_os = "windows") && request.minimized == Some(false) {
+            // xdg-shell has no request to restore a minimized window; winit
+            // silently ignores it. Report that instead of fabricating success.
+            return Err(RpcError::unsupported(
+                "Wayland clients cannot restore a minimized window; the user or compositor restores it",
             ));
         }
         if let Some(native) = &window.native {

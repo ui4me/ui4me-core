@@ -191,7 +191,20 @@ impl NativeListener {
                     }));
                 }
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                    std::thread::sleep(Duration::from_millis(20))
+                    // Wake immediately for a connection; the timeout only
+                    // bounds how long close() waits to observe `stop`.
+                    let mut poll = libc::pollfd {
+                        fd: self.listener.as_raw_fd(),
+                        events: libc::POLLIN,
+                        revents: 0,
+                    };
+                    // SAFETY: one valid pollfd for the listener owned by self.
+                    if unsafe { libc::poll(&mut poll, 1, 100) } < 0 {
+                        let error = io::Error::last_os_error();
+                        if error.kind() != io::ErrorKind::Interrupted {
+                            return Err(error);
+                        }
+                    }
                 }
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
                 Err(error) => return Err(error),
@@ -430,24 +443,109 @@ pub fn bootstrap_supervised(args: &[OsString]) -> Result<Option<i32>> {
         ])
         .arg(format!("--unit={unit}"))
         .env("UI4ME_SYSTEMD_UNIT", &unit)
-        .env("UI4ME_DESKTOP_REALM", desktop_realm());
+        .env("UI4ME_DESKTOP_REALM", desktop_realm())
+        .env(LAUNCHER_ENV, launcher_identity(std::process::id())?);
+    const OWN: [&str; 3] = ["UI4ME_SYSTEMD_UNIT", "UI4ME_DESKTOP_REALM", LAUNCHER_ENV];
     for (key, _) in std::env::vars_os() {
-        if key != "UI4ME_SYSTEMD_UNIT" && key != "UI4ME_DESKTOP_REALM" {
+        if !OWN.iter().any(|own| key == OsStr::new(own)) {
             let mut argument = OsString::from("--setenv=");
             argument.push(key);
             command.arg(argument);
         }
     }
     command
-        .args([
-            "--setenv=UI4ME_SYSTEMD_UNIT",
-            "--setenv=UI4ME_DESKTOP_REALM",
-        ])
+        .args(OWN.map(|own| format!("--setenv={own}")))
         .arg("--")
         .arg(std::env::current_exe()?)
         .args(args);
     let status = command.status().context("cannot start systemd user supervision; run doctor, or explicitly choose --allow-unsupervised for diagnostics")?;
     Ok(Some(status.code().unwrap_or(1)))
+}
+
+/// The supervised host's lifetime remains bound to the launcher that the
+/// desktop, terminal or test harness started. systemd-run --wait never stops
+/// the unit when its client dies, so without this a Ctrl+C, closed terminal or
+/// killed launcher would leave an orphaned application running.
+const LAUNCHER_ENV: &str = "UI4ME_LAUNCHER";
+
+/// "pid:starttime", where starttime is the kernel's boot-relative process
+/// start stamp. It distinguishes the launcher from a later PID reuse.
+fn launcher_identity(pid: u32) -> Result<String> {
+    Ok(format!("{pid}:{}", process_start_time(pid)?))
+}
+
+fn process_start_time(pid: u32) -> Result<u64> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat"))?;
+    // The command name is parenthesized and may contain spaces or ')'.
+    let rest = stat
+        .rsplit_once(')')
+        .map(|(_, rest)| rest)
+        .context("malformed /proc stat")?;
+    // Fields after the name start at field 3 (state); starttime is field 22.
+    rest.split_whitespace()
+        .nth(19)
+        .and_then(|value| value.parse().ok())
+        .context("malformed /proc process start time")
+}
+
+/// Watch the launcher of a supervised host. Returns a flag set once the
+/// launcher has exited (or was already gone), after which `wake` is called.
+/// Returns None when this host was not started by the supervising launcher.
+pub fn watch_launcher(
+    wake: std::sync::Arc<dyn Fn() + Send + Sync>,
+) -> Option<std::sync::Arc<AtomicBool>> {
+    if !is_systemd_managed() {
+        return None;
+    }
+    let value = std::env::var(LAUNCHER_ENV).ok()?;
+    let (pid, start) = value.split_once(':')?;
+    let (pid, start): (u32, u64) = (pid.parse().ok()?, start.parse().ok()?);
+    let gone = std::sync::Arc::new(AtomicBool::new(false));
+    // SAFETY: pidfd_open takes a PID and flags and returns a new descriptor.
+    let raw = unsafe { libc::syscall(libc::SYS_pidfd_open, pid as libc::pid_t, 0) };
+    let pidfd = if raw >= 0 {
+        // SAFETY: the successful syscall returned a descriptor we now own.
+        Some(unsafe { OwnedFd::from_raw_fd(raw as i32) })
+    } else {
+        None
+    };
+    // Check identity after opening the pidfd so a PID reused before the open
+    // cannot be mistaken for the launcher.
+    let same = process_start_time(pid).ok() == Some(start);
+    let Some(pidfd) = pidfd.filter(|_| same) else {
+        tracing::warn!("launcher already exited; shutting down the supervised application");
+        gone.store(true, Ordering::SeqCst);
+        wake();
+        return Some(gone);
+    };
+    let flag = gone.clone();
+    let spawned = std::thread::Builder::new()
+        .name("ui4me-launcher-watch".into())
+        .spawn(move || {
+            let mut poll = libc::pollfd {
+                fd: pidfd.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            loop {
+                // SAFETY: one valid pollfd for the descriptor owned by this thread.
+                let ready = unsafe { libc::poll(&mut poll, 1, -1) };
+                if ready > 0 {
+                    break;
+                }
+                if ready < 0 && io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
+                    tracing::warn!(error = %io::Error::last_os_error(), "cannot watch launcher");
+                    return;
+                }
+            }
+            tracing::warn!("launcher exited; shutting down the supervised application");
+            flag.store(true, Ordering::SeqCst);
+            wake();
+        });
+    if let Err(error) = spawned {
+        tracing::warn!(%error, "cannot start launcher watch");
+    }
+    Some(gone)
 }
 
 pub fn is_systemd_managed() -> bool {
@@ -460,6 +558,11 @@ pub fn is_systemd_managed() -> bool {
     std::fs::read_to_string("/proc/self/cgroup")
         .map(|s| s.lines().any(|line| line.ends_with(&unit)))
         .unwrap_or(false)
+}
+
+/// What `run` uses, independent of how this diagnostic process was started.
+pub fn run_containment_description() -> &'static str {
+    "systemd-user-service via systemd-run --user (required; --allow-unsupervised is an explicit diagnostic)"
 }
 
 pub fn containment_description() -> &'static str {
@@ -690,6 +793,24 @@ pub fn initialize_application(_app_id: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn launcher_identity_distinguishes_processes_by_start_time() {
+        let own = launcher_identity(std::process::id()).unwrap();
+        assert_eq!(own, launcher_identity(std::process::id()).unwrap());
+        let mut child = Command::new("sleep").arg("5").spawn().unwrap();
+        let other = launcher_identity(child.id()).unwrap();
+        child.kill().unwrap();
+        child.wait().unwrap();
+        let (own_pid, own_start) = own.split_once(':').unwrap();
+        let (child_pid, child_start) = other.split_once(':').unwrap();
+        assert_ne!(own_pid, child_pid);
+        assert!(own_start.parse::<u64>().unwrap() <= child_start.parse::<u64>().unwrap());
+        assert!(
+            launcher_identity(child.id()).is_err(),
+            "reaped process has no identity"
+        );
+    }
+
     #[test]
     fn compositor_identity_is_stable_across_launch_routes_and_changes_on_restart() {
         let directory = tempfile::tempdir().unwrap();

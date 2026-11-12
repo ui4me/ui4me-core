@@ -20,6 +20,16 @@ use buffer::WaylandBuffer;
 
 struct State;
 
+/// UI4ME patch: busy buffers parked while the compositor still holds them.
+/// Bounds memory when a compositor withholds releases (for example for a fully
+/// occluded window); when the bound is reached `buffer_mut` reports
+/// [`COMPOSITOR_HOLDS_BUFFERS`] instead of blocking the caller's thread.
+const MAX_RETIRED_BUFFERS: usize = 4;
+
+/// Error text used when no buffer can be provided without blocking. Callers
+/// can retry on a later frame.
+pub(crate) const COMPOSITOR_HOLDS_BUFFERS: &str = "Wayland compositor still holds every buffer";
+
 #[derive(Debug)]
 pub struct WaylandDisplayImpl<D: ?Sized> {
     conn: Option<Connection>,
@@ -80,6 +90,8 @@ pub struct WaylandImpl<D: ?Sized, W: ?Sized> {
     display: Arc<WaylandDisplayImpl<D>>,
     surface: Option<wl_surface::WlSurface>,
     buffers: Option<(WaylandBuffer, WaylandBuffer)>,
+    /// UI4ME patch: replaced back buffers awaiting `wl_buffer.release`.
+    retired: Vec<WaylandBuffer>,
     size: Option<(NonZeroI32, NonZeroI32)>,
 
     /// The pointer to the window object.
@@ -177,6 +189,7 @@ impl<D: HasDisplayHandle + ?Sized, W: HasWindowHandle> SurfaceInterface<D, W>
             display: display.clone(),
             surface: Some(surface),
             buffers: Default::default(),
+            retired: Vec::new(),
             size: None,
             window_handle: window,
         })
@@ -205,21 +218,36 @@ impl<D: HasDisplayHandle + ?Sized, W: HasWindowHandle> SurfaceInterface<D, W>
             .expect("Must set size of surface before calling `buffer_mut()`");
 
         if let Some((_front, back)) = &mut self.buffers {
-            // Block if back buffer not released yet
-            if !back.released() {
-                let mut event_queue = self
-                    .display
+            // UI4ME patch: upstream blocked here in `blocking_dispatch` until
+            // the compositor released the back buffer. A compositor may keep
+            // sending frame callbacks to an occluded surface without latching
+            // its newest buffer, so that wait could last forever and freeze the
+            // application's event loop. Process releases that already arrived,
+            // then use a fresh buffer instead of waiting.
+            if !back.released() || self.retired.iter().any(|b| !b.released()) {
+                self.display
                     .event_queue
                     .lock()
-                    .unwrap_or_else(|x| x.into_inner());
-                while !back.released() {
-                    event_queue.blocking_dispatch(&mut State).map_err(|err| {
+                    .unwrap_or_else(|x| x.into_inner())
+                    .dispatch_pending(&mut State)
+                    .map_err(|err| {
                         SoftBufferError::PlatformError(
                             Some("Wayland dispatch failure".to_string()),
                             Some(Box::new(err)),
                         )
                     })?;
+            }
+            self.retired.retain(|buffer| !buffer.released());
+            if !back.released() {
+                if self.retired.len() >= MAX_RETIRED_BUFFERS {
+                    return Err(SoftBufferError::PlatformError(
+                        Some(COMPOSITOR_HOLDS_BUFFERS.to_string()),
+                        None,
+                    ));
                 }
+                let fresh =
+                    WaylandBuffer::new(&self.display.shm, width.get(), height.get(), &self.display.qh);
+                self.retired.push(std::mem::replace(back, fresh));
             }
 
             // Resize, if buffer isn't large enough

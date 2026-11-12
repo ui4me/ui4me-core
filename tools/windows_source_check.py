@@ -45,6 +45,11 @@ def main():
             source += f"\n[[{kind}]]\nname = {json.dumps(path.stem)}\npath = {json.dumps(str(path))}\n"
     # Explicit workspace prevents any accidental parent workspace inheritance.
     source += "\n[workspace]\n"
+    # Keep the workspace's vendored dependency patches so the lockfile matches.
+    for name, spec in tomllib.loads((ROOT / "Cargo.toml").read_text()).get("patch", {}).get("crates-io", {}).items():
+        if not source.endswith("[patch.crates-io]\n") and "[patch.crates-io]" not in source:
+            source += "\n[patch.crates-io]\n"
+        source += f"{name} = {{ path = {json.dumps(str((ROOT / spec['path']).resolve()))} }}\n"
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="ui4me-windows-source-") as temporary:
         directory = Path(temporary)

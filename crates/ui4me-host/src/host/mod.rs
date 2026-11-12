@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::{
-    atomic::{AtomicI32, Ordering},
+    atomic::{AtomicBool, AtomicI32, Ordering},
     mpsc, Arc,
 };
 use std::time::{Duration, Instant};
@@ -41,6 +41,8 @@ struct NativeWindow {
     modifiers: ModifiersState,
     ime_enabled: bool,
     drag_selecting: bool,
+    /// Whether a frame has been presented (logged once for startup timing).
+    presented: bool,
 }
 
 struct WindowRecord {
@@ -107,6 +109,10 @@ pub struct Host {
     action_rx: mpsc::Receiver<ActionEvent>,
     transfers: HashMap<AsyncRequestSerial, PendingTransfer>,
     exit_code: Arc<AtomicI32>,
+    /// Set when a supervising launcher process has exited.
+    launcher_gone: Option<Arc<AtomicBool>>,
+    /// Shared native presentation context, created with the first window.
+    presentation: Option<softbuffer::Context<OwnedDisplayHandle>>,
 }
 
 /// Launch a manifest, forwarding secondary launches to the existing instance.
@@ -119,11 +125,7 @@ pub fn run(config: AppConfig, headless: bool) -> Result<i32> {
     };
     if let Some(lock) = &instance {
         if !lock.primary {
-            let request = json!({"jsonrpc":"2.0","id":"activation","method":"app.activate",
-                "params":{"args":std::env::args().collect::<Vec<_>>(),"cwd":std::env::current_dir()?,
-                    "activation_token":std::env::var("XDG_ACTIVATION_TOKEN").ok()}});
-            let response = transport::request(&lock.endpoint, request, Duration::from_secs(5))?;
-            protocol::parse_response(response)?.outcome?;
+            forward_activation(&lock.endpoint, &config)?;
             return Ok(0);
         }
     }
@@ -151,6 +153,34 @@ pub fn run(config: AppConfig, headless: bool) -> Result<i32> {
         event_loop.run_app(host)?;
     }
     Ok(result.load(Ordering::Relaxed))
+}
+
+/// Deliver this launch to the primary instance. A primary that is still
+/// starting (for example two simultaneous launches) cannot yet deliver the
+/// activation to a ready backend, so retry within the manifest's bounded
+/// startup deadline instead of losing the user's launch.
+fn forward_activation(endpoint: &str, config: &AppConfig) -> Result<()> {
+    let request = json!({"jsonrpc":"2.0","id":"activation","method":"app.activate",
+        "params":{"args":std::env::args().collect::<Vec<_>>(),"cwd":std::env::current_dir()?,
+            "activation_token":std::env::var("XDG_ACTIVATION_TOKEN").ok()}});
+    let deadline = Instant::now()
+        + Duration::from_millis(config.host.startup_timeout_ms)
+        + Duration::from_secs(5);
+    loop {
+        let timeout = deadline
+            .saturating_duration_since(Instant::now())
+            .clamp(Duration::from_millis(100), Duration::from_secs(5));
+        let response = transport::request(endpoint, request.clone(), timeout)?;
+        match protocol::parse_response(response)?.outcome {
+            Ok(_) => return Ok(()),
+            Err(error)
+                if error.code == protocol::code::UNAVAILABLE && Instant::now() < deadline =>
+            {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
 }
 
 /// The native probe works without a language runtime, so failures can be
@@ -209,6 +239,7 @@ pub fn doctor() -> Value {
     json!({"host_version":env!("CARGO_PKG_VERSION"),"protocol_version":protocol::PROTOCOL_VERSION,
         "os":std::env::consts::OS,"architecture":std::env::consts::ARCH,"pid":std::process::id(),
         "environment":environment,"containment":platform::containment_description(),
+        "run_containment":platform::run_containment_description(),
         "paths":platform::standard_paths("org.ui4me.HostProbe").ok(),
         "native_tests":"not run by doctor","renderer":"CPU integration probe; HTML/CSS renderer not part of v0.1",
         "windowing_dependency":"winit 0.31.0-beta.4 (exactly pinned)"})
@@ -252,6 +283,7 @@ impl Host {
         };
         let (job_tx, job_rx) = mpsc::sync_channel(protocol::MAX_PENDING);
         let (action_tx, action_rx) = mpsc::sync_channel(128);
+        let launcher_gone = platform::watch_launcher(wake.clone());
         let mut lifecycle = Lifecycle::new();
         lifecycle.begin_connecting()?;
         if standalone {
@@ -291,6 +323,8 @@ impl Host {
             action_rx,
             transfers: HashMap::new(),
             exit_code,
+            launcher_gone,
+            presentation: None,
         })
     }
 
@@ -429,6 +463,20 @@ impl Host {
                 );
             }
         }
+        if self
+            .launcher_gone
+            .as_ref()
+            .is_some_and(|gone| gone.load(Ordering::SeqCst))
+        {
+            // The launcher was terminated (signal, closed terminal or a killed
+            // test harness). This is an external termination, not an answer
+            // to any pending decision: cancel those and shut down boundedly.
+            self.launcher_gone = None;
+            if !matches!(self.lifecycle.phase(), Phase::Quitting | Phase::Stopped) {
+                self.exit_code.store(1, Ordering::Relaxed);
+                self.begin_shutdown();
+            }
+        }
         if let Some(backend) = &self.backend {
             crate::logging::backend_logs(backend.drain_logs());
         }
@@ -547,8 +595,18 @@ impl Host {
         // app.activate is only reachable on the current user's private,
         // desktop-session-scoped endpoint, and never controls native resources.
         if request.method == "app.activate" && self.client != Some(connection) {
-            let outcome = if self.client.is_none() {
+            let outcome = if matches!(
+                self.lifecycle.phase(),
+                Phase::Starting | Phase::Connecting | Phase::Initializing
+            ) {
+                // The backend has not called app.ready, so it may not have
+                // registered for app.activated yet. The launcher retries.
                 Err(RpcError::unavailable("Primary instance is still starting"))
+            } else if matches!(
+                self.lifecycle.phase(),
+                Phase::Quitting | Phase::Stopped | Phase::Failed
+            ) {
+                Err(RpcError::closed("Primary instance is shutting down"))
             } else if request.params.to_string().len() > 32 * 1024 {
                 Err(RpcError::invalid_params("Activation payload too large"))
             } else {
@@ -1002,6 +1060,8 @@ mod tests {
             action_rx,
             transfers: HashMap::new(),
             exit_code: Arc::new(AtomicI32::new(0)),
+            launcher_gone: None,
+            presentation: None,
         }
     }
 
@@ -1018,6 +1078,47 @@ mod tests {
                 closing: false,
             },
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn wayland_unminimize_is_rejected_instead_of_reporting_success() {
+        let mut host = controller(true);
+        add_window(&mut host, "one");
+        let error = host
+            .set_window(json!({"window_id":"one","minimized":false,"title":"changed"}))
+            .unwrap_err();
+        assert_eq!(error.code, protocol::code::UNSUPPORTED);
+        assert_eq!(
+            host.windows["one"].title, "one",
+            "rejected request changes nothing"
+        );
+        assert!(host
+            .set_window(json!({"window_id":"one","minimized":true}))
+            .is_ok());
+    }
+
+    #[test]
+    fn launcher_exit_during_pending_quit_shuts_down_without_approving_it() {
+        let mut host = controller(true);
+        add_window(&mut host, "one");
+        host.request_quit("native_close").unwrap();
+        assert_eq!(host.lifecycle.phase(), Phase::QuitPending);
+        assert_eq!(host.decisions.pending_count(), 1);
+        let gone = Arc::new(AtomicBool::new(false));
+        host.launcher_gone = Some(gone.clone());
+        host.pump(None);
+        assert_eq!(
+            host.lifecycle.phase(),
+            Phase::QuitPending,
+            "launcher still alive"
+        );
+        gone.store(true, Ordering::SeqCst);
+        host.pump(None);
+        // No backend remains in this fixture, so the bounded shutdown completes.
+        assert_eq!(host.lifecycle.phase(), Phase::Stopped);
+        assert_eq!(host.decisions.pending_count(), 0);
+        assert_eq!(host.exit_code.load(Ordering::Relaxed), 1);
     }
 
     #[test]

@@ -53,6 +53,10 @@ pub(super) fn update_ime(probe: &Probe, native: &mut NativeWindow) {
     }
 }
 
+/// Matches the vendored softbuffer Wayland backend's non-blocking busy error
+/// (third_party/softbuffer-0.4.8, COMPOSITOR_HOLDS_BUFFERS).
+const COMPOSITOR_HOLDS_BUFFERS: &str = "Wayland compositor still holds every buffer";
+
 impl Host {
     pub(super) fn write_clipboard(
         &self,
@@ -356,6 +360,14 @@ impl Host {
             );
             native.window.pre_present_notify();
             buffer.present().map_err(|e| anyhow::anyhow!("{e}"))?;
+            if !native.presented {
+                native.presented = true;
+                tracing::info!(
+                    window = id,
+                    since_host_start_ms = self.started.elapsed().as_millis() as u64,
+                    "first frame presented"
+                );
+            }
             native.accessibility.update(record.probe.tree(
                 &record.title,
                 size.width,
@@ -366,7 +378,21 @@ impl Host {
             Ok(())
         })();
         if let Err(error) = result {
-            tracing::error!(%error, "native presentation failed");
+            if error.to_string().contains(COMPOSITOR_HOLDS_BUFFERS) {
+                // The compositor has not yet released any of this window's
+                // bounded buffers (e.g. it is fully occluded). Never wait for
+                // it on the GUI thread: skip this frame and retry on a later,
+                // frame-callback-paced redraw.
+                tracing::debug!(
+                    window = id,
+                    "frame deferred until the compositor releases a buffer"
+                );
+                if let Some(native) = self.windows.get(id).and_then(|w| w.native.as_ref()) {
+                    native.window.request_redraw();
+                }
+            } else {
+                tracing::error!(%error, "native presentation failed");
+            }
         }
     }
 }
@@ -401,8 +427,16 @@ impl ApplicationHandler for Host {
     }
     fn about_to_wait(&mut self, event_loop: &dyn ActiveEventLoop) {
         self.pump(Some(event_loop));
+        // Workers wake the loop for messages, results and backend exit. The
+        // timer only enforces deadlines, so poll quickly while time-bounded work
+        // exists and back off when the application is simply idle.
+        let deadlines_pending = self.lifecycle.phase() != Phase::Running
+            || !self.transfers.is_empty()
+            || !self.jobs.is_empty()
+            || self.connected.keys().any(|id| Some(*id) != self.client);
+        let interval = if deadlines_pending { 50 } else { 500 };
         event_loop.set_control_flow(ControlFlow::WaitUntil(
-            Instant::now() + Duration::from_millis(50),
+            Instant::now() + Duration::from_millis(interval),
         ));
     }
 

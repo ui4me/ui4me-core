@@ -307,21 +307,98 @@ impl NativeListener {
             }
             return Ok(None);
         }
-        Ok(Some(NativeStream {
-            handle: Arc::new(handle),
-            stopped: Arc::new(AtomicBool::new(false)),
-            deadline: None,
-        }))
+        Ok(Some(NativeStream::new(handle)))
+    }
+}
+
+/// One end of a connected pipe shared by reader, writer and control clones.
+/// Shutdown must be observable by the peer, as Unix shutdown(2) is: the
+/// handle is closed as soon as no overlapped operation still uses it, and no
+/// operation can start afterwards, so a closed or reused handle is never used.
+struct Pipe {
+    raw: HANDLE,
+    stopped: AtomicBool,
+    usage: std::sync::Mutex<PipeUsage>,
+}
+#[derive(Default)]
+struct PipeUsage {
+    in_flight: usize,
+    closed: bool,
+}
+// The raw value is an owned kernel handle; access is serialized by `usage`.
+unsafe impl Send for Pipe {}
+unsafe impl Sync for Pipe {}
+impl Pipe {
+    fn usage(&self) -> std::sync::MutexGuard<'_, PipeUsage> {
+        self.usage
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+    fn begin(&self) -> io::Result<()> {
+        let mut usage = self.usage();
+        if usage.closed || self.stopped.load(Ordering::Acquire) {
+            return Err(io::Error::new(io::ErrorKind::BrokenPipe, "pipe closed"));
+        }
+        usage.in_flight += 1;
+        Ok(())
+    }
+    fn end(&self) {
+        let mut usage = self.usage();
+        usage.in_flight -= 1;
+        self.close_if_idle(&mut usage);
+    }
+    fn shutdown(&self) {
+        let mut usage = self.usage();
+        self.stopped.store(true, Ordering::Release);
+        if !usage.closed && usage.in_flight > 0 {
+            // Pending operations observe `stopped`, complete their
+            // cancellation and the last one closes the handle.
+            unsafe {
+                CancelIoEx(self.raw, null());
+            }
+        }
+        self.close_if_idle(&mut usage);
+    }
+    fn close_if_idle(&self, usage: &mut PipeUsage) {
+        if self.stopped.load(Ordering::Acquire) && usage.in_flight == 0 && !usage.closed {
+            usage.closed = true;
+            unsafe {
+                CloseHandle(self.raw);
+            }
+        }
+    }
+}
+impl Drop for Pipe {
+    fn drop(&mut self) {
+        let usage = self
+            .usage
+            .get_mut()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if !usage.closed {
+            usage.closed = true;
+            unsafe {
+                CloseHandle(self.raw);
+            }
+        }
     }
 }
 
 pub struct NativeStream {
-    handle: Arc<Handle>,
-    stopped: Arc<AtomicBool>,
+    pipe: Arc<Pipe>,
     deadline: Option<Instant>,
 }
 
 impl NativeStream {
+    fn new(handle: Handle) -> Self {
+        Self {
+            pipe: Arc::new(Pipe {
+                raw: handle.into_raw(),
+                stopped: AtomicBool::new(false),
+                usage: Default::default(),
+            }),
+            deadline: None,
+        }
+    }
     pub fn connect(endpoint: &str, timeout: Duration) -> io::Result<Self> {
         let name = wide_str(endpoint)?;
         let start = Instant::now();
@@ -338,13 +415,7 @@ impl NativeStream {
                 )
             };
             match Handle::checked(raw) {
-                Ok(handle) => {
-                    return Ok(Self {
-                        handle: Arc::new(handle),
-                        stopped: Arc::new(AtomicBool::new(false)),
-                        deadline: None,
-                    });
-                }
+                Ok(handle) => return Ok(Self::new(handle)),
                 Err(error)
                     if matches!(
                         error.raw_os_error().map(|v| v as u32),
@@ -366,25 +437,26 @@ impl NativeStream {
     }
     pub fn try_clone(&self) -> io::Result<Self> {
         Ok(Self {
-            handle: self.handle.clone(),
-            stopped: self.stopped.clone(),
+            pipe: self.pipe.clone(),
             deadline: self.deadline,
         })
     }
+    /// Close this connection for both directions; the peer observes it.
     pub fn shutdown(&self) {
-        self.stopped.store(true, Ordering::Release);
-        unsafe {
-            CancelIoEx(self.handle.0, null());
-        }
+        self.pipe.shutdown();
     }
     pub fn set_timeout(&mut self, timeout: Option<Duration>) -> io::Result<()> {
         self.deadline = timeout.map(|value| Instant::now() + value);
         Ok(())
     }
     fn transfer(&self, bytes: *mut u8, length: usize, write: bool) -> io::Result<usize> {
-        if self.stopped.load(Ordering::Acquire) {
-            return Err(io::Error::new(io::ErrorKind::BrokenPipe, "pipe closed"));
-        }
+        self.pipe.begin()?;
+        let result = self.transfer_started(bytes, length, write);
+        self.pipe.end();
+        result
+    }
+    fn transfer_started(&self, bytes: *mut u8, length: usize, write: bool) -> io::Result<usize> {
+        let handle = self.pipe.raw;
         if self
             .deadline
             .is_some_and(|deadline| Instant::now() >= deadline)
@@ -406,7 +478,7 @@ impl NativeStream {
         let result = unsafe {
             if write {
                 WriteFile(
-                    self.handle.0,
+                    handle,
                     bytes.cast_const(),
                     length.min(u32::MAX as usize) as u32,
                     &mut count,
@@ -414,7 +486,7 @@ impl NativeStream {
                 )
             } else {
                 ReadFile(
-                    self.handle.0,
+                    handle,
                     bytes,
                     length.min(u32::MAX as usize) as u32,
                     &mut count,
@@ -423,13 +495,13 @@ impl NativeStream {
             }
         };
         if result != 0 {
-            bool_result(unsafe { GetOverlappedResult(self.handle.0, &overlapped, &mut count, 0) })?;
+            bool_result(unsafe { GetOverlappedResult(handle, &overlapped, &mut count, 0) })?;
             return Ok(count as usize);
         }
         match unsafe { GetLastError() } {
             ERROR_BROKEN_PIPE | ERROR_PIPE_NOT_CONNECTED if !write => Ok(0),
             ERROR_IO_PENDING => {
-                wait_pending(self.handle.0, &mut overlapped, &self.stopped, self.deadline)
+                wait_pending(handle, &mut overlapped, &self.pipe.stopped, self.deadline)
                     .map(|value| value as usize)
             }
             error => Err(io::Error::from_raw_os_error(error as i32)),
@@ -514,6 +586,19 @@ fn wait_pending(
 pub fn bootstrap_supervised(_args: &[OsString]) -> Result<Option<i32>> {
     Ok(None)
 }
+/// Windows hosts are not re-launched under a separate supervisor; the
+/// launcher is the host itself, so there is nothing to watch.
+pub fn watch_launcher(
+    _wake: std::sync::Arc<dyn Fn() + Send + Sync>,
+) -> Option<std::sync::Arc<std::sync::atomic::AtomicBool>> {
+    None
+}
+
+/// What `run` uses, independent of how this diagnostic process was started.
+pub fn run_containment_description() -> &'static str {
+    "Windows Job Object (backend assigned during creation)"
+}
+
 pub fn containment_description() -> &'static str {
     "Windows Job Object (backend assigned during creation)"
 }
