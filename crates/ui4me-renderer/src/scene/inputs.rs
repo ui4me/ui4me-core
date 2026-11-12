@@ -451,6 +451,8 @@ pub struct BoxExtras {
     pub radii: [(f32, f32); 4],
     /// `box-shadow`, first layer topmost.
     pub shadows: Vec<BoxShadowSpec>,
+    /// Visible lower-right CSS resize affordance; hit handling remains document-owned.
+    pub resize_grip: Option<Color>,
     /// `opacity` (1 = opaque).
     pub opacity: f32,
     /// Blend this element's isolated group with its backdrop.
@@ -659,6 +661,7 @@ impl Default for BoxExtras {
             unsupported: Vec::new(),
             radii: [(0.0, 0.0); 4],
             shadows: Vec::new(),
+            resize_grip: None,
             opacity: 1.0,
             blend_mode: Default::default(),
             isolation: false,

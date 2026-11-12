@@ -277,12 +277,17 @@ impl Host {
         // viewport setup all succeed. Existing user state survives a rejected load.
         let mut engine = Document::parse_hosted(&html, asset_root.as_deref(), width, height)?;
         engine.set_viewport(width, height, scale)?;
-        engine.set_system_color_scheme(
-            window
-                .native
-                .as_ref()
-                .and_then(|native| native.window.theme())
-                .map(|theme| theme == winit::window::Theme::Dark),
+        let preferences = self.preferences.snapshot();
+        engine.set_system_preferences(
+            preferences.dark.or_else(|| {
+                window
+                    .native
+                    .as_ref()
+                    .and_then(|native| native.window.theme())
+                    .map(|theme| theme == winit::window::Theme::Dark)
+            }),
+            preferences.reduced_motion,
+            preferences.high_contrast,
         )?;
         if let Some(native) = &window.native {
             // A replacement in an already unfocused window may receive no new
@@ -390,6 +395,83 @@ mod tests {
             )
             .unwrap()["text"],
             "replacement"
+        );
+    }
+
+    #[test]
+    fn completion_commands_decode_and_preserve_utf16_nodes_and_form_order() {
+        let mut host = controller();
+        let id = load(&mut host, "<form id=f><input name=x value='A😀B'><input name=x value=second><button id=s name=action value=save>Save</button></form>");
+        let nodes = command(
+            &mut host,
+            &id,
+            json!({"op":"query_nodes","selector":"input","limit":1}),
+        )
+        .unwrap();
+        let node = nodes["nodes"][0]["node"].clone();
+        assert!(nodes["nodes"][0]["element"].is_null());
+        command(&mut host, &id, json!({"op":"focus","node":node})).unwrap();
+        command(&mut host,&id,json!({"op":"set_control_selection","node":node,"start":1,"end":3,"direction":"backward"})).unwrap();
+        assert!(command(
+            &mut host,
+            &id,
+            json!({"op":"set_control_selection","node":node,"start":2,"end":3})
+        )
+        .is_err());
+        command(&mut host,&id,json!({"op":"replace_control_range","node":node,"replacement":"X","selection_mode":"select"})).unwrap();
+        command(
+            &mut host,
+            &id,
+            json!({"op":"edit_command","node":node,"command":"undo"}),
+        )
+        .unwrap();
+        let data = command(
+            &mut host,
+            &id,
+            json!({"op":"get_form_data","element":"f","submitter":"s"}),
+        )
+        .unwrap();
+        assert_eq!(
+            data["entries"],
+            json!([
+                {"name":"x","kind":"text","value":"A😀B"},
+                {"name":"x","kind":"text","value":"second"},
+                {"name":"action","kind":"text","value":"save"}
+            ])
+        );
+        command(&mut host, &id, json!({"op":"blur"})).unwrap();
+        assert!(command(&mut host, &id, json!({"op":"get_focused_element"}))
+            .unwrap()
+            .is_null());
+        assert!(command(
+            &mut host,
+            &id,
+            json!({"op":"get_form_data","element":"f","unknown":true})
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn bundle_registration_decodes_atomically_and_purge_preserves_registered_source() {
+        let mut host = controller();
+        let id = load(&mut host, "<p>Resource contract</p>");
+        command(&mut host,&id,json!({"op":"register_resource_bundle","name":"app","entries":[{"path":"a.txt","data_url":"data:text/plain;base64,YWJj"}]})).unwrap();
+        assert!(command(&mut host,&id,json!({"op":"register_resource_bundle","name":"app","entries":[{"path":"../escape","data_url":"data:text/plain,wrong"}]})).is_err());
+        assert!(command(&mut host,&id,json!({"op":"register_resource_bundle","name":"app","entries":[{"path":"a.txt","data_url":"not-a-data-url"}]})).is_err());
+        command(&mut host, &id, json!({"op":"purge_unused_resources"})).unwrap();
+        let stats = command(&mut host, &id, json!({"op":"get_resource_stats"})).unwrap();
+        assert_eq!(stats["bundles"]["bytes"], 3);
+        assert_eq!(stats["bundles"]["count"], 1);
+        command(
+            &mut host,
+            &id,
+            json!({"op":"unregister_resource_bundle","name":"app"}),
+        )
+        .unwrap();
+        assert_eq!(
+            command(&mut host, &id, json!({"op":"get_resource_stats"})).unwrap()["bundles"]
+                ["bytes"],
+            0
         );
     }
 

@@ -40,6 +40,35 @@ use ui4me_engine_types::stage::Stage;
 use ui4me_engine_types::status::Status;
 
 impl DocumentPipeline {
+    /// Update the file-input label from selected basenames. This is a presentation cache;
+    /// it cannot select files, grant filesystem access or change the form's selected state.
+    /// An empty list clears it (reset/cancelled selection); unchanged labels do not redraw.
+    pub fn set_file_input_names(&mut self, node: NodeId, names: &[String]) -> Result<bool, Status> {
+        self.check_open()?;
+        let label = match names {
+            [] => None,
+            [name] => Some(format!("Choose File — {name}")),
+            _ => Some(format!("Choose Files — {} files selected", names.len())),
+        };
+        if self.file_input_labels.get(&node) == label.as_ref() {
+            return Ok(false);
+        }
+        match label {
+            Some(label) => {
+                self.file_input_labels.insert(node, label);
+            }
+            None => {
+                self.file_input_labels.remove(&node);
+            }
+        }
+        self.file_input_labels_dirty = true;
+        self.note_input_reason(
+            crate::pipeline::reasons::Reason::ColdRebuild,
+            crate::pipeline::reasons::Subject::Document,
+        );
+        Ok(true)
+    }
+
     /// `getElementById`.
     pub fn element_by_id(&self, id: &str) -> Option<NodeId> {
         self.doc.element_by_id(id)
@@ -279,6 +308,7 @@ impl DocumentPipeline {
         // re-runs over the committed style and fragments (no restyle, no relayout, FR-066).
         let paint_only = !cold
             && !self.env_pending
+            && !self.file_input_labels_dirty
             && self.committed.is_some()
             && !reasons.is_empty()
             && reasons.iter().all(|r| {
@@ -360,6 +390,7 @@ impl DocumentPipeline {
                 // `@font-face` faces the text needed in this update start loading (non-blocking).
                 self.request_text_faces();
                 self.publish(r0, draft);
+                self.file_input_labels_dirty = false;
                 self.finish_font_rebuild();
                 Ok(())
             }
@@ -512,7 +543,10 @@ impl DocumentPipeline {
         // The previous layout is reusable when the new box tree equals its box tree (a style change
         // that moved no layout input: colours, shadows, backgrounds, hover states) and the font,
         // resource and environment epochs did not move.
-        let reuse_base = if rebuild || self.no_layout_reuse || self.layout_font_gen != self.font_gen
+        let reuse_base = if rebuild
+            || self.no_layout_reuse
+            || self.layout_font_gen != self.font_gen
+            || self.file_input_labels_dirty
         {
             None
         } else {
@@ -541,6 +575,7 @@ impl DocumentPipeline {
                 &self.config,
                 &mut self.text,
                 self.resources.as_ref(),
+                &self.file_input_labels,
                 reuse_base.as_ref().map(|b| &*b.layout),
                 &mut self.box_styles,
                 !self.no_layout_reuse,
@@ -640,7 +675,8 @@ impl DocumentPipeline {
         } else {
             &self.paint_styles
         };
-        let reuse = (self.scene_reuse && !self.no_layout_reuse).then_some(&layout);
+        let reuse = (self.scene_reuse && !self.no_layout_reuse && !self.file_input_labels_dirty)
+            .then_some(&layout);
         let scene = scene_stage(
             &self.doc,
             &style,
@@ -737,6 +773,7 @@ impl DocumentPipeline {
                 &self.config,
                 &mut self.text,
                 self.resources.as_ref(),
+                &self.file_input_labels,
                 Some(&**layout),
                 &mut self.box_styles,
                 !self.no_layout_reuse,
@@ -1118,6 +1155,7 @@ pub(crate) fn layout_stage(
     config: &crate::pipeline::state::PipelineConfig,
     text: &mut TextServices,
     resources: Option<&Arc<crate::pipeline::resources::PipelineResources>>,
+    file_input_labels: &std::collections::HashMap<NodeId, String>,
     prev: Option<&LayoutOutput>,
     cache: &mut crate::layout::box_tree::BoxStyleCache,
     incremental: bool,
@@ -1134,7 +1172,8 @@ pub(crate) fn layout_stage(
         |n: NodeId, property: &str| resources.and_then(|r| r.css_image_state(n, property));
     let src = StyleBridgeSource::new_cached(doc, style, cache)
         .with_images(&natural)
-        .with_css_images(&css_natural);
+        .with_css_images(&css_natural)
+        .with_file_input_labels(file_input_labels);
     // 008 T016 entry: validates the viewport and isolates internal failures (a failure keeps the previous epoch, O4).
     let damage = if incremental {
         prev.and_then(|p| p.boxes.build_revision())
@@ -1794,6 +1833,7 @@ pub(crate) fn cold_stages(
     fonts: &ui4me_assets::fonts::FontSourcesView,
     images: Option<&Arc<dyn crate::scene::inputs::ImageSource>>,
     resources: Option<&Arc<crate::pipeline::resources::PipelineResources>>,
+    file_input_labels: &std::collections::HashMap<NodeId, String>,
     generation: u64,
     revision: RevisionTuple,
     scroll: &ScrollOffsets,
@@ -1817,6 +1857,7 @@ pub(crate) fn cold_stages(
         config,
         &mut text,
         resources,
+        file_input_labels,
         None,
         &mut Default::default(),
         false,
@@ -1849,6 +1890,7 @@ pub(crate) fn cold_stages(
                 config,
                 &mut text,
                 resources,
+                file_input_labels,
                 None,
                 &mut Default::default(),
                 false,

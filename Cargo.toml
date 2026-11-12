@@ -4,7 +4,7 @@ exclude = ["patches", "third_party"]
 resolver = "3"
 
 [workspace.package]
-version = "0.2.0"
+version = "1.0.0-rc.1"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT AND OFL-1.1"
@@ -40,14 +40,14 @@ euclid = "0.22"
 app_units = "0.7"
 url = "2.5"
 # layout
-taffy = { path = "patches/taffy/taffy", default-features = false, features = ["std", "block_layout", "flexbox", "grid", "float_layout", "calc", "content_size"] }
+taffy = { path = "patches/taffy/taffy", default-features = false, features = ["std", "block_layout", "flexbox", "grid", "float_layout", "calc", "content_size", "flexbox_balance"] }
 # text
 # System font enumeration uses fontconfig on Linux and DirectWrite on Windows.
 # `fontconfig-dlopen` loads libfontconfig at run time, so the engine starts (with registered fonts only) where it is missing.
 parley = { version = "0.12", default-features = false, features = ["std", "system"] }
 fontique = { version = "0.12", default-features = false, features = ["std", "system", "fontconfig-dlopen"] }
 # Raster: single-threaded CPU rendering
-vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "u8_pipeline"] }
+vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "u8_pipeline", "png"] }
 # platform
 winit = { version = "=0.31.0-beta.4", default-features = false, features = ["wayland", "wayland-dlopen"] }
 softbuffer = { version = "=0.4.8", default-features = false, features = ["wayland", "wayland-dlopen"] }

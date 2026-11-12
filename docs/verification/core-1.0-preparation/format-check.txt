@@ -1,0 +1,3 @@
+$ cargo fmt -p ui4me-host -p ui4me-renderer -p ui4me-document -p ui4me-assets -p ui4me-engine-types -- --check
+Observed exit code: 0
+

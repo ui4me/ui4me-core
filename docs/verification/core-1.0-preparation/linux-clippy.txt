@@ -1,0 +1,10 @@
+$ cargo clippy --locked --workspace --all-targets -j2 -- -D warnings
+Observed exit code: 0
+
+    Blocking waiting for file lock on package cache
+    Checking ui4me-renderer v1.0.0-rc.1 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/crates/ui4me-renderer)
+    Checking ui4me-host v1.0.0-rc.1 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/crates/ui4me-host)
+    Checking ui4me-assets v1.0.0-rc.1 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/crates/ui4me-assets)
+    Checking ui4me-document v1.0.0-rc.1 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/crates/ui4me-document)
+    Checking ui4me-engine-types v1.0.0-rc.1 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/crates/ui4me-engine-types)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 29.24s

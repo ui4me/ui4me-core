@@ -628,6 +628,15 @@ impl NodeWrapper<'_> {
     }
 
     fn notify_property_changes(&self, adapter: &Adapter, old: &NodeWrapper<'_>) {
+        // UI4ME: combobox/list navigation keeps DOM focus on the container.
+        // Expose the semantic active descendant to AT-SPI clients instead of
+        // relying on a changed numeric value (string combo values have none).
+        let active = self.0.active_descendant().map(|node| node.id());
+        if active != old.0.active_descendant().map(|node| node.id()) {
+            if let Some(active) = active {
+                adapter.emit_object_event(self.id(), ObjectEvent::ActiveDescendantChanged(active));
+            }
+        }
         let name = self.name();
         if name != old.name() {
             let name = name.unwrap_or_default();

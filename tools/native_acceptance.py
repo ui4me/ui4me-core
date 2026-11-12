@@ -105,7 +105,7 @@ def source_identity():
 def main(checks=None, suite="host"):
     checks = CHECKS if checks is None else checks
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=ROOT / "verification" / ("native" if suite == "host" else "renderer-native"))
+    parser.add_argument("--output", type=Path, default=ROOT / "verification" / ("native" if suite == "host" else suite + "-native"))
     parser.add_argument("--automated", action="store_true")
     parser.add_argument("--record", choices=checks)
     parser.add_argument("--status", choices=("PASS", "FAIL", "BLOCKED"))

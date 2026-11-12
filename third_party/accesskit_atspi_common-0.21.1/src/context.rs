@@ -6,9 +6,26 @@
 use accesskit::{ActionHandler, ActionRequest};
 use accesskit_consumer::Tree;
 use std::fmt::{Debug, Formatter};
-use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, Mutex, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::WindowBounds;
+
+// UI4ME: one native host serves one manifest application. Configure its real
+// display name before creating any adapter, rather than exposing argv[0].
+static APPLICATION_NAME: OnceLock<String> = OnceLock::new();
+
+/// Set the application's accessible display name before its first adapter.
+/// Repeating the same name is allowed; changing process identity is rejected.
+pub fn set_application_name(name: String) -> Result<(), String> {
+    if name.is_empty() || name.len() > 4096 || name.contains('\0') {
+        return Err("Invalid accessible application name".into());
+    }
+    match APPLICATION_NAME.set(name) {
+        Ok(()) => Ok(()),
+        Err(name) if APPLICATION_NAME.get() == Some(&name) => Ok(()),
+        Err(_) => Err("Accessible application name was already configured".into()),
+    }
+}
 
 /// This is an implementation detail of `accesskit_unix`, required for robust
 /// state transitions with minimal overhead.
@@ -98,7 +115,7 @@ pub struct AppContext {
 impl AppContext {
     pub fn new(name: Option<String>) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(Self {
-            name,
+            name: APPLICATION_NAME.get().cloned().or(name),
             toolkit_name: None,
             toolkit_version: None,
             id: None,

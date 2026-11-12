@@ -1,8 +1,10 @@
-# Hosted documents: UI4ME Core 0.2
+# Hosted documents: UI4ME Core
 
 This is the document extension to the authenticated, bounded local protocol in
 [PROTOCOL.md](PROTOCOL.md). The transport protocol remains version **1**; the host
-and reference application version is **0.2.0**. The Rust host owns the native
+and candidate product version is **1.0.0-rc.1**. The complete added node, editing,
+form and resource operations are in [CORE_1.0_PROTOCOL.md](CORE_1.0_PROTOCOL.md).
+The Rust host owns the native
 event loop, window lifetime, editing, focus, rendering and desktop services.
 Python is an ordinary managed backend process. It does not own a native window
 or import a native rendering library.
@@ -123,8 +125,8 @@ document replacement or node removal.
 
 `query` returns only matched elements which have IDs. `total` is the number of
 those identified matches, while `matched_nodes` also counts anonymous matches.
-Pagination applies to `ids`; `limit` is 1–4096. If an ID is absent, use node
-inspection rather than assuming `matched_nodes == total`.
+Pagination applies to `ids`; `limit` is 1–4096. For anonymous elements use the
+new `query_nodes` and node mutation API rather than assuming `matched_nodes == total`.
 
 `get_html` offsets and limits are **UTF-8 bytes**, not Python characters or UTF-16
 units. An offset must be a valid character boundary within the serialized text.
@@ -149,7 +151,7 @@ transaction. A client timeout still means an unknown outcome, not rollback.
 |---|---|---|
 | `set_value`, `get_value` | `element`; setter also `value` | Setter updates the control; getter returns `{value}` |
 | `set_checked`, `get_checked` | `element`; setter also `checked` | Checkbox/radio state; getter returns `{checked}` |
-| `focus` | `element` | Native document focus, independent of Python callbacks |
+| `focus` | `element` or `node` | Native document focus, independent of Python callbacks |
 | `get_options` | `element` | `{options:[{value,label,selected,disabled},...]}` |
 | `set_selected_values` | `element`, `values:[string,...]` | Select control values |
 | `get_validity` | `element` | `{will_validate,valid,flags,message}`; no events |

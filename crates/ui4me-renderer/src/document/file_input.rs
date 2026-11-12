@@ -71,6 +71,11 @@ impl Document {
         let events: Vec<EventInit> = match paths {
             None => vec![EventInit::new("cancel").bubbles(true)],
             Some(paths) => {
+                let names: Vec<_> = paths
+                    .iter()
+                    .map(|p| super::application_api::file_basename(p).to_owned())
+                    .collect();
+                self.pipeline.set_file_input_names(input, &names)?;
                 self.input_files.insert(input, paths);
                 vec![
                     EventInit::new("input").bubbles(true),
@@ -105,11 +110,24 @@ impl Document {
     /// Forget the files of inputs reset by a form reset or removed (called after mutations).
     pub(super) fn prune_input_files(&mut self) {
         let d = self.pipeline.document();
+        let removed: Vec<_> = self
+            .input_files
+            .keys()
+            .copied()
+            .filter(|&n| {
+                !d.arena().contains(n)
+                    || !d.is_connected(n).unwrap_or(false)
+                    || d.input_type(n) != Some(InputType::File)
+            })
+            .collect();
         self.input_files.retain(|&n, _| {
             d.arena().contains(n)
                 && d.is_connected(n).unwrap_or(false)
                 && d.input_type(n) == Some(InputType::File)
         });
+        for n in removed {
+            let _ = self.pipeline.set_file_input_names(n, &[]);
+        }
     }
 }
 

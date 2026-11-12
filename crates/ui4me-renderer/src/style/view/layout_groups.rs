@@ -53,7 +53,7 @@ pub enum FlexBasis {
 pub struct Flex {
     pub direction: FlexDirection,
     pub wrap: FlexWrap,
-    /// `flex-wrap: wrap balance` (CSS Flexbox 2): not laid out; the consumer reports it.
+    /// Balanced wrapping (CSS Flexbox 2), consumed by the pinned Taffy balancing algorithm.
     pub wrap_balance: bool,
     pub grow: f32,
     pub shrink: f32,
@@ -256,7 +256,7 @@ pub(crate) fn flex(epoch: u64, cv: &ComputedValues) -> Flex {
         },
         wrap: if p.flex_wrap.contains(StyloWrap::WRAP_REVERSE) {
             FlexWrap::WrapReverse
-        } else if p.flex_wrap.contains(StyloWrap::WRAP) {
+        } else if p.flex_wrap.intersects(StyloWrap::WRAP | StyloWrap::BALANCE) {
             FlexWrap::Wrap
         } else {
             FlexWrap::NoWrap

@@ -25,7 +25,7 @@ pub use atspi_common::{
 pub use action::*;
 pub use adapter::{Adapter, next_adapter_id};
 pub use callback::AdapterCallback;
-pub use context::{ActionHandlerNoMut, ActionHandlerWrapper, AppContext};
+pub use context::{ActionHandlerNoMut, ActionHandlerWrapper, AppContext, set_application_name};
 pub use error::*;
 pub use events::*;
 pub use node::{CacheNode, NodeIdOrRoot, PlatformNode, PlatformRoot};

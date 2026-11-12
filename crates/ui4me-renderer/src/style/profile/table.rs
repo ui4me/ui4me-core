@@ -98,7 +98,7 @@ bool_prefs! {
     "layout.css.text-underline.enabled" = true, // 1.10.0: On (text-underline-offset, text-underline-position; 015 TXT-6)
     "layout.css.text-wrap-style.balance.enabled" = true, // 1.10.0: On (text-wrap: balance, text-wrap-style: balance; 015 TXT-4)
     "layout.css.text-wrap-style.pretty.enabled" = false,
-    "layout.css.word-break.break-word.enabled" = false,
+    "layout.css.word-break.break-word.enabled" = true,
     "layout.css.white-space-collapse.preserve-spaces.enabled" = false,
     "layout.css.text-indent-keywords.enabled" = false,
     "layout.css.display-grid-lanes.enabled" = false,
@@ -116,7 +116,7 @@ bool_prefs! {
     "layout.css.webkit-text-fill-color.enabled" = false,
     "layout.css.zoom.enabled" = false,
     "layout.css.grid-template-subgrid-value.enabled" = true, // 1.11.0: On (CSS Grid 2 subgrid; 015 GRID-1, lane L-GRID; Taffy P-008-4)
-    "layout.css.flexbox-balance.enabled" = false,
+    "layout.css.flexbox-balance.enabled" = true,
     "layout.css.light-dark.images.enabled" = true, // 1.26.0: On (F0909: light-dark(<image>, <image>) computes to the image of the used colour scheme)
     "layout.css.cross-fade.enabled" = false,
     "layout.css.random.enabled" = false,
@@ -276,7 +276,7 @@ pub const FEATURES: &[(&str, FeatureState)] = &[
     ("css.property.hyphens", On),
     ("css.property.image-orientation", Unavailable),
     ("css.property.initial-letter", Off), // 1.14.0: stays Off, reported (015 TXT-5: `::first-letter` is laid out without the sunken initial)
-    ("css.property.line-clamp", On),
+    ("css.property.line-clamp", Off),
     ("css.property.mask", On),
     ("css.property.overscroll-behavior", On),
     ("css.property.page", On),            // 1.27.0: named pages (1.0 F1001)
@@ -335,10 +335,12 @@ pub const FEATURES: &[(&str, FeatureState)] = &[
     ("css.value.text-indent-each-line", Off),
     ("css.value.text-indent-hanging", Off),
     ("css.value.text-wrap-balance", On),
+    ("css.value.flex-wrap-balance", On),
+    ("css.function.anchor-size", Off),
     ("css.value.text-wrap-pretty", Off),
     ("css.value.text-wrap-style-stable", On),
     ("css.value.white-space-collapse-preserve-spaces", Off),
-    ("css.value.word-break-break-word", Off),
+    ("css.value.word-break-break-word", On),
 ];
 
 pub fn feature_state(id: &str) -> Option<FeatureState> {
@@ -365,6 +367,8 @@ pub fn value_feature(name: &str, value: &str) -> Option<FeatureId> {
         } else {
             "css.value.clip-path-url"
         }
+    } else if has_function(&v, "anchor-size") {
+        "css.function.anchor-size"
     } else if v.contains("cross-fade(") {
         "css.function.cross-fade"
     } else if v
@@ -392,7 +396,6 @@ pub fn value_feature(name: &str, value: &str) -> Option<FeatureId> {
             "white-space-collapse" if has_token("preserve-spaces") => {
                 "css.value.white-space-collapse-preserve-spaces"
             }
-            "word-break" if has_token("break-word") => "css.value.word-break-break-word",
             _ => return None,
         }
     };
@@ -443,8 +446,8 @@ const PROPERTY_PREFIX_FEATURES: &[(&str, &str)] = &[
 
 /// Properties the engine parses and computes whose rows are Off: a declaration is **kept** and reported by name,
 /// as written (the sheet pre-scan and the `style=""` scan; a shorthand reports its own row), never removed by the
-/// census (1.7.0). Empty since 1.9.0: the multicolumn and break rows of 1.7.0 are On (015 MC-1, FRAG-2c).
-pub const REPORTED_PROPERTIES: &[(&str, &str)] = &[];
+/// census. Standard line-clamp remains unimplemented; legacy -webkit-line-clamp is supported.
+pub const REPORTED_PROPERTIES: &[(&str, &str)] = &[("line-clamp", "css.property.line-clamp")];
 
 /// The row of a property in [`REPORTED_PROPERTIES`] (kept and reported), if any.
 pub fn reported_property_feature(name: &str) -> Option<FeatureId> {

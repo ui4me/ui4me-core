@@ -157,7 +157,27 @@ impl Inner {
         size: f32,
         text: &str,
     ) -> (Option<Probe>, Option<parley::SpanMetrics>) {
-        let props = font_properties(&self.env, spec, size);
+        self.probe_with_defaults(spec, size, text, None)
+    }
+
+    fn probe_with_defaults(
+        &mut self,
+        spec: &FontSpec,
+        size: f32,
+        text: &str,
+        defaults: Option<ui4me_assets::fonts::FaceSettings>,
+    ) -> (Option<Probe>, Option<parley::SpanMetrics>) {
+        let mut props = font_properties(&self.env, spec, size);
+        if let Some(defaults) = &defaults {
+            let settings = crate::text::fonts::features::FontSettings::default()
+                .with_face_defaults(defaults, 0.0);
+            props.extend(crate::text::fonts::features::style_properties(
+                &settings,
+                size,
+                self.env.opsz_available(),
+                None,
+            ));
+        }
         let mut b = self.lcx.ranged_builder(&mut self.env.fcx, text, 1.0, false);
         for p in props {
             b.push_default(p);
@@ -179,6 +199,22 @@ impl Inner {
                     });
                     break;
                 }
+            }
+        }
+        if defaults.is_none()
+            && self.env.face_table().has_settings()
+            && let Some(first) = &out
+        {
+            let font = parley::FontData {
+                data: first.font_data.clone(),
+                index: first.font_index,
+            };
+            if let Some(settings) = self
+                .env
+                .settings_for_shaped_font(spec, text.chars().next().unwrap_or(' '), &font)
+                .filter(|d| !d.is_empty())
+            {
+                return self.probe_with_defaults(spec, size, text, Some(settings));
             }
         }
         (out, span)

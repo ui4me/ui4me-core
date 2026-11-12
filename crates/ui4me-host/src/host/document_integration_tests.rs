@@ -133,13 +133,26 @@ fn late_clipboard_completion_cannot_paste_into_replacement_with_reused_request_i
 
 #[test]
 fn late_drop_is_discarded_but_live_drop_keeps_document_epoch_and_unicode() {
-    let (mut host, first) = controller("<main id='target'>Drop here</main>");
-    let second = load(&mut host, "w1", "<main id='target'>New document</main>");
+    let (mut host, first) = controller(
+        "<main id='target' data-ui4me-drop='text' style='height:100px'>Drop here</main>",
+    );
+    let old_target = engine(&mut host)
+        .native_drop_target(12.0, 12.0, false)
+        .unwrap();
+    let second = load(
+        &mut host,
+        "w1",
+        "<main id='target' data-ui4me-drop='text' style='height:100px'>New document</main>",
+    );
+    let live_target = engine(&mut host)
+        .native_drop_target(12.0, 12.0, false)
+        .unwrap();
     host.observed_notifications.clear();
     host.finish_transfer(
         TransferTarget::DocumentDrop {
             window_id: "w1".into(),
             document_id: first,
+            target: old_target,
             files: false,
             x: 12.0,
             y: 12.0,
@@ -151,6 +164,7 @@ fn late_drop_is_discarded_but_live_drop_keeps_document_epoch_and_unicode() {
         TransferTarget::DocumentDrop {
             window_id: "w1".into(),
             document_id: second.clone(),
+            target: live_target.clone(),
             files: false,
             x: 12.0,
             y: 12.0,
@@ -164,7 +178,14 @@ fn late_drop_is_discarded_but_live_drop_keeps_document_epoch_and_unicode() {
     assert_eq!(events[0]["params"]["event"]["text"], "é日👋");
     assert_eq!(events[0]["params"]["event"]["external"], true);
     host.windows.get_mut("w1").unwrap().closing = true;
-    host.complete_document_drop("w1", &second, false, (12.0, 12.0), Ok("after close".into()));
+    host.complete_document_drop(
+        "w1",
+        &second,
+        &live_target,
+        false,
+        (12.0, 12.0),
+        Ok("after close".into()),
+    );
     assert_eq!(document_events(&host).len(), 1);
 }
 
@@ -192,6 +213,7 @@ fn replacement_and_unload_prune_only_their_document_transfers_and_cancel_their_p
             TransferTarget::DocumentDrop {
                 window_id: "w1".into(),
                 document_id: first.clone(),
+                target: Value::Null,
                 files: true,
                 x: 0.0,
                 y: 0.0,

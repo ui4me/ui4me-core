@@ -205,6 +205,28 @@ impl SvgRasterCache {
         }
     }
 
+    /// Release rasters that neither a current scene nor a pending paint still owns.
+    /// Pixel-only scene references count too: an ImageRaster can otherwise have only
+    /// this cache owner while its data remains in a display list.
+    pub fn purge_unused(&self) -> usize {
+        let mut g = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        let keys: Vec<_> = g
+            .map
+            .iter()
+            .filter(|(_, (raster, _))| {
+                Arc::strong_count(raster) == 1 && Arc::strong_count(&raster.data) == 1
+            })
+            .map(|(key, _)| *key)
+            .collect();
+        for key in &keys {
+            g.remove(key);
+        }
+        let retained: std::collections::HashSet<_> = g.map.keys().copied().collect();
+        g.order.retain(|key| retained.contains(key));
+        g.prune();
+        keys.len()
+    }
+
     /// Forget every raster of an entry that was replaced or evicted.
     pub fn forget(&self, generation: u64) {
         let mut g = self.inner.lock().unwrap_or_else(|p| p.into_inner());
@@ -262,6 +284,7 @@ mod tests {
         };
         let cache = SvgRasterCache::new(1024);
         let pixels = cache.raster(&image, (16, 16)).unwrap().raster.data.clone();
+        assert_eq!(cache.purge_unused(), 0, "live scene pixels are retained");
         cache.forget(image.generation);
         assert_eq!(cache.stats().bytes, 1024);
         assert!(matches!(
@@ -271,5 +294,7 @@ mod tests {
         drop(pixels);
         assert_eq!(cache.stats().bytes, 0);
         assert!(cache.raster(&image, (16, 16)).is_ok());
+        assert_eq!(cache.purge_unused(), 1);
+        assert_eq!(cache.stats().bytes, 0);
     }
 }

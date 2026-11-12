@@ -276,7 +276,15 @@ pub(crate) fn special<S: StyledSource>(
                     let label = match ty.as_str() {
                         "submit" => value.unwrap_or("Submit").to_string(),
                         "reset" => value.unwrap_or("Reset").to_string(),
-                        "file" => "Choose File".to_string(),
+                        "file" => {
+                            // Selection is supplied by Document, never inferred from the value
+                            // attribute or a script-provided filesystem path.
+                            b.volatile += 1;
+                            b.src
+                                .file_input_label(node)
+                                .unwrap_or("Choose File")
+                                .to_string()
+                        }
                         "image" => info
                             .attr("alt")
                             .filter(|a| !a.is_empty())

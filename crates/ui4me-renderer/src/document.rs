@@ -346,7 +346,16 @@ impl Document {
         let root = pipeline.document().document_node();
         for event in [
             "click",
+            "dblclick",
+            "auxclick",
+            "contextmenu",
+            "beforeinput",
             "input",
+            "select",
+            "selectionchange",
+            "copy",
+            "cut",
+            "paste",
             "change",
             "focus",
             "blur",
@@ -357,6 +366,10 @@ impl Document {
             "mousedown",
             "mouseup",
             "mousemove",
+            "mouseover",
+            "mouseout",
+            "mouseenter",
+            "mouseleave",
             "pointerdown",
             "pointerup",
             "pointermove",
@@ -642,6 +655,9 @@ impl Document {
         self.run_ops(ops, true)
     }
     fn run_ops(&mut self, ops: &[DomOp], atomic: bool) -> Result<()> {
+        self.run_ops_resolved(ops, atomic, false)
+    }
+    fn run_ops_resolved(&mut self, ops: &[DomOp], atomic: bool, nodes: bool) -> Result<()> {
         self.invalidate_clipboard_context();
         let id = self.id();
         let d = self.pipeline.document();
@@ -655,7 +671,7 @@ impl Document {
             Ok(if atomic {
                 d.transaction(|d| {
                     for (i, op) in ops.iter().enumerate() {
-                        apply_op(d, op, hosted).map_err(|e| Error {
+                        apply_op(d, op, hosted, nodes).map_err(|e| Error {
                             code: e.code,
                             message: format!("batch operation {i}: {}", e.message),
                         })?;
@@ -663,7 +679,7 @@ impl Document {
                     Ok(())
                 })
             } else {
-                ops.iter().try_for_each(|op| apply_op(d, op, hosted))
+                ops.iter().try_for_each(|op| apply_op(d, op, hosted, nodes))
             })
         })?;
         // A move (or a rolled-back removal) passes through the DOM removing steps, which reset
@@ -766,6 +782,21 @@ impl Document {
     pub fn set_system_high_contrast(&mut self, on: Option<bool>) {
         self.env.system_high_contrast = on;
     }
+    /// Replace the observed system preferences atomically. `None` means unknown, not false;
+    /// application overrides continue to win. A source/unknown-state change is observable too.
+    pub fn set_system_preferences(
+        &mut self,
+        dark: Option<bool>,
+        reduced_motion: Option<bool>,
+        high_contrast: Option<bool>,
+    ) -> Result<bool> {
+        let before = self.environment();
+        self.env.system_dark = dark;
+        self.env.system_reduced_motion = reduced_motion;
+        self.env.system_high_contrast = high_contrast;
+        let changed = self.apply_environment()?;
+        Ok(changed || before != self.environment())
+    }
     /// The app's media preferences: `Some(Some(v))` overrides, `Some(None)` returns to the system
     /// value, `None` leaves it. Returns whether anything in force changed.
     pub fn set_app_environment(
@@ -783,12 +814,18 @@ impl Document {
     }
     fn apply_environment(&mut self) -> Result<bool> {
         let dark = self.env.app_dark.or(self.env.system_dark).unwrap_or(false);
-        let reduce = self.env.app_reduced_motion.unwrap_or(false);
+        let reduce = self.effective_reduced_motion();
         let changed = self.pipeline.set_dark(dark)? | self.pipeline.set_reduced_motion(reduce)?;
         if changed {
             self.repaint = true;
         }
         Ok(changed)
+    }
+    fn effective_reduced_motion(&self) -> bool {
+        self.env
+            .app_reduced_motion
+            .or(self.env.system_reduced_motion)
+            .unwrap_or(false)
     }
     /// The media preferences in force and where each comes from.
     pub fn environment(&self) -> Value {
@@ -798,10 +835,12 @@ impl Document {
             "color_scheme": scheme(dark),
             "color_scheme_source": if self.env.app_dark.is_some() { "app" } else if self.env.system_dark.is_some() { "system" } else { "default" },
             "system_color_scheme": self.env.system_dark.map_or("unknown", scheme),
-            "reduced_motion": if self.env.app_reduced_motion.unwrap_or(false) { "reduce" } else { "no-preference" },
-            "reduced_motion_source": if self.env.app_reduced_motion.is_some() { "app" } else { "default" },
+            "reduced_motion": if self.effective_reduced_motion() { "reduce" } else { "no-preference" },
+            "reduced_motion_source": if self.env.app_reduced_motion.is_some() { "app" } else if self.env.system_reduced_motion.is_some() { "system" } else { "default" },
+            "system_reduced_motion": self.env.system_reduced_motion,
             "scale": self.pipeline.config.scale,
             "high_contrast": self.env.system_high_contrast,
+            "high_contrast_source": if self.env.system_high_contrast.is_some() { "system" } else { "unknown" },
         })
     }
     pub fn set_viewport(&mut self, width: u32, height: u32, scale: f64) -> Result<()> {
@@ -895,6 +934,12 @@ impl Document {
         let Some(el) = request.target else {
             return Ok(());
         };
+        if !self.pipeline.document().arena().is_connected(el) {
+            return Err(Error {
+                code: 4,
+                message: "Accessibility target is no longer connected".into(),
+            });
+        }
         let centre = |d: &mut Self| {
             d.viewport_rect(el)
                 .map(|(x, y, w, h)| (x + w / 2.0, y + h / 2.0))
@@ -937,7 +982,35 @@ impl Document {
             K::Decrement => {
                 assistive::step(self, id, el, -1)?;
             }
-            K::ScrollIntoView => {}
+            K::ScrollIntoView => self.scroll_node_into_view(el, "nearest", "nearest", "instant")?,
+            K::ScrollIntoViewWithHint {
+                target_id,
+                block,
+                inline,
+            } => {
+                self.scroll_node_into_view(el, block, inline, "instant")?;
+                let tree = self.accessibility_tree()?;
+                if let Some(run) = tree.get(*target_id).filter(|n| n.run.is_some())
+                    && let Some(bounds) = run.bounds
+                    && let Some(g) = DispatchHost::control_geometry(self, id, el)?
+                {
+                    // Text-run bounds are viewport coordinates. Scroll the control's internal
+                    // content without moving its caret, selection, focus or undo history.
+                    let width = g.inner.viewport.size.width.to_f64();
+                    let height = g.inner.viewport.size.height.to_f64();
+                    let dx = align(inline, bounds.x - g.origin.0, bounds.w, 0.0, width);
+                    let dy = align(block, bounds.y - g.origin.1, bounds.h, 0.0, height);
+                    if dx != 0.0 || dy != 0.0 {
+                        DispatchHost::scroll_set(
+                            self,
+                            id,
+                            Some(el),
+                            g.scroll.0 + dx,
+                            g.scroll.1 + dy,
+                        )?;
+                    }
+                }
+            }
             K::Expand | K::Collapse => {
                 let want = matches!(request.kind, K::Expand);
                 if expanded(self) != Some(want) {
@@ -1405,19 +1478,24 @@ impl Document {
         Ok(())
     }
     pub fn render(&mut self, width: u32, height: u32, scale: f64) -> Result<Vec<u32>> {
-        if width == 0
-            || height == 0
-            || (width as usize)
-                .checked_mul(height as usize)
-                .is_none_or(|n| n > MAX_PIXELS)
-        {
-            return Err(Error {
-                code: 5,
-                message: "Framebuffer dimensions exceed pixel budget".into(),
-            });
-        }
-        if !scale.is_finite() || scale <= 0.0 {
-            return Err(arg("Scale must be finite and positive"));
+        let count = framebuffer_length(width, height, scale)?;
+        let mut pixels = vec![0; count];
+        self.render_into(width, height, scale, &mut pixels)?;
+        Ok(pixels)
+    }
+    /// Render directly into a caller-owned native surface (`0x00RRGGBB`). The destination must
+    /// have exactly width * height pixels. Invalid dimensions/length leave it untouched, and
+    /// the frame is completed before this call returns; no surface reference is retained.
+    pub fn render_into(
+        &mut self,
+        width: u32,
+        height: u32,
+        scale: f64,
+        pixels: &mut [u32],
+    ) -> Result<()> {
+        let count = framebuffer_length(width, height, scale)?;
+        if pixels.len() != count {
+            return Err(arg("Framebuffer slice length must equal width * height"));
         }
         self.poll_resources()?;
         self.pipeline.set_device_viewport(width, height, scale)?;
@@ -1432,8 +1510,13 @@ impl Document {
                 ),
             });
         }
-        let mut pixels = Vec::with_capacity(width as usize * height as usize);
-        for rgba in frame.pixels.data.as_chunks::<4>().0 {
+        if frame.pixels.data.len() != count * 4 {
+            return Err(Error {
+                code: 6,
+                message: "Renderer pixel data length does not match surface dimensions".into(),
+            });
+        }
+        for (pixel, rgba) in pixels.iter_mut().zip(frame.pixels.data.as_chunks::<4>().0) {
             let a = u32::from(rgba[3]);
             let channel = |v: u8| match frame.pixels.format {
                 PixelFormat::Rgba8Premultiplied => (u32::from(v) + 255 - a).min(255),
@@ -1441,11 +1524,11 @@ impl Document {
                     (u32::from(v) * a + 255 * (255 - a) + 127) / 255
                 }
             };
-            pixels.push((channel(rgba[0]) << 16) | (channel(rgba[1]) << 8) | channel(rgba[2]));
+            *pixel = (channel(rgba[0]) << 16) | (channel(rgba[1]) << 8) | channel(rgba[2]);
         }
         frame.recycle();
-        self.paint_selection(&mut pixels, width, height, scale)?;
-        self.paint_editing_caret(&mut pixels, width, height, scale)?;
+        self.paint_selection(pixels, width, height, scale)?;
+        self.paint_editing_caret(pixels, width, height, scale)?;
         if self.hosted {
             // Geometry refresh belongs to the frame boundary. Doing it after
             // each DOM write forces layout for every streamed log/chat token.
@@ -1453,7 +1536,7 @@ impl Document {
             crate::interaction::editing::ime_enabled(self, id);
         }
         self.repaint = false;
-        Ok(pixels)
+        Ok(())
     }
     #[cfg(test)]
     pub(crate) fn resources_weak_for_testing(&self) -> std::sync::Weak<Mutex<ResourceManager>> {
@@ -1814,12 +1897,25 @@ impl DispatchHost for Document {
         };
         let mut value = json!({"type":event_type,"element":element_name,"path":route,
             "_target":[raw.index,raw.generation.get()],"_element":[eraw.index,eraw.generation.get()]});
+        value["node"] = json!(public_dom::node_ref(node));
+        value["detail"] = json!(event.init.detail);
+        if let Some(related) = event.init.related_target {
+            value["related_node"] = json!(public_dom::node_ref(related));
+            value["related_element"] = json!(d.get_attribute(related, "id").ok().flatten());
+        }
         if let Some(control) = d.control_state(node).ok().flatten() {
             if let Some(text) = d.control_value(node) {
                 value["value"] = json!(text);
             }
             if let Some(checked) = control.checkedness {
                 value["checked"] = json!(checked);
+            }
+            if let Some(selection) = control.selection {
+                value["selection"] = json!({"start":selection.start,"end":selection.end,"direction":match selection.direction {
+                    ui4me_document::control_state::SelectionDirection::Forward=>"forward",
+                    ui4me_document::control_state::SelectionDirection::Backward=>"backward",
+                    ui4me_document::control_state::SelectionDirection::None=>"none"
+                }});
             }
         }
         if d.local_name(node).is_ok_and(|t| t == "select") {
@@ -2143,9 +2239,21 @@ impl DispatchHost for Document {
     }
     fn form_reset(&mut self, _id: DocumentId, form: NodeId) {
         // A reset empties the file inputs of the form (HTML reset algorithm).
-        let d = self.pipeline.document();
-        self.input_files
-            .retain(|&n, _| !d.arena().is_inclusive_ancestor(form, n));
+        let controls = self
+            .pipeline
+            .document()
+            .form_elements(form)
+            .unwrap_or_default();
+        let id = self.id();
+        for n in controls {
+            self.input_files.remove(&n);
+            let _ = self.pipeline.set_file_input_names(n, &[]);
+            if let Some(value) = self.pipeline.document().control_value(n)
+                && self.interaction.host_value_written(id, n, &value)
+            {
+                self.ime_resets += 1;
+            }
+        }
     }
     fn file_input_activated(&mut self, _id: DocumentId, input: NodeId) {
         // One picker per input at a time; the host opens it after the dispatch (0.6 F0606).
@@ -2276,6 +2384,16 @@ fn finite_point(x: f64, y: f64) -> Result<()> {
     } else {
         Err(arg("Input coordinates must be finite"))
     }
+}
+fn framebuffer_length(width: u32, height: u32, scale: f64) -> Result<usize> {
+    let count = (width as usize).checked_mul(height as usize);
+    if width == 0 || height == 0 || count.is_none_or(|n| n > MAX_PIXELS) {
+        return Err(limit_error("Framebuffer dimensions exceed pixel budget"));
+    }
+    if !scale.is_finite() || scale <= 0.0 {
+        return Err(arg("Scale must be finite and positive"));
+    }
+    Ok(count.expect("dimensions were validated"))
 }
 fn check_text(text: &str) -> Result<()> {
     if text.len() > MAX_TEXT {
@@ -2544,6 +2662,13 @@ impl StoredRule {
 const PREVENTABLE: &[&str] = &[
     "keydown",
     "click",
+    "dblclick",
+    "auxclick",
+    "contextmenu",
+    "beforeinput",
+    "copy",
+    "cut",
+    "paste",
     "mousedown",
     "pointerdown",
     "wheel",
@@ -2571,12 +2696,21 @@ fn check_movable(d: &Model, n: NodeId, what: &str) -> Result<()> {
     }
     Ok(())
 }
-fn apply_op(d: &mut Model, op: &DomOp, hosted: bool) -> Result<()> {
+fn apply_op(d: &mut Model, op: &DomOp, hosted: bool, nodes: bool) -> Result<()> {
+    let resolve = |d: &Model, target: &str| {
+        if nodes {
+            public_dom::model_live_ref(d, target)
+        } else {
+            model_node(d, target)
+        }
+    };
     match op {
         DomOp::SetText { element, text } => {
             check_text(text)?;
-            let n = model_node(d, element)?;
-            if matches!(d.local_name(n)?, "input" | "textarea" | "select") {
+            let n = resolve(d, element)?;
+            if d.local_name(n)
+                .is_ok_and(|tag| matches!(tag, "input" | "textarea" | "select"))
+            {
                 return Err(arg(
                     "Use set_value for form controls; it is not a batch operation",
                 ));
@@ -2585,7 +2719,7 @@ fn apply_op(d: &mut Model, op: &DomOp, hosted: bool) -> Result<()> {
         }
         DomOp::AppendText { element, text } => {
             check_text(text)?;
-            let n = model_node(d, element)?;
+            let n = resolve(d, element)?;
             if matches!(d.local_name(n)?, "input" | "textarea" | "select") {
                 return Err(arg("append_text requires a non-control element"));
             }
@@ -2607,7 +2741,7 @@ fn apply_op(d: &mut Model, op: &DomOp, hosted: bool) -> Result<()> {
             keep,
             from_start,
         } => {
-            let n = model_node(d, element)?;
+            let n = resolve(d, element)?;
             let kids: Vec<NodeId> = d.children(n)?.to_vec();
             let elements: Vec<usize> = kids
                 .iter()
@@ -2634,12 +2768,12 @@ fn apply_op(d: &mut Model, op: &DomOp, hosted: bool) -> Result<()> {
             element,
             name,
             value,
-        } => model_set_attribute(d, model_node(d, element)?, name, value.as_deref(), hosted)?,
+        } => model_set_attribute(d, resolve(d, element)?, name, value.as_deref(), hosted)?,
         DomOp::AddClass { element, name } | DomOp::RemoveClass { element, name } => {
             if name.is_empty() || name.chars().any(char::is_whitespace) {
                 return Err(arg("A class must be one nonempty token"));
             }
-            let n = model_node(d, element)?;
+            let n = resolve(d, element)?;
             let mut classes: Vec<String> = d
                 .get_attribute(n, "class")?
                 .unwrap_or("")
@@ -2658,7 +2792,7 @@ fn apply_op(d: &mut Model, op: &DomOp, hosted: bool) -> Result<()> {
             html,
         } => {
             check_html(html)?;
-            let n = model_node(d, element)?;
+            let n = resolve(d, element)?;
             let position = parse_position(position)?;
             if matches!(position, "beforebegin" | "afterend") {
                 check_movable(d, n, "insert_html beside")?;
@@ -2669,13 +2803,13 @@ fn apply_op(d: &mut Model, op: &DomOp, hosted: bool) -> Result<()> {
         }
         DomOp::ReplaceChildrenHtml { element, html } => {
             check_html(html)?;
-            let n = model_node(d, element)?;
+            let n = resolve(d, element)?;
             d.set_inner_html_checked(n, html, |d, f| {
                 validate_document(d, Some(n), Some(f), hosted)
             })?;
         }
         DomOp::RemoveElement { element } => {
-            let n = model_node(d, element)?;
+            let n = resolve(d, element)?;
             check_movable(d, n, "remove")?;
             d.remove(n)?;
         }
@@ -2684,8 +2818,8 @@ fn apply_op(d: &mut Model, op: &DomOp, hosted: bool) -> Result<()> {
             target,
             position,
         } => {
-            let n = model_node(d, element)?;
-            let t = model_node(d, target)?;
+            let n = resolve(d, element)?;
+            let t = resolve(d, target)?;
             let position = parse_position(position)?;
             check_movable(d, n, "move")?;
             if matches!(position, "beforebegin" | "afterend") {
@@ -2791,10 +2925,14 @@ fn scroll_info(e: &crate::pipeline::scroll::ScrollEntry) -> ScrollTargetInfo {
 mod a11y_text_tests;
 #[cfg(test)]
 mod animation_tests;
+mod application_api;
 #[cfg(test)]
 mod bidi_tests;
 #[cfg(test)]
 mod controls_tests;
+pub use application_api::NodeOp;
+#[cfg(test)]
+mod application_api_tests;
 mod css_animation;
 mod hosted;
 pub use hosted::{ClipboardRequest, ImeSurrounding};
@@ -2840,6 +2978,7 @@ struct Environment {
     system_dark: Option<bool>,
     app_dark: Option<bool>,
     app_reduced_motion: Option<bool>,
+    system_reduced_motion: Option<bool>,
     /// The OS high-contrast mode (reported; `forced-colors` is not evaluated).
     system_high_contrast: Option<bool>,
 }

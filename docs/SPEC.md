@@ -1,11 +1,15 @@
-# UI4ME Core 0.2 architecture and requirements
+# UI4ME Core architecture and requirements
+
+Core 1.0 completion requirements and explicit audit dispositions are in
+[CORE_1.0_SPEC](CORE_1.0_SPEC.md); its protocol extensions are in
+[CORE_1.0_PROTOCOL](CORE_1.0_PROTOCOL.md). This file retains the common foundation.
 
 ## Product boundary
 
 UI4ME is a native desktop application builder with an HTML/CSS front end and a
-separate programming-language backend. Version 0.2 migrates the existing engine
-into the qualified 0.1 host. The delivered scope is one substantial integration,
-followed by fixes and qualification. It does not introduce a component framework,
+separate programming-language backend. The existing engine is integrated with
+the native host. Core 1.0 completes the selected application API and desktop
+profile, followed by fixes and qualification. It does not introduce a component framework,
 a browser runtime, a second native host, or a separate rendering process.
 
 Application code may change APIs freely at this stage. Retaining the existing
@@ -92,7 +96,7 @@ painting stay on the host thread even if backend callbacks are slow.
 
 ## Screen rendering profile
 
-The hosted profile is `ui4me-desktop-0.2`. It carries the donor's implemented
+The hosted profile is `ui4me-desktop-1.0`. It carries the donor's implemented
 screen CSS, selectors, cascade, layout, text and interaction code rather than
 replacing it with a new minimal engine. The runtime `css_profile` and diagnostics
 report the actual supported/degraded features. This is not an assertion of full
@@ -118,7 +122,7 @@ page-output commands are absent. A static SVG is an image-level event target.
 Pointer coordinates enter the engine in CSS pixels. Physical presentation and
 native scale changes update the viewport; primary pointer input supports mouse
 and equivalent primary pen/touch actions. Multi-touch gesture qualification is
-not part of 0.2. Keyboard events carry logical keys, physical codes and modifier
+not part of Core 1.0 qualification. Keyboard events carry logical keys, physical codes and modifier
 state. Text insertion observes IME composition and shortcut/AltGr distinctions.
 
 IME exposes a bounded UTF-8 surrounding-text excerpt with byte-aligned cursor
@@ -130,8 +134,9 @@ platform behavior must be observed on both target desktops.
 Clipboard reads/writes use the host's asynchronous native services. Failed copy
 or cut writes cannot silently delete selected text. Delayed pastes/cuts validate
 focus, node generation, control value and selection before modifying the target.
-Incoming OS drops become document events with a target and file paths/plain
-text. Paths are not silently truncated or opened automatically.
+Incoming OS drops become document events with a captured target and file paths/plain
+text only where `data-ui4me-drop` opts in. Paths are not silently truncated or
+opened automatically. Async completion revalidates the original target generation.
 
 Each native AccessKit adapter has a stable window root and never-reused native
 child identities. Renderer-local node IDs are mapped per document; action

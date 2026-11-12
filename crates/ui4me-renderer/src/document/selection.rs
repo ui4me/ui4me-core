@@ -823,6 +823,9 @@ impl Document {
                 }
                 match key.as_str() {
                     "c" | "C" | "Insert" => {
+                        if prevented("copy") {
+                            return Ok(());
+                        }
                         // A clipboard failure must not fail the input event; it is reported as a
                         // document error like other default-action failures.
                         if let Err(e) = self.copy_selection() {

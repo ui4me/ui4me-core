@@ -868,6 +868,18 @@ pub(crate) fn extras_of(
     let overflow = view.overflow();
     e.clip_x = overflow.x.clips();
     e.clip_y = overflow.y.clips();
+    if view.pseudo().is_none()
+        && !matches!(
+            (overflow.x, overflow.y),
+            (g::OverflowKind::Visible, g::OverflowKind::Visible)
+        )
+        && view
+            .serialize("resize")
+            .as_deref()
+            .is_some_and(|v| matches!(v, "both" | "horizontal" | "vertical" | "inline" | "block"))
+    {
+        e.resize_grip = Some(color(&view.inline_text().color));
+    }
     match transform(&paint.transform, border_box) {
         Ok(t) => e.transform = t,
         Err(feature) => e.unsupported.push(feature),

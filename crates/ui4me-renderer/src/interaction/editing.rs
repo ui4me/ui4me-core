@@ -11,10 +11,8 @@
 //! Clipboard (`copy`/`cut`/`paste`), undo/redo and IME composition are the submodules
 //! [`clipboard`], [`history`] and [`ime`] (lane L-CLIP-r13).
 //!
-//! Not done, reported (012 tasks stay open): `maxlength` is honoured but `minlength`/`pattern`
-//! validation is not run, right-to-left text (logical caret movement only), `selectionchange`,
-//! auto-scroll timers while dragging outside the control (the move events themselves scroll), and
-//! grapheme clusters follow a combining-mark/ZWJ/CRLF approximation instead of UAX #29.
+//! Grapheme and word editing use Unicode segmentation (UAX #29); visual bidi movement uses
+//! the committed text geometry. Selection changes are delivered as asynchronous notifications.
 
 use crate::interaction::dispatch::{DispatchHost, eng, rt, run_dispatch};
 use crate::interaction::frame::{EventInit, EventInterface, Modifiers};
@@ -30,6 +28,7 @@ use ui4me_engine_types::control_inner::ControlInner;
 use ui4me_engine_types::diag::DispatchOrigin;
 use ui4me_engine_types::ids::{DocumentId, NodeId};
 use ui4me_engine_types::status::Status;
+use unicode_segmentation::UnicodeSegmentation;
 
 /// The inner editing area of a control as the committed layout has it, in viewport space.
 #[derive(Clone, Debug, PartialEq)]
@@ -215,6 +214,8 @@ struct Chars {
     chars: Vec<char>,
     /// UTF-16 offset of the start of `chars[i]`; one more entry for the end.
     off: Vec<u32>,
+    clusters: Vec<usize>,
+    words: Vec<(usize, usize)>,
 }
 
 impl Chars {
@@ -227,7 +228,34 @@ impl Chars {
             u += c.len_utf16() as u32;
         }
         off.push(u);
-        Chars { chars, off }
+        let mut scalar = 0;
+        let mut clusters = vec![0];
+        for grapheme in s.graphemes(true) {
+            scalar += grapheme.chars().count();
+            clusters.push(scalar);
+        }
+        let mut scalar = 0;
+        let mut words: Vec<(usize, usize)> = Vec::new();
+        for segment in s.split_word_bounds() {
+            let start = scalar;
+            scalar += segment.chars().count();
+            // Adjacent white-space segments form one selection unit.
+            if segment.chars().all(char::is_whitespace)
+                && words
+                    .last()
+                    .is_some_and(|&(a, b)| chars[a..b].iter().all(|c| c.is_whitespace()))
+            {
+                words.last_mut().expect("checked above").1 = scalar;
+            } else {
+                words.push((start, scalar));
+            }
+        }
+        Chars {
+            chars,
+            off,
+            clusters,
+            words,
+        }
     }
     /// Index of the character starting at (or containing) UTF-16 offset `u`.
     fn index(&self, u: u32) -> usize {
@@ -239,140 +267,66 @@ impl Chars {
     fn n(&self) -> usize {
         self.chars.len()
     }
-    fn is_extend(c: char) -> bool {
-        matches!(c as u32,
-            0x0300..=0x036F | 0x0483..=0x0489 | 0x0591..=0x05BD | 0x0610..=0x061A | 0x064B..=0x065F | 0x0670 | 0x06D6..=0x06DC
-            | 0x0900..=0x0903 | 0x093A..=0x094F | 0x0E31 | 0x0E34..=0x0E3A | 0x0E47..=0x0E4E
-            | 0x1AB0..=0x1AFF | 0x1DC0..=0x1DFF | 0x200C | 0x200D | 0x20D0..=0x20FF | 0xFE00..=0xFE0F | 0xFE20..=0xFE2F
-            | 0x1F3FB..=0x1F3FF | 0xE0020..=0xE007F | 0xE0100..=0xE01EF)
-    }
-    fn is_regional(c: char) -> bool {
-        (0x1F1E6..=0x1F1FF).contains(&(c as u32))
-    }
-    /// Index of the end of the cluster that starts at `i` (approximation of UAX #29: CRLF,
-    /// combining marks, ZWJ sequences, variation selectors, skin tones, regional-indicator pairs).
+    /// Extended grapheme boundaries from UAX #29, in scalar indices. The same boundary
+    /// table drives both directions, so flags, ZWJ sequences and Indic conjuncts cannot be
+    /// split by backward movement or Backspace.
     fn cluster_end(&self, i: usize) -> usize {
-        let n = self.n();
-        if i >= n {
-            return n;
-        }
-        if self.chars[i] == '\r' && self.chars.get(i + 1) == Some(&'\n') {
-            return i + 2;
-        }
-        let mut j = i + 1;
-        if Self::is_regional(self.chars[i])
-            && self.chars.get(j).is_some_and(|c| Self::is_regional(*c))
-        {
-            j += 1;
-        }
-        while j < n && Self::is_extend(self.chars[j]) {
-            // A joiner pulls in the next character.
-            if self.chars[j] == '\u{200D}' && j + 1 < n {
-                j += 1;
-            }
-            j += 1;
-        }
-        j.min(n)
+        let at = self.clusters.partition_point(|&b| b <= i);
+        self.clusters.get(at).copied().unwrap_or(self.n())
     }
     fn cluster_start(&self, i: usize) -> usize {
-        let mut j = i;
-        while j > 0 {
-            let mut k = j - 1;
-            while k > 0
-                && (Self::is_extend(self.chars[k])
-                    || self.chars[k] == '\n' && self.chars[k - 1] == '\r')
-            {
-                k -= 1;
-            }
-            // `k` starts a cluster that may end at or beyond `j`.
-            if self.cluster_end(k) >= j {
-                return k;
-            }
-            j = k;
-        }
-        0
+        let at = self.clusters.partition_point(|&b| b < i);
+        self.clusters
+            .get(at.saturating_sub(1))
+            .copied()
+            .unwrap_or(0)
     }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Class {
-    Space,
-    Word,
-    Punct,
-}
-
-fn class(c: char) -> Class {
-    if c.is_whitespace() {
-        Class::Space
-    } else if c.is_alphanumeric() || c == '_' {
-        Class::Word
-    } else {
-        Class::Punct
+    fn segment_at(&self, i: usize) -> Option<(usize, usize)> {
+        self.words.iter().copied().find(|&(s, e)| s <= i && i < e)
     }
 }
 
 fn word_left(t: &Chars, mut i: usize) -> usize {
-    while i > 0 && class(t.chars[i - 1]) == Class::Space {
+    i = i.min(t.n());
+    while i > 0 && t.chars[i - 1].is_whitespace() {
         i -= 1;
     }
-    if i > 0 {
-        let k = class(t.chars[i - 1]);
-        while i > 0 && class(t.chars[i - 1]) == k {
-            i -= 1;
-        }
-    }
-    i
+    t.segment_at(i.saturating_sub(1)).map_or(0, |(s, _)| s)
 }
 
-/// Windows: the start of the next word; elsewhere: the end of the current or next word.
+/// Windows moves to the start of the next word; other platforms to the end of
+/// the current/next word. Both use Unicode word boundaries, including apostrophes.
 fn word_right(t: &Chars, mut i: usize) -> usize {
-    let n = t.n();
+    i = i.min(t.n());
     if cfg!(windows) {
-        if i < n {
-            let k = class(t.chars[i]);
-            while i < n && class(t.chars[i]) == k {
-                i += 1;
-            }
-        }
-        while i < n && class(t.chars[i]) == Class::Space {
+        i = t.segment_at(i).map_or(t.n(), |(_, e)| e);
+        while i < t.n() && t.chars[i].is_whitespace() {
             i += 1;
         }
     } else {
-        while i < n && class(t.chars[i]) == Class::Space {
+        while i < t.n() && t.chars[i].is_whitespace() {
             i += 1;
         }
-        if i < n {
-            let k = class(t.chars[i]);
-            while i < n && class(t.chars[i]) == k {
-                i += 1;
-            }
-        }
+        i = t.segment_at(i).map_or(t.n(), |(_, e)| e);
     }
     i
 }
 
-/// The word (or white-space run) around character index `i`: `(start, end)` char indices.
+/// The Unicode word or punctuation segment at the caret; a caret just after a
+/// word selects that preceding word, matching desktop text controls.
 fn word_around(t: &Chars, i: usize) -> (usize, usize) {
-    let n = t.n();
-    if n == 0 {
+    if t.n() == 0 {
         return (0, 0);
     }
-    let at = if i < n && class(t.chars[i]) != Class::Space {
+    let i = i.min(t.n());
+    let at = if i < t.n() && !t.chars[i].is_whitespace() {
         i
-    } else if i > 0 && class(t.chars[i - 1]) != Class::Space {
+    } else if i > 0 && !t.chars[i - 1].is_whitespace() {
         i - 1
     } else {
-        i.min(n - 1)
+        i.min(t.n() - 1)
     };
-    let k = class(t.chars[at]);
-    let (mut s, mut e) = (at, at + 1);
-    while s > 0 && class(t.chars[s - 1]) == k {
-        s -= 1;
-    }
-    while e < n && class(t.chars[e]) == k {
-        e += 1;
-    }
-    (s, e)
+    t.segment_at(at).unwrap_or((at, at + 1))
 }
 
 /// The hard line (paragraph) around char index `i`.
@@ -548,10 +502,13 @@ fn write_selection(
                 }),
             )
             .is_ok();
-        ok && (old.start, old.end) != (start, end)
+        ok && (old.start, old.end, old.dir) != (start, end, dir)
     })?;
     if changed && announce && start != end {
         fire(host, cx, EventInit::new("select").bubbles(true))?;
+    }
+    if changed {
+        fire(host, cx, EventInit::new("selectionchange").bubbles(true))?;
     }
     Ok(changed)
 }
@@ -566,6 +523,11 @@ fn reveal_caret(
     offset: u32,
     upstream: bool,
 ) -> Result<(), Status> {
+    // Programmatic editing can address an unfocused control. Its value/selection changes must
+    // not move the visible caret or replace the currently focused control's native IME state.
+    if rt(host, |ix| ix.focused_element(cx.doc)) != Some(cx.node) {
+        return Ok(());
+    }
     host.set_caret_state(cx.doc, cx.node, true, upstream);
     rt(host, |ix| {
         if let Ok(s) = ix.doc_state(cx.doc) {
@@ -733,6 +695,7 @@ fn edit(host: &mut dyn DispatchHost, cx: &Cx, e: Edit) -> Result<bool, Status> {
     let Some((value_changed, caret, applied)) = changed else {
         return Ok(false);
     };
+    let selection_changed = applied.before != applied.after;
     if value_changed {
         if let Some(kind) = e.record {
             let now = cx.ts.unwrap_or_else(|| host.now_ms());
@@ -743,6 +706,9 @@ fn edit(host: &mut dyn DispatchHost, cx: &Cx, e: Edit) -> Result<bool, Status> {
             cx,
             input_event("input", e.input_type, data.as_deref(), false, cx.m),
         )?;
+    }
+    if selection_changed {
+        fire(host, cx, EventInit::new("selectionchange").bubbles(true))?;
     }
     rt(host, |ix| {
         if let Ok(s) = ix.doc_state(cx.doc) {
@@ -1299,9 +1265,156 @@ pub(crate) fn assistive_select(
     let Some(c) = snapshot(host, &cx)? else {
         return Ok(());
     };
-    let (a, f) = (anchor.min(c.len()), focus.min(c.len()));
+    let chars = Chars::new(&c.value);
+    let (a, f) = (
+        chars.off[chars.index(anchor.min(c.len()))],
+        chars.off[chars.index(focus.min(c.len()))],
+    );
     write_selection(host, &cx, a, f, true)?;
     reveal_caret(host, &cx, f, false)
+}
+
+/// An application selection write shares IME termination, caret reveal and notifications with
+/// native selection. It does not move keyboard focus or destroy the undo history.
+pub(crate) fn set_application_selection(
+    host: &mut dyn DispatchHost,
+    doc: DocumentId,
+    node: NodeId,
+    start: u32,
+    end: u32,
+    direction: SelectionDirection,
+) -> Result<(), Status> {
+    let origin = DispatchOrigin::ElementTask;
+    let cx = Cx {
+        doc,
+        node,
+        m: Modifiers::default(),
+        origin,
+        ts: None,
+    };
+    finish_application_composition(host, doc, node)?;
+    let Some(c) = snapshot(host, &cx)? else {
+        return Ok(());
+    };
+    let chars = Chars::new(&c.value);
+    let end = chars.off[chars.index(end.min(c.len()))];
+    let start = chars.off[chars.index(start.min(end))];
+    let (anchor, focus) = if direction == SelectionDirection::Backward {
+        (end, start)
+    } else {
+        (start, end)
+    };
+    write_selection(host, &cx, anchor, focus, true)?;
+    // A direction of `none` is distinct from `forward` for the public selection API.
+    if direction == SelectionDirection::None && start != end {
+        eng(host, doc, |_, d| {
+            d.control_state_writer().set_selection(
+                node,
+                Some(Selection {
+                    start,
+                    end,
+                    direction,
+                }),
+            )
+        })??;
+    }
+    reveal_caret(host, &cx, focus, false)
+}
+
+/// Application replacement as a single edit, with the final selection included in the undo
+/// record. No temporary selection is exposed and cancellation preserves the original state.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn replace_application_range(
+    host: &mut dyn DispatchHost,
+    doc: DocumentId,
+    node: NodeId,
+    text: &str,
+    start: u32,
+    end: u32,
+    mode: &str,
+) -> Result<bool, Status> {
+    let origin = DispatchOrigin::ElementTask;
+    let cx = Cx {
+        doc,
+        node,
+        m: Modifiers::default(),
+        origin,
+        ts: None,
+    };
+    finish_application_composition(host, doc, node)?;
+    let Some(c) = snapshot(host, &cx)? else {
+        return Ok(false);
+    };
+    if c.readonly {
+        return Ok(false);
+    }
+    let mut replacement = text.to_owned();
+    if !c.kind.multiline {
+        replacement.retain(|ch| ch != '\r' && ch != '\n');
+    }
+    if let Some(max) = c.maxlength {
+        let room = (max as i64 - (i64::from(c.len()) - i64::from(end - start))).max(0) as u32;
+        if !replacement.is_empty() && room == 0 {
+            return Ok(false);
+        }
+        let chars = Chars::new(&replacement);
+        let count = chars.index(room.min(chars.off[chars.n()]));
+        replacement = chars.chars[..count].iter().collect();
+    }
+    let inserted = utf16_len(&replacement);
+    let selection = match mode {
+        "select" => (start, start + inserted, SelectionDirection::Forward),
+        "start" => (start, start, SelectionDirection::None),
+        "end" => (start + inserted, start + inserted, SelectionDirection::None),
+        _ => {
+            let delta = i64::from(inserted) - i64::from(end - start);
+            let a = if c.start > end {
+                (i64::from(c.start) + delta) as u32
+            } else if c.start > start {
+                start
+            } else {
+                c.start
+            };
+            let b = if c.end > end {
+                (i64::from(c.end) + delta) as u32
+            } else if c.end > start {
+                start + inserted
+            } else {
+                c.end
+            };
+            (a, b, c.dir)
+        }
+    };
+    edit(
+        host,
+        &cx,
+        Edit {
+            input_type: "insertReplacementText",
+            data: Some(replacement.clone()),
+            range: (start, end),
+            replacement,
+            record: Some(history::StepKind::Other),
+            selection_after: Some(selection),
+        },
+    )
+}
+
+pub(crate) fn finish_application_composition(
+    host: &mut dyn DispatchHost,
+    doc: DocumentId,
+    node: NodeId,
+) -> Result<(), Status> {
+    if rt(host, |ix| ix.focused_element(doc)) == Some(node) {
+        ime::finish(
+            host,
+            doc,
+            true,
+            Modifiers::default(),
+            DispatchOrigin::ElementTask,
+            None,
+        )?;
+    }
+    Ok(())
 }
 
 /// An assistive ReplaceSelectedText (0.5 F0504): the selection (or nothing, at the caret) is
@@ -1745,6 +1858,28 @@ mod tests {
         assert_eq!(t.cluster_start(5), 3);
         let flag = Chars::new("\u{1F1E9}\u{1F1EA}x");
         assert_eq!(flag.cluster_end(0), 2, "a regional-indicator pair");
+        assert_eq!(flag.cluster_start(2), 0, "backward must not split the flag");
+    }
+
+    #[test]
+    fn unicode_graphemes_are_symmetric_for_flags_zwj_indic_and_hangul() {
+        for text in ["🇨🇿", "👩🏽‍💻", "👨‍👩‍👧‍👦", "क्\u{200d}ष", "각", "a\u{0301}"]
+        {
+            let chars = Chars::new(text);
+            assert_eq!(chars.cluster_end(0), chars.n(), "forward {text:?}");
+            assert_eq!(chars.cluster_start(chars.n()), 0, "backward {text:?}");
+        }
+        let chars = Chars::new("🇨🇿🇩🇪");
+        assert_eq!(chars.cluster_start(4), 2);
+        assert_eq!(chars.cluster_start(2), 0);
+    }
+
+    #[test]
+    fn word_selection_uses_unicode_boundaries_for_apostrophes_and_combining_marks() {
+        let text = Chars::new("can't e\u{0301}cole");
+        assert_eq!(word_around(&text, 2), (0, 5));
+        assert_eq!(word_around(&text, 8), (6, 12));
+        assert_eq!(word_left(&text, 12), 6);
     }
 
     #[test]

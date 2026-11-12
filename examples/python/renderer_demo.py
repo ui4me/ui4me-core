@@ -16,6 +16,7 @@ import time
 
 from application import Application, StaleDocumentError
 from client import DisconnectedError, RpcError
+from completion_checks import REQUIRED_CHECKS as COMPLETION_CHECKS, run_completion_checks
 
 HERE = Path(__file__).resolve().parent
 UI = HERE / "ui"
@@ -26,7 +27,7 @@ REQUIRED_CHECKS = {
     "two_documents", "stale_document_rejected", "application_ready",
     "shutdown_received", "document_load_rollback", "document_inspection",
     "document_overlays",
-}
+} | COMPLETION_CHECKS
 
 
 def main():
@@ -56,7 +57,7 @@ def main():
         if args.evidence:
             args.evidence.parent.mkdir(parents=True, exist_ok=True)
             args.evidence.write_text(json.dumps({
-                "schema": 1, "version": "0.2.0", "time_utc": datetime.now(timezone.utc).isoformat(),
+                "schema": 1, "version": "1.0.0-rc.1", "time_utc": datetime.now(timezone.utc).isoformat(),
                 "native_desktop_qualified": False,
                 "mode": "headless" if args.headless_verify else "native-smoke" if args.native_verify else "interactive",
                 "results": results,
@@ -101,7 +102,10 @@ def main():
             def open_details(_):
                 existing = state["details"]
                 if existing is not None and not existing.closed:
-                    existing.set(focus=True)
+                    if app.capabilities()["features"]["window_focus"]["available"]:
+                        existing.set(focus=True)
+                    else:
+                        existing.request_attention("informational")
                     return
                 second = app.open_file(UI / "details.html", title="UI4ME — Second document",
                                        width=540, height=420)
@@ -110,11 +114,9 @@ def main():
                 second.document.on("click", lambda _: second.request_close(), element="close-details")
 
             def choose_file(_):
-                result = app.rpc.call("dialog.open_files", {
-                    "window_id": window.id, "title": "Choose a local document",
-                    "filters": [{"name": "Text files", "extensions": ["txt", "md", "html"]},
-                                {"name": "All files", "extensions": ["*"]}],
-                })
+                result = window.open_files(title="Choose a local document", filters=[
+                    {"name": "Text files", "extensions": ["txt", "md", "html"]},
+                    {"name": "All files", "extensions": ["*"]}])
                 set_status("Selection cancelled" if result["cancelled"] else "Selected: " + ", ".join(result["paths"]))
 
             doc.on("click", change_theme, element="theme")
@@ -252,6 +254,7 @@ def main():
                     raise AssertionError("Host accepted a stale document identity")
                 assert current.get_text("message") == "Replacement document"
                 record("stale_document_rejected")
+                run_completion_checks(app, record)
                 app.ready()
                 record("application_ready")
                 if args.native_verify:

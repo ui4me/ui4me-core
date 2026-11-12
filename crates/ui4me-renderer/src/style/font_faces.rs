@@ -49,6 +49,7 @@ pub enum FontStyleExport {
 #[derive(Clone, Debug, PartialEq)]
 pub struct FontFaceExport {
     pub family: String,
+    pub settings: ui4me_assets::fonts::FaceSettings,
     pub sources: Vec<FontSourceExport>,
     /// `font-weight` range (a single value is a degenerate range); default 400.
     pub weight: (f32, f32),
@@ -191,17 +192,43 @@ impl StyleBridge {
                 if d.line_gap_override.is_some() {
                     unsupported.push("line-gap-override");
                 }
-                if d.font_feature_settings.is_some() {
-                    unsupported.push("font-feature-settings");
-                }
-                if d.font_variation_settings.is_some() {
-                    unsupported.push("font-variation-settings");
-                }
                 if d.font_language_override.is_some() {
                     unsupported.push("font-language-override");
                 }
                 out.push(FontFaceExport {
                     family: family.name.to_string(),
+                    settings: ui4me_assets::fonts::FaceSettings {
+                        features: d
+                            .font_feature_settings
+                            .as_ref()
+                            .map(|settings| {
+                                settings
+                                    .0
+                                    .iter()
+                                    .filter_map(|v| {
+                                        v.value.resolve().map(|value| {
+                                            (v.tag.0.to_be_bytes(), value.max(0) as u32)
+                                        })
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                        variations: d
+                            .font_variation_settings
+                            .as_ref()
+                            .map(|settings| {
+                                settings
+                                    .0
+                                    .iter()
+                                    .filter_map(|v| {
+                                        v.value
+                                            .resolve()
+                                            .map(|value| (v.tag.0.to_be_bytes(), value))
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                    },
                     sources,
                     weight,
                     style,

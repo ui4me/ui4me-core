@@ -29,6 +29,7 @@ use ui4me_engine_types::text_metrics::{FontSpec, FontStyleSpec};
 #[derive(Clone, Debug)]
 pub(crate) struct FaceRecord {
     pub id: FaceId,
+    pub settings: ui4me_assets::fonts::FaceSettings,
     pub weight: (f32, f32),
     pub style: FaceStyle,
     pub width: (f32, f32),
@@ -129,6 +130,7 @@ impl FaceTable {
             fam.groups[group].last_declared = decl;
             fam.faces.push(FaceRecord {
                 id: v.id,
+                settings: v.settings.clone(),
                 weight: v.weight,
                 style: v.style,
                 width: v.width,
@@ -137,6 +139,34 @@ impl FaceTable {
             });
         }
         FaceTable { families }
+    }
+
+    pub fn has_settings(&self) -> bool {
+        self.families
+            .values()
+            .any(|f| f.faces.iter().any(|face| !face.settings.is_empty()))
+    }
+
+    /// Best matching declared faces in family-list order, later declarations first,
+    /// restricted to the actual character's unicode-range. Selection still happens
+    /// in Fontique; these candidates only identify the defaults of its chosen font.
+    pub(crate) fn setting_candidates(&self, spec: &FontSpec, ch: char) -> Vec<FaceRecord> {
+        let mut out = Vec::new();
+        for name in spec.families.iter() {
+            let ui4me_engine_types::text_metrics::FamilyName::Named(name) = name else {
+                continue;
+            };
+            let Some(family) = self.families.get(&name.to_ascii_lowercase()) else {
+                continue;
+            };
+            for i in css_best(&family.faces, spec).into_iter().rev() {
+                let face = &family.faces[i];
+                if in_ranges(&family.groups[face.group].ranges, ch as u32) {
+                    out.push(face.clone());
+                }
+            }
+        }
+        out
     }
 
     pub fn is_empty(&self) -> bool {
@@ -345,6 +375,7 @@ mod tests {
     ) -> FaceRecord {
         FaceRecord {
             id: FaceId(id),
+            settings: Default::default(),
             weight: w,
             style,
             width,

@@ -109,7 +109,9 @@ pub const ID: &str = CssFeatureProfile::ID;
 /// 1.26.0 (0.9 F0906/F0909): `backdrop-filter` On (its `url()` forms stay reported), `light-dark()` images On; a
 /// `border-radius` box no longer hits outside its rounded border box; blur deviations are bounded (128 px).
 /// 1.27.0 (1.0 F1001): `@page` (size, margins, named pages, margin boxes) and the `page` property On for pagination.
-pub const VERSION: &str = "1.27.0";
+/// 1.28.0: intrinsic flex bases, balanced wrapping and legacy break-word are consumed;
+/// standard line-clamp is honestly reported as Off (legacy -webkit-line-clamp stays On).
+pub const VERSION: &str = "1.28.0";
 /// The single Stylo revision of the workspace (engine/Cargo.toml; X-DEPS).
 pub const ENGINE_REVISION: &str = "37c1ed3b707c8f333304de2107c13b68fbc1057c";
 

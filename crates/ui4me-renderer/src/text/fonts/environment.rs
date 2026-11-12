@@ -458,6 +458,41 @@ impl FontEnvironment {
         out
     }
 
+    /// Face-local defaults for the font the shaper actually selected. System aliases
+    /// are matched by their loaded font identity; a fallback font never inherits an
+    /// unrelated declared face's settings.
+    pub(crate) fn settings_for_shaped_font(
+        &mut self,
+        spec: &ui4me_engine_types::text_metrics::FontSpec,
+        ch: char,
+        font: &parley::FontData,
+    ) -> Option<ui4me_assets::fonts::FaceSettings> {
+        for face in self.faces.setting_candidates(spec, ch) {
+            let matches = match &face.state {
+                ui4me_assets::fonts::FaceState::Loaded(blob) => {
+                    parley_blob_id(blob.id) == font.data.id()
+                }
+                ui4me_assets::fonts::FaceState::LocalFamily(name) => self
+                    .fcx
+                    .collection
+                    .family_by_name(name)
+                    .is_some_and(|family| {
+                        family.fonts().iter().any(|candidate| {
+                            candidate.index() == font.index
+                                && candidate
+                                    .load(Some(&mut self.fcx.source_cache))
+                                    .is_some_and(|b| b.id() == font.data.id())
+                        })
+                    }),
+                _ => false,
+            };
+            if matches {
+                return Some(face.settings);
+            }
+        }
+        None
+    }
+
     /// The document's `@font-face` face table.
     pub fn face_table(&self) -> &FaceTable {
         &self.faces

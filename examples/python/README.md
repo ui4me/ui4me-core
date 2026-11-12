@@ -13,8 +13,8 @@ package dependencies beyond the standard library. The Rust executable owns the
 native event loop, document, editing, rendering and desktop services.
 
 `application.py` is a small supplied source facade over `client.py`'s private
-socket/named-pipe protocol. It exposes `Application`, `Window` and generation-bound
-`Document`, common mutation helpers and `Document.command()` for the complete
+socket/named-pipe protocol. It exposes `Application`, `Window`, generation-bound
+`Document` and opaque `Node` handles, named application helpers and `Document.command()` for the complete
 selected protocol. It is not a second DOM model or a separately published SDK.
 
 ```python
@@ -31,7 +31,8 @@ with Application.from_environment() as app:
     app.run()
 ```
 
-Use IDs present in your HTML. Application notifications are serialized in event
+Use IDs present in your HTML, or query anonymous nodes with `query_nodes` and
+wrap their references with `document.node(reference=...)`. Application notifications are serialized in event
 order on one backend worker; the independent transport reader resolves nested
 RPC calls, and the separate host-request pool answers close/quit policy. Lifecycle
 policy callbacks can run concurrently with application event callbacks; protect
@@ -71,3 +72,23 @@ contract and [RENDERER_ACCEPTANCE.md](../../docs/RENDERER_ACCEPTANCE.md) for act
 native qualification. `--headless` and `--native-test` renderer launcher modes
 produce bounded semantic/smoke evidence, not a claim that every desktop scenario
 has been tested.
+
+## Core 1.0 helpers
+
+`Document` adds focus/blur, hit-testing, UTF-16 control selection and replacement,
+editing commands, ordered form data, reset/submit/custom validity, node mutation
+transactions, stylesheet inspection, dialogs/popovers and resource bundles.
+`Window` adds native size constraints, state/attention and file picker methods;
+`Application` adds preferences, clipboard and parent-aware external services.
+See [CORE_1.0_PROTOCOL](../../docs/CORE_1.0_PROTOCOL.md) for exact parameters and limits.
+
+Selection offsets count UTF-16 units: in `A😀B`, select 1..3 for the emoji.
+Python indices are different. `window.open_files(wait=False)` returns the actual
+transport future so `cancel()` asks the native picker to close. Per-window
+`on_before_close` callbacks are routed independently.
+
+The automated renderer journey includes `completion_checks.py`. The normal
+example is static while idle. Add the `demonstrate-animation` class to the body
+explicitly to exercise the pulse animation, and remove it afterward. Incoming
+drops require `data-ui4me-drop="files text"` (or either type) on a receiving
+ancestor; the example body opts in explicitly.

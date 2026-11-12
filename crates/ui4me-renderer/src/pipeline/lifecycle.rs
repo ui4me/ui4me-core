@@ -239,6 +239,8 @@ impl DocumentPipeline {
             font_gen: 0,
             layout_font_gen: 0,
             box_styles: Default::default(),
+            file_input_labels: Default::default(),
+            file_input_labels_dirty: false,
             paint_styles: Default::default(),
             layout_reuses: 0,
             animation_paint_updates: 0,

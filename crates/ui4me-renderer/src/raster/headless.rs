@@ -478,9 +478,17 @@ impl RasterBackend {
         scene: &Arc<SceneSnapshot>,
         scale: f32,
     ) -> Result<(PixelBuffer, RenderReceipt, DamageOutcome), Box<RenderFailure>> {
-        self.prev = None;
-        let (pixels, receipt) = self.render_headless_culled(scene, scale, true)?;
+        // Invalidate the retained scene before rastering (including on failure),
+        // but keep its pixel allocation for another frame of similar size. The
+        // previous `self.prev = None; self.prev.take()` sequence always discarded
+        // this full-surface allocation, even during steady-size animation.
         let mut data = self.prev.take().map(|p| p.data).unwrap_or_default();
+        let (pixels, receipt) = self.render_headless_culled(scene, scale, true)?;
+        // Match the spare-pool's size policy: shrinking a large window must not
+        // retain an unrelated, much larger allocation until the window closes.
+        if data.capacity() > pixels.data.len().saturating_mul(2).saturating_add(64 << 10) {
+            data = Vec::new();
+        }
         data.clear();
         data.extend_from_slice(&pixels.data);
         self.prev = Some(PrevFrame {
@@ -491,5 +499,56 @@ impl RasterBackend {
             data,
         });
         Ok((pixels, receipt, DamageOutcome::Full))
+    }
+}
+
+#[cfg(test)]
+mod retained_frame_tests {
+    use super::*;
+
+    fn scene(width: u32, height: u32, color: &str) -> Arc<SceneSnapshot> {
+        let mut document = crate::Document::parse(&format!(
+            "<!doctype html><style>html,body{{margin:0;background:{color}}}</style>"
+        ))
+        .unwrap();
+        document.render(width, height, 1.0).unwrap();
+        document
+            .pipeline_mut_for_testing()
+            .committed()
+            .unwrap()
+            .scene
+            .clone()
+    }
+
+    #[test]
+    fn full_frames_reuse_storage_preserve_pixels_and_release_on_shrink_or_failure() {
+        let mut backend = RasterBackend::new();
+        let red = scene(512, 512, "red");
+        backend.render_full_keep(&red, 1.0).unwrap();
+        let old = &mut backend.prev.as_mut().unwrap().data;
+        // Extra capacity distinguishes intentional retention from an allocator
+        // happening to return the same address for a new exact-size allocation.
+        old.reserve_exact(4096);
+        let (pointer, capacity) = (old.as_ptr(), old.capacity());
+
+        let blue = scene(512, 512, "blue");
+        let (pixels, _, _) = backend.render_full_keep(&blue, 1.0).unwrap();
+        let retained = &backend.prev.as_ref().unwrap().data;
+        assert_eq!(retained.as_ptr(), pointer);
+        assert_eq!(retained.capacity(), capacity);
+        let (expected, _) = RasterBackend::new().render_headless(&blue, 1.0).unwrap();
+        assert_eq!(pixels.data, expected.data);
+
+        let small = scene(8, 8, "green");
+        let (pixels, _, _) = backend.render_full_keep(&small, 1.0).unwrap();
+        let (expected, _) = RasterBackend::new().render_headless(&small, 1.0).unwrap();
+        assert_eq!(pixels.data, expected.data);
+        assert!(backend.prev.as_ref().unwrap().data.capacity() <= (64 << 10));
+
+        assert!(backend.render_full_keep(&small, f32::NAN).is_err());
+        assert!(
+            backend.prev.is_none(),
+            "a failed full frame invalidates reuse"
+        );
     }
 }

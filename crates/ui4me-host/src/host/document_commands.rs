@@ -1,7 +1,7 @@
 //! Validated document operations. Native lifetime and OS services remain host methods.
 use super::*;
 use serde::Deserialize;
-use ui4me_renderer::{Document, DomOp, ScrollState};
+use ui4me_renderer::{Document, DomOp, NodeOp, ScrollState};
 
 fn yes() -> bool {
     true
@@ -21,10 +21,118 @@ fn query_limit() -> usize {
 fn mouse_pointer() -> u32 {
     1
 }
+fn no_direction() -> String {
+    "none".into()
+}
+fn preserve_selection() -> String {
+    "preserve".into()
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub(super) enum DocumentCommand {
+    RegisterResourceBundle {
+        name: String,
+        entries: Vec<ResourceEntry>,
+    },
+    UnregisterResourceBundle {
+        name: String,
+    },
+    GetResourceStats,
+    PurgeUnusedResources {
+        #[serde(default)]
+        url: Option<String>,
+    },
+    ElementAtPoint {
+        x: f64,
+        y: f64,
+    },
+    GetFocusedElement,
+    Blur {
+        #[serde(default)]
+        element: Option<String>,
+        #[serde(default)]
+        node: Option<String>,
+    },
+    GetControlSelection {
+        #[serde(default)]
+        element: Option<String>,
+        #[serde(default)]
+        node: Option<String>,
+    },
+    SetControlSelection {
+        #[serde(default)]
+        element: Option<String>,
+        #[serde(default)]
+        node: Option<String>,
+        start: u32,
+        end: u32,
+        #[serde(default = "no_direction")]
+        direction: String,
+    },
+    ReplaceControlRange {
+        #[serde(default)]
+        element: Option<String>,
+        #[serde(default)]
+        node: Option<String>,
+        replacement: String,
+        #[serde(default)]
+        start: Option<u32>,
+        #[serde(default)]
+        end: Option<u32>,
+        #[serde(default = "preserve_selection")]
+        selection_mode: String,
+    },
+    EditCommand {
+        command: String,
+        #[serde(default)]
+        element: Option<String>,
+        #[serde(default)]
+        node: Option<String>,
+    },
+    ResetForm {
+        #[serde(default)]
+        element: Option<String>,
+        #[serde(default)]
+        node: Option<String>,
+    },
+    RequestSubmit {
+        #[serde(default)]
+        element: Option<String>,
+        #[serde(default)]
+        node: Option<String>,
+        #[serde(default)]
+        submitter: Option<String>,
+        #[serde(default)]
+        submitter_node: Option<String>,
+    },
+    GetFormData {
+        #[serde(default)]
+        element: Option<String>,
+        #[serde(default)]
+        node: Option<String>,
+        #[serde(default)]
+        submitter: Option<String>,
+        #[serde(default)]
+        submitter_node: Option<String>,
+    },
+    SetCustomValidity {
+        #[serde(default)]
+        element: Option<String>,
+        #[serde(default)]
+        node: Option<String>,
+        message: String,
+    },
+    QueryNodes {
+        selector: String,
+        #[serde(default)]
+        offset: usize,
+        #[serde(default = "query_limit")]
+        limit: usize,
+    },
+    NodeBatch {
+        ops: Vec<NodeBatchOp>,
+    },
     SetText {
         element: String,
         text: String,
@@ -61,7 +169,10 @@ pub(super) enum DocumentCommand {
         name: String,
     },
     Focus {
-        element: String,
+        #[serde(default)]
+        element: Option<String>,
+        #[serde(default)]
+        node: Option<String>,
     },
     ReplaceChildrenHtml {
         element: String,
@@ -309,6 +420,151 @@ pub(super) enum DocumentCommand {
     },
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ResourceEntry {
+    path: String,
+    data_url: String,
+}
+
+/// Decode the whole request before registering anything. A failed entry cannot
+/// replace a working bundle or consume part of its aggregate source budget.
+fn decode_resource_entries(
+    entries: Vec<ResourceEntry>,
+) -> Result<Vec<ui4me_assets::bundles::BundleEntryInput>, RpcError> {
+    if entries.len() > 256 {
+        return Err(RpcError::busy(
+            "A resource registration permits at most 256 entries",
+        ));
+    }
+    let mut bytes = 0usize;
+    entries
+        .into_iter()
+        .map(|entry| {
+            let url = data_url::DataUrl::process(&entry.data_url)
+                .map_err(|_| RpcError::invalid_params("Resource entry must be a valid data URL"))?;
+            let mime = url.mime_type().to_string();
+            let (data, _) = url.decode_to_vec().map_err(|_| {
+                RpcError::invalid_params("Resource entry data URL cannot be decoded")
+            })?;
+            bytes = bytes
+                .checked_add(data.len())
+                .ok_or_else(|| RpcError::busy("Resource registration size overflow"))?;
+            if bytes > 1024 * 1024 {
+                return Err(RpcError::busy(
+                    "A resource registration permits at most 1 MiB decoded bytes",
+                ));
+            }
+            Ok(ui4me_assets::bundles::BundleEntryInput::new(
+                entry.path,
+                data,
+                Some(mime),
+            ))
+        })
+        .collect()
+}
+
+/// Explicit, generation-checked node mutations. Anonymous HTML nodes need no
+/// synthetic id attribute, and a stale node must never target a replacement.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+pub(super) enum NodeBatchOp {
+    SetText {
+        node: String,
+        text: String,
+    },
+    SetAttribute {
+        node: String,
+        name: String,
+        value: String,
+    },
+    RemoveAttribute {
+        node: String,
+        name: String,
+    },
+    AddClass {
+        node: String,
+        name: String,
+    },
+    RemoveClass {
+        node: String,
+        name: String,
+    },
+    InsertHtml {
+        node: String,
+        position: String,
+        html: String,
+    },
+    ReplaceChildrenHtml {
+        node: String,
+        html: String,
+    },
+    RemoveElement {
+        node: String,
+    },
+    MoveElement {
+        node: String,
+        target_node: String,
+        position: String,
+    },
+    AppendText {
+        node: String,
+        text: String,
+    },
+    TrimChildren {
+        node: String,
+        keep: usize,
+        #[serde(default = "start")]
+        from: String,
+    },
+}
+
+impl NodeBatchOp {
+    fn into_engine(self) -> Result<NodeOp, RpcError> {
+        Ok(match self {
+            Self::SetText { node, text } => NodeOp::SetText { node, text },
+            Self::SetAttribute { node, name, value } => NodeOp::SetAttribute {
+                node,
+                name,
+                value: Some(value),
+            },
+            Self::RemoveAttribute { node, name } => NodeOp::SetAttribute {
+                node,
+                name,
+                value: None,
+            },
+            Self::AddClass { node, name } => NodeOp::AddClass { node, name },
+            Self::RemoveClass { node, name } => NodeOp::RemoveClass { node, name },
+            Self::InsertHtml {
+                node,
+                position,
+                html,
+            } => NodeOp::InsertHtml {
+                node,
+                position,
+                html,
+            },
+            Self::ReplaceChildrenHtml { node, html } => NodeOp::ReplaceChildrenHtml { node, html },
+            Self::RemoveElement { node } => NodeOp::RemoveElement { node },
+            Self::MoveElement {
+                node,
+                target_node,
+                position,
+            } => NodeOp::MoveElement {
+                node,
+                target_node,
+                position,
+            },
+            Self::AppendText { node, text } => NodeOp::AppendText { node, text },
+            Self::TrimChildren { node, keep, from } => NodeOp::TrimChildren {
+                node,
+                keep,
+                from_start: trim_from_start(&from)?,
+            },
+        })
+    }
+}
+
 /// One operation of a `batch` command; the same fields as the single command.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
@@ -441,6 +697,114 @@ fn changed(result: ui4me_renderer::Result<()>) -> Result<Value, RpcError> {
 impl DocumentCommand {
     pub(super) fn execute(self, document: &mut Document) -> Result<Value, RpcError> {
         let value = match self {
+            Self::RegisterResourceBundle { name, entries } => {
+                document.register_resource_bundle(&name, decode_resource_entries(entries)?)?
+            }
+            Self::UnregisterResourceBundle { name } => {
+                document.unregister_resource_bundle(&name)?
+            }
+            Self::GetResourceStats => document.resource_stats()?,
+            Self::PurgeUnusedResources { url } => {
+                document.purge_unused_resources(url.as_deref())?
+            }
+            Self::ElementAtPoint { x, y } => {
+                if !x.is_finite() || !y.is_finite() {
+                    return Err(RpcError::invalid_params("Coordinates must be finite"));
+                }
+                document.element_at_point(x, y)?
+            }
+            Self::GetFocusedElement => document.focused_element(),
+            Self::Blur { element, node } => {
+                changed(document.blur(element.as_deref(), node.as_deref()))?
+            }
+            Self::GetControlSelection { element, node } => {
+                document.control_selection(element.as_deref(), node.as_deref())?
+            }
+            Self::SetControlSelection {
+                element,
+                node,
+                start,
+                end,
+                direction,
+            } => document.set_control_selection(
+                element.as_deref(),
+                node.as_deref(),
+                start,
+                end,
+                &direction,
+            )?,
+            Self::ReplaceControlRange {
+                element,
+                node,
+                replacement,
+                start,
+                end,
+                selection_mode,
+            } => document.replace_control_range(
+                element.as_deref(),
+                node.as_deref(),
+                &replacement,
+                start,
+                end,
+                &selection_mode,
+            )?,
+            Self::EditCommand {
+                command,
+                element,
+                node,
+            } => document.edit_command(&command, element.as_deref(), node.as_deref())?,
+            Self::ResetForm { element, node } => {
+                document.reset_form(element.as_deref(), node.as_deref())?
+            }
+            Self::RequestSubmit {
+                element,
+                node,
+                submitter,
+                submitter_node,
+            } => document.request_submit(
+                element.as_deref(),
+                node.as_deref(),
+                submitter.as_deref(),
+                submitter_node.as_deref(),
+            )?,
+            Self::GetFormData {
+                element,
+                node,
+                submitter,
+                submitter_node,
+            } => document.form_data(
+                element.as_deref(),
+                node.as_deref(),
+                submitter.as_deref(),
+                submitter_node.as_deref(),
+            )?,
+            Self::SetCustomValidity {
+                element,
+                node,
+                message,
+            } => document.set_custom_validity(element.as_deref(), node.as_deref(), &message)?,
+            Self::QueryNodes {
+                selector,
+                offset,
+                limit,
+            } => {
+                if limit == 0 || limit > 4096 {
+                    return Err(RpcError::invalid_params("query limit must be 1..4096"));
+                }
+                document.query_nodes(&selector, offset, limit)?
+            }
+            Self::NodeBatch { ops } => {
+                if ops.len() > 1024 {
+                    return Err(RpcError::busy(
+                        "A node batch permits at most 1024 operations",
+                    ));
+                }
+                let ops = ops
+                    .into_iter()
+                    .map(NodeBatchOp::into_engine)
+                    .collect::<Result<Vec<_>, _>>()?;
+                changed(document.apply_node_batch(&ops))?
+            }
             Self::SetText { element, text } => changed(document.set_text(&element, &text))?,
             Self::GetText { element } => json!({"text":document.get_text(&element)?}),
             Self::GetValue { element } => json!({"value":document.get_value(&element)?}),
@@ -489,7 +853,9 @@ impl DocumentCommand {
                 json!({"ids":selected,"total":total,"matched_nodes":matched_nodes,
                     "offset":offset,"limit":limit,"truncated":next < total})
             }
-            Self::Focus { element } => changed(document.focus(&element))?,
+            Self::Focus { element, node } => {
+                changed(document.focus_target(element.as_deref(), node.as_deref()))?
+            }
             Self::ReplaceChildrenHtml { element, html } => {
                 changed(document.replace_children_html(&element, &html))?
             }

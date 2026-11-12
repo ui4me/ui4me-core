@@ -15,8 +15,10 @@
 //! images that came from it and the documents that referenced it advance their resource epoch.
 //!
 //! Limits (`SIZE_LIMIT`): at most [`MAX_ENTRIES`] entries and [`MAX_BUNDLE_BYTES`] bytes per
-//! bundle, paths at most [`MAX_PATH_BYTES`]. The per-kind encoded limit of the reading document's
-//! policy applies when an entry is read (as for files).
+//! bundle, [`MAX_BUNDLES`] names and [`MAX_REGISTERED_BYTES`] registered source bytes across
+//! the registry, paths at most [`MAX_PATH_BYTES`]. Replacement checks exclude the old bundle
+//! atomically. The per-kind encoded limit of the reading document's policy applies when an
+//! entry is read (as for files).
 
 use crate::uri;
 use std::collections::HashMap;
@@ -29,8 +31,11 @@ use url::Url;
 
 /// The scheme name (without the colon).
 pub const SCHEME: &str = "ui4me-res";
-pub const MAX_ENTRIES: usize = 65_536;
-pub const MAX_BUNDLE_BYTES: u64 = 1 << 30;
+pub const MAX_ENTRIES: usize = 4096;
+pub const MAX_BUNDLE_BYTES: u64 = 16 << 20;
+/// Registry-wide bounds also cover many individually small registrations.
+pub const MAX_BUNDLES: usize = 64;
+pub const MAX_REGISTERED_BYTES: u64 = 16 << 20;
 pub const MAX_PATH_BYTES: usize = 1024;
 pub const MAX_NAME_BYTES: usize = 63;
 const MAX_DIR_DEPTH: usize = 32;
@@ -151,6 +156,13 @@ struct Inner {
     next_generation: u64,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct BundleStats {
+    pub bundles: usize,
+    pub entries: usize,
+    pub bytes: u64,
+}
+
 /// The runtime-wide bundle registry (shared with the worker threads; reads take a shared lock).
 #[derive(Default)]
 pub struct BundleRegistry {
@@ -233,6 +245,21 @@ impl BundleRegistry {
             }
         }
         let mut inner = self.inner.write().unwrap_or_else(|p| p.into_inner());
+        let old = inner.bundles.get(name);
+        if old.is_none() && inner.bundles.len() >= MAX_BUNDLES {
+            return Err(status(
+                Code::SizeLimit,
+                "too many registered resource bundles",
+            ));
+        }
+        let registered: u64 = inner.bundles.values().map(|b| b.total_bytes).sum();
+        let replaced = old.map_or(0, |b| b.total_bytes);
+        if registered - replaced + total > MAX_REGISTERED_BYTES {
+            return Err(status(
+                Code::SizeLimit,
+                "registered resource byte budget exceeded",
+            ));
+        }
         inner.next_generation += 1;
         let bundle = Arc::new(Bundle {
             name: name.to_string(),
@@ -273,6 +300,15 @@ impl BundleRegistry {
             .collect();
         v.sort();
         v
+    }
+
+    pub fn stats(&self) -> BundleStats {
+        let inner = self.inner.read().unwrap_or_else(|p| p.into_inner());
+        BundleStats {
+            bundles: inner.bundles.len(),
+            entries: inner.bundles.values().map(|b| b.len()).sum(),
+            bytes: inner.bundles.values().map(|b| b.total_bytes).sum(),
+        }
     }
 
     pub fn get(&self, name: &str) -> Option<Arc<Bundle>> {
@@ -584,6 +620,59 @@ mod tests {
             r.lookup(&u("ui4me-res:///index.html")).unwrap_err().code,
             Code::UriMalformed
         );
+    }
+
+    #[test]
+    fn aggregate_budget_and_failed_replace_are_atomic() {
+        let registry = BundleRegistry::new();
+        let chunk: Arc<[u8]> = vec![0u8; 1 << 20].into();
+        for i in 0..16 {
+            registry
+                .register(
+                    &format!("b{i}"),
+                    vec![BundleEntryInput::new("x", chunk.clone(), None)],
+                )
+                .unwrap();
+        }
+        assert_eq!(registry.stats().bytes, MAX_REGISTERED_BYTES);
+        assert_eq!(
+            registry
+                .register("overflow", vec![BundleEntryInput::new("x", vec![0], None)])
+                .unwrap_err()
+                .code,
+            Code::SizeLimit
+        );
+        let before = registry.get("b0").unwrap();
+        let two: Arc<[u8]> = vec![0u8; 2 << 20].into();
+        assert!(
+            registry
+                .register("b0", vec![BundleEntryInput::new("x", two, None)])
+                .is_err()
+        );
+        assert_eq!(registry.get("b0").unwrap().generation, before.generation);
+        registry
+            .register("b0", vec![BundleEntryInput::new("x", vec![1], None)])
+            .unwrap();
+        assert_eq!(registry.stats().bytes, 15 * (1 << 20) + 1);
+        assert!(registry.unregister("b1"));
+        registry
+            .register("replacement", vec![BundleEntryInput::new("x", chunk, None)])
+            .unwrap();
+        assert_eq!(registry.stats().bundles, 16);
+    }
+
+    #[test]
+    fn bundle_name_count_is_bounded_even_for_empty_bundles() {
+        let registry = BundleRegistry::new();
+        for i in 0..MAX_BUNDLES {
+            registry.register(&format!("b{i}"), vec![]).unwrap();
+        }
+        assert_eq!(
+            registry.register("extra", vec![]).unwrap_err().code,
+            Code::SizeLimit
+        );
+        registry.register("b0", vec![]).unwrap();
+        assert_eq!(registry.stats().bundles, MAX_BUNDLES);
     }
 
     #[test]

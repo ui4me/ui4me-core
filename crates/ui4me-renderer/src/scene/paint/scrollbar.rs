@@ -83,6 +83,7 @@ pub(crate) fn layout(
 }
 
 pub(crate) fn push(b: &PaintBox, out: &mut Vec<Pending>, scope: Option<ScopeId>) {
+    push_resize_grip(b, out, scope);
     for bar in &b.extras.scrollbars {
         let (track_kind, thumb_kind) = match bar.axis {
             crate::scene::hit_index::ScrollAxis::Horizontal => {
@@ -135,4 +136,62 @@ pub(crate) fn push(b: &PaintBox, out: &mut Vec<Pending>, scope: Option<ScopeId>)
             },
         });
     }
+}
+
+/// Three diagonal strokes within the same 14px corner used by CSS resize input.
+/// The affordance follows the element transform and paints above its contents.
+fn push_resize_grip(b: &PaintBox, out: &mut Vec<Pending>, scope: Option<ScopeId>) {
+    use crate::scene::display_list::{FillRule, Path, PathCommand, Point};
+    let Some(color) = b.extras.resize_grip else {
+        return;
+    };
+    let width = b.border_box.size.width.to_f64() as f32;
+    let height = b.border_box.size.height.to_f64() as f32;
+    if width < 8.0 || height < 8.0 {
+        return;
+    }
+    let right = b.border_box.origin.x.to_f64() as f32 + width - 3.0;
+    let bottom = b.border_box.origin.y.to_f64() as f32 + height - 3.0;
+    let mut commands = Vec::new();
+    for length in [3.0f32, 6.0, 9.0] {
+        if length + 4.0 > width.min(height) {
+            continue;
+        }
+        commands.extend([
+            PathCommand::MoveTo(Point {
+                x: right - length,
+                y: bottom,
+            }),
+            PathCommand::LineTo(Point {
+                x: right,
+                y: bottom - length,
+            }),
+            PathCommand::LineTo(Point {
+                x: right,
+                y: bottom - length + 1.2,
+            }),
+            PathCommand::LineTo(Point {
+                x: right - length + 1.2,
+                y: bottom,
+            }),
+            PathCommand::Close,
+        ]);
+    }
+    out.push(Pending {
+        owner: b.node,
+        phase: PaintPhase::OverlayScrollbar,
+        kind: ItemKind("resize-grip"),
+        ink: Rect {
+            x: right - 9.0,
+            y: bottom - 9.0,
+            width: 10.0,
+            height: 10.0,
+        },
+        scope,
+        op: DrawOp::FillPath {
+            path: Path { commands },
+            fill_rule: FillRule::NonZero,
+            paint: Paint::Solid(color),
+        },
+    });
 }

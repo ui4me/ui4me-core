@@ -39,13 +39,15 @@ pub(super) fn update_ime(engine: &Document, native: &mut NativeWindow) {
     };
     let (x, y, width, height) = ime.cursor_area;
     let scale = native.window.scale_factor();
-    let state = super::ImeState::new(
+    let metadata = engine.ime_hints();
+    let mut state = super::ImeState::new(
         &surrounding.text,
         surrounding.cursor,
         surrounding.anchor,
         (x * scale, y * scale, width * scale, height * scale),
         ime.password,
     );
+    state.hints = metadata.clone();
     if native.ime_enabled && native.ime_sent.as_ref() == Some(&state) {
         return;
     }
@@ -54,14 +56,7 @@ pub(super) fn update_ime(engine: &Document, native: &mut NativeWindow) {
     else {
         return;
     };
-    let (hint, purpose) = if ime.password {
-        (
-            ImeHint::HIDDEN_TEXT | ImeHint::SENSITIVE_DATA,
-            ImePurpose::Password,
-        )
-    } else {
-        (ImeHint::NONE, ImePurpose::Normal)
-    };
+    let (hint, purpose) = ime_policy(&metadata, ime.password);
     let data = ImeRequestData::default()
         .with_hint_and_purpose(hint, purpose)
         .with_cursor_area(
@@ -90,6 +85,47 @@ pub(super) fn update_ime(engine: &Document, native: &mut NativeWindow) {
     }
 }
 
+/// This is advisory metadata. Winit currently delivers purpose/hints on
+/// Wayland; its Windows adapter still supplies ordinary IME composition only.
+fn ime_policy(metadata: &Value, password: bool) -> (ImeHint, ImePurpose) {
+    let mode = metadata
+        .get("inputmode")
+        .and_then(Value::as_str)
+        .filter(|m| !m.is_empty())
+        .or_else(|| metadata.get("input_type").and_then(Value::as_str));
+    if password {
+        return (
+            ImeHint::HIDDEN_TEXT | ImeHint::SENSITIVE_DATA,
+            if matches!(mode, Some("numeric" | "decimal")) {
+                ImePurpose::Pin
+            } else {
+                ImePurpose::Password
+            },
+        );
+    }
+    let purpose = match mode {
+        Some("numeric" | "decimal" | "number") => ImePurpose::Number,
+        Some("tel") => ImePurpose::Phone,
+        Some("url") => ImePurpose::Url,
+        Some("email") => ImePurpose::Email,
+        Some("date") => ImePurpose::Date,
+        Some("time") => ImePurpose::Time,
+        Some("datetime-local") => ImePurpose::DateTime,
+        _ => ImePurpose::Normal,
+    };
+    let mut hint = ImeHint::NONE;
+    if metadata.get("multiline").and_then(Value::as_bool) == Some(true) {
+        hint |= ImeHint::MULTILINE;
+    }
+    if metadata.get("spellcheck").and_then(Value::as_bool) == Some(true) {
+        hint |= ImeHint::SPELLCHECK;
+    }
+    if metadata.get("autocomplete").and_then(Value::as_str) == Some("on") {
+        hint |= ImeHint::COMPLETION;
+    }
+    (hint, purpose)
+}
+
 fn cursor(name: &str) -> CursorIcon {
     match name {
         "text" => CursorIcon::Text,
@@ -115,6 +151,52 @@ fn cursor(name: &str) -> CursorIcon {
 }
 
 impl Host {
+    pub(super) fn apply_native_preferences(&mut self, event_loop: Option<&dyn ActiveEventLoop>) {
+        let observation = self.preferences.snapshot();
+        if observation.revision == self.preference_revision {
+            return;
+        }
+        self.preference_revision = observation.revision;
+        let mut results = Vec::new();
+        for (id, window) in &mut self.windows {
+            let dark = observation.dark.or_else(|| {
+                window
+                    .native
+                    .as_ref()
+                    .and_then(|n| n.window.theme())
+                    .map(|t| t == winit::window::Theme::Dark)
+            });
+            if let Some(document) = &mut window.document {
+                let result = document.engine.set_system_preferences(
+                    dark,
+                    observation.reduced_motion,
+                    observation.high_contrast,
+                );
+                results.push((
+                    id.clone(),
+                    document.id.clone(),
+                    result,
+                    document.engine.environment(),
+                ));
+            }
+        }
+        for (id, document_id, result, environment) in results {
+            match result {
+                Ok(true) => {
+                    self.emit_document_events(
+                        &id,
+                        &document_id,
+                        vec![json!({"type":"environment_changed","environment":environment})],
+                    );
+                    self.document_changed(&id, event_loop);
+                }
+                Ok(false) => {}
+                Err(error) => self.document_error(&id, &document_id, error),
+            }
+        }
+        self.notify("desktop.preferences_changed", observation.value());
+    }
+
     fn document_error(
         &mut self,
         window_id: &str,
@@ -682,6 +764,7 @@ impl Host {
                 })
             }
             WindowEvent::ThemeChanged(theme) => {
+                let observation = self.preferences.snapshot();
                 if let Some((document_id, result, environment)) = self
                     .windows
                     .get_mut(id)
@@ -689,9 +772,13 @@ impl Host {
                     .map(|d| {
                         (
                             d.id.clone(),
-                            d.engine.set_system_color_scheme(Some(
-                                *theme == winit::window::Theme::Dark,
-                            )),
+                            d.engine.set_system_preferences(
+                                observation
+                                    .dark
+                                    .or(Some(*theme == winit::window::Theme::Dark)),
+                                observation.reduced_motion,
+                                observation.high_contrast,
+                            ),
                             d.engine.environment(),
                         )
                     })
@@ -865,10 +952,111 @@ impl Host {
         true
     }
 
+    pub(super) fn incoming_drag(
+        &mut self,
+        id: &str,
+        transfer: winit::data_transfer::DataTransferId,
+        position: Option<(f64, f64)>,
+        phase: &str,
+        event_loop: &dyn ActiveEventLoop,
+    ) {
+        use winit::{data_transfer::TypeHint, event_loop::DndAction};
+        let formats = event_loop
+            .data_transfer(transfer)
+            .ok()
+            .filter(|_| self.jobs.len() + self.transfers.len() < protocol::MAX_PENDING)
+            .map(|data| {
+                (
+                    data.has_type(&TypeHint::UriList),
+                    data.has_type(&TypeHint::Plaintext),
+                )
+            });
+        let Some(record) = self.windows.get_mut(id).filter(|w| !w.closing) else {
+            return;
+        };
+        let Some(native) = &mut record.native else {
+            return;
+        };
+        let point = position.map(|(x, y)| {
+            (
+                x / native.window.scale_factor(),
+                y / native.window.scale_factor(),
+            )
+        });
+        let mut files = None;
+        let mut target = None;
+        if let (Some((x, y)), Some((has_files, has_text))) = (point, formats) {
+            if let Some(document) = &mut record.document {
+                if has_files {
+                    target = document.engine.native_drop_target(x, y, true);
+                    if target.is_some() {
+                        files = Some(true);
+                    }
+                }
+                if target.is_none() && has_text {
+                    target = document.engine.native_drop_target(x, y, false);
+                    if target.is_some() {
+                        files = Some(false);
+                    }
+                }
+            } else if has_files || has_text {
+                files = Some(has_files);
+            }
+        }
+        let actions = if files.is_some() {
+            &[DndAction::Copy][..]
+        } else {
+            &[][..]
+        };
+        if let Err(error) = event_loop.set_valid_dnd_actions(transfer, actions) {
+            tracing::debug!(%error,"Native drop acceptance unavailable");
+            files = None;
+            target = None;
+        }
+        let state = IncomingDrop {
+            transfer,
+            document_id: record.document.as_ref().map(|d| d.id.clone()),
+            target,
+            files,
+            point: point.unwrap_or((0.0, 0.0)),
+        };
+        let changed = native.incoming_drop.as_ref().is_none_or(|old| {
+            old.transfer != state.transfer
+                || old.document_id != state.document_id
+                || old.target != state.target
+                || old.files != state.files
+        });
+        native.incoming_drop = Some(state.clone());
+        // Report transitions rather than unbounded pointer-motion messages to
+        // a slow language backend. Geometry remains current in the saved state.
+        if changed {
+            self.emit_drop_feedback(id, &state, phase);
+        }
+    }
+
+    pub(super) fn emit_drop_feedback(&mut self, id: &str, state: &IncomingDrop, phase: &str) {
+        if let Some(document_id) = &state.document_id {
+            self.emit_document_events(
+                id,
+                document_id,
+                vec![json!({"type":"drag_feedback", "phase":phase,
+                "accepted":phase!="leave" && state.files.is_some(),
+                "kind":state.files.map(|files|if files {"files"}else{"text"}),
+                "element":state.target.as_ref().map(|t|&t["element"]),
+                "node":state.target.as_ref().map(|t|&t["node"]),
+                "x":state.point.0,"y":state.point.1,"external":true})],
+            );
+        }
+    }
+
+    // The separate document epoch, receiver token and point are deliberate:
+    // native completion must not reacquire a target after an asynchronous read.
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn complete_document_drop(
         &mut self,
         id: &str,
         document_id: &str,
+        target: &Value,
         files: bool,
         point: (f64, f64),
         result: Result<String, RpcError>,
@@ -882,8 +1070,12 @@ impl Host {
         else {
             return;
         };
+        if !document.engine.native_drop_accepts(target, files) {
+            return;
+        }
         let (x, y) = point;
-        let element = document.engine.element_at(x, y);
+        let element = &target["element"];
+        let node = &target["node"];
         match result {
             Ok(text) => {
                 let event = if files {
@@ -912,9 +1104,9 @@ impl Host {
                             return;
                         }
                     };
-                    json!({"type":"drop","element":element,"x":x,"y":y,"paths":paths,"external":true})
+                    json!({"type":"drop","element":element,"node":node,"x":x,"y":y,"paths":paths,"external":true})
                 } else {
-                    json!({"type":"drop","element":element,"x":x,"y":y,"text":text,"external":true})
+                    json!({"type":"drop","element":element,"node":node,"x":x,"y":y,"text":text,"external":true})
                 };
                 self.emit_document_events(id, document_id, vec![event]);
             }
@@ -968,6 +1160,26 @@ fn file_filters(accept: &[String]) -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ime_hints_use_inputmode_and_never_offer_password_completions() {
+        let (h, p) = ime_policy(
+            &json!({"input_type":"email","inputmode":"numeric","autocomplete":"on","spellcheck":true}),
+            true,
+        );
+        assert_eq!(p, ImePurpose::Pin);
+        assert!(h.contains(ImeHint::SENSITIVE_DATA | ImeHint::HIDDEN_TEXT));
+        assert!(!h.intersects(ImeHint::COMPLETION | ImeHint::SPELLCHECK));
+        let (h, p) = ime_policy(
+            &json!({"input_type":"textarea","multiline":true,"spellcheck":true}),
+            false,
+        );
+        assert_eq!(p, ImePurpose::Normal);
+        assert!(h.contains(ImeHint::MULTILINE | ImeHint::SPELLCHECK));
+        assert_eq!(
+            ime_policy(&json!({"input_type":"email"}), false).1,
+            ImePurpose::Email
+        );
+    }
     #[test]
     fn oversized_document_event_reports_error_without_disconnect_or_truncation() {
         let mut host = super::super::tests::controller(true);

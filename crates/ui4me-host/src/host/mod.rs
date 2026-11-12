@@ -58,6 +58,17 @@ struct NativeWindow {
     /// methods answer every text-input update (for example by re-sending a pending dead-key
     /// preedit), and re-sending on each redraw turned that into an unbounded IME/redraw loop.
     ime_sent: Option<ImeState>,
+    incoming_drop: Option<IncomingDrop>,
+}
+
+#[derive(Clone)]
+struct IncomingDrop {
+    transfer: winit::data_transfer::DataTransferId,
+    document_id: Option<String>,
+    target: Option<Value>,
+    /// None means rejected, true selects local-file URIs, false selects text.
+    files: Option<bool>,
+    point: (f64, f64),
 }
 
 /// IME-visible state of the focused editor: surrounding text, cursor and anchor (bytes), the
@@ -69,6 +80,7 @@ struct ImeState {
     anchor: usize,
     area: (i64, i64, i64, i64),
     password: bool,
+    hints: Value,
 }
 
 impl ImeState {
@@ -87,6 +99,7 @@ impl ImeState {
             anchor,
             area: (px(area.0), px(area.1), px(area.2), px(area.3)),
             password,
+            hints: Value::Null,
         }
     }
 }
@@ -96,6 +109,8 @@ struct WindowRecord {
     width: u32,
     height: u32,
     visible: bool,
+    resizable: bool,
+    limits: requests::WindowLimits,
     probe: Probe,
     document: Option<HostedDocument>,
     native: Option<NativeWindow>,
@@ -140,6 +155,7 @@ enum TransferTarget {
     DocumentDrop {
         window_id: String,
         document_id: String,
+        target: Value,
         files: bool,
         x: f64,
         y: f64,
@@ -188,6 +204,8 @@ pub struct Host {
     launcher_gone: Option<Arc<AtomicBool>>,
     /// Shared native presentation context, created with the first window.
     presentation: Option<softbuffer::Context<OwnedDisplayHandle>>,
+    preferences: platform::preferences::PreferenceWatch,
+    preference_revision: u64,
 }
 
 /// Launch a manifest, forwarding secondary launches to the existing instance.
@@ -316,7 +334,7 @@ pub fn doctor() -> Value {
         "environment":environment,"containment":platform::containment_description(),
         "run_containment":platform::run_containment_description(),
         "paths":platform::standard_paths("org.ui4me.HostProbe").ok(),
-        "native_tests":"not run by doctor","renderer":"CPU HTML/CSS desktop profile ui4me-desktop-0.2 (plus diagnostic probe)",
+        "native_tests":"not run by doctor","renderer":"CPU HTML/CSS desktop profile ui4me-desktop-1.0 (plus diagnostic probe)",
         "windowing_dependency":"winit 0.31.0-beta.4 (exactly pinned)"})
 }
 
@@ -335,6 +353,11 @@ impl Host {
         wake: Wake,
         exit_code: Arc<AtomicI32>,
     ) -> Result<Self> {
+        #[cfg(target_os = "linux")]
+        if !headless {
+            accesskit_atspi_common::set_application_name(config.app.name.clone())
+                .map_err(anyhow::Error::msg)?;
+        }
         let icon = crate::icons::load(config.app.icon.as_deref())?;
         let token = random_token()?;
         let instance_key = instance
@@ -359,6 +382,7 @@ impl Host {
         let (job_tx, job_rx) = mpsc::sync_channel(protocol::MAX_PENDING);
         let (action_tx, action_rx) = mpsc::sync_channel(128);
         let launcher_gone = platform::watch_launcher(wake.clone());
+        let preferences = platform::preferences::PreferenceWatch::new(!headless, wake.clone());
         let mut lifecycle = Lifecycle::new();
         lifecycle.begin_connecting()?;
         if standalone {
@@ -402,6 +426,8 @@ impl Host {
             exit_code,
             launcher_gone,
             presentation: None,
+            preferences,
+            preference_revision: 0,
             #[cfg(test)]
             observed_notifications: Vec::new(),
         })
@@ -452,6 +478,7 @@ impl Host {
     }
 
     fn pump(&mut self, event_loop: Option<&dyn ActiveEventLoop>) {
+        self.apply_native_preferences(event_loop);
         // An input/log flood must not monopolize native event dispatch.
         for _ in 0..64 {
             let event = self
@@ -815,13 +842,48 @@ impl Host {
     }
 
     fn capabilities(&self) -> Value {
-        json!({"native":!self.headless,"headless":self.headless,"windows":true,"max_windows":self.config.host.max_windows,
+        let native = !self.headless;
+        let preferences = self.preferences.snapshot();
+        let observed_service =
+            |available: Option<bool>| if native { available } else { Some(false) };
+        let feature = |implemented: bool, available: Option<bool>, scope: &str| {
+            json!({
+            "implemented":implemented,"available":available,
+            "qualification":if implemented {"requires_current_native_evidence"}else{"out_of_scope"},"scope":scope})
+        };
+        let features = json!({
+            "window_constraints":feature(true,Some(native),"Paired min/max CSS-pixel bounds; OS may impose additional limits"),
+            "window_observation":feature(true,Some(native),"Native observed state; unavailable properties are null, separate from requested state"),
+                "window_visibility":feature(cfg!(target_os="windows"),Some(native && cfg!(target_os="windows")),"Pinned Wayland backend cannot create hidden windows or show/hide existing top levels"),
+                "window_focus":feature(cfg!(target_os="windows"),Some(native && cfg!(target_os="windows")),"Wayland focus is compositor-owned; use advisory attention"),
+            "window_position":feature(cfg!(target_os="windows"),Some(native && cfg!(target_os="windows")),"Compositor owns Wayland top-level placement"),
+            "window_restore":feature(cfg!(target_os="windows"),Some(native && cfg!(target_os="windows")),"Wayland has no un-minimize request"),
+            "attention":feature(true,observed_service(if cfg!(target_os="windows") {Some(true)}else{None}),"Window-manager policy; Wayland requires xdg-activation and cannot cancel urgency"),
+            "clipboard_text":feature(true,observed_service(None),"Text only; availability is established by the native request"),
+            "file_dialogs":feature(true,observed_service(None),"Parented native picker; Linux requires the desktop portal"),
+            "external_open":feature(true,observed_service(None),"Optional parent forwarded to OpenURI or Windows Shell; accepted is not proof of a presented app"),
+            "reveal_file":feature(true,observed_service(None),"Local path selection via FileManager1.ShowItems or Windows Shell; these services have no parent argument"),
+            "native_preferences":feature(true,observed_service(preferences.availability()),"Observed color scheme, reduced motion and high contrast; missing per-setting values stay null"),
+            "ime":feature(true,observed_service(None),"Composition, surrounding text and candidate area depend on the active input method"),
+            "ime_purpose_hints":feature(true,Some(native && cfg!(target_os="linux")),"Advisory Wayland input purpose/hints; pinned winit does not implement these hints on Windows"),
+            "incoming_drop":feature(true,observed_service(None),"Bounded local file or text data, with document target policy"),
+            "accessibility":feature(true,observed_service(None),"AccessKit AT-SPI or UI Automation; presence does not qualify screen-reader journeys"),
+            "printing":feature(false,Some(false),"Outside the desktop core contract"),
+            "tray":feature(false,Some(false),"Outside the current core contract")
+        });
+        let mut result = json!({"native":!self.headless,"headless":self.headless,"windows":true,"max_windows":self.config.host.max_windows,
             "clipboard_text":!self.headless,"file_dialogs":!self.headless,"external_open":!self.headless,
             "drag_drop":!self.headless,"ime":!self.headless,"accessibility":!self.headless,
-            "probe":true,"html_css":true,"renderer":"cpu","css_profile":"ui4me-desktop-0.2","max_documents":documents::MAX_DOCUMENTS,"printing":false,"tray":false,
+            "probe":true,"html_css":true,"renderer":"cpu","css_profile":"ui4me-desktop-1.0","max_documents":documents::MAX_DOCUMENTS,"printing":false,"tray":false,
             "platform":std::env::consts::OS,"containment":platform::containment_description(),
             "limits":{"frame_bytes":protocol::MAX_FRAME_BYTES,"pending_requests":protocol::MAX_PENDING,"probe_text_bytes":crate::presentation::MAX_TEXT_BYTES},
-            "window_positioning":cfg!(target_os="windows"),"native_qualification":"requires local evidence"})
+            "window_positioning":native && cfg!(target_os="windows"),"native_qualification":"requires local evidence"});
+        result["capability_schema"] = json!(2);
+        result["qualification"] = json!({"status":"unqualified_candidate","evidence":"No native qualification is inferred from compiled code, a previous release, or an available service"});
+        result["legacy_flags"] = json!("Top-level service booleans describe enabled API surfaces; feature availability below is authoritative and null means unobserved");
+        result["features"] = features;
+        result["native_preferences"] = preferences.value();
+        result
     }
 
     fn request_close(&mut self, window_id: &str, reason: &str) -> Result<(), RpcError> {
@@ -1037,11 +1099,11 @@ impl Host {
         if self
             .jobs
             .values()
-            .any(|j| j.parent.as_deref() == Some(id) && j.kind.is_dialog())
+            .any(|j| j.parent.as_deref() == Some(id) && (j.kind.is_dialog() || j.dialog.is_some()))
         {
             if let Some(window) = self.windows.get_mut(id) {
                 window.closing = true;
-                window.probe.status = "Waiting for the native dialog to close.".into();
+                window.probe.status = "Waiting for the native request to close.".into();
             }
             let replies: Vec<_> = self
                 .jobs
@@ -1190,6 +1252,8 @@ mod tests {
             exit_code: Arc::new(AtomicI32::new(0)),
             launcher_gone: None,
             presentation: None,
+            preferences: platform::preferences::PreferenceWatch::new(false, Arc::new(|| {})),
+            preference_revision: 0,
             #[cfg(test)]
             observed_notifications: Vec::new(),
         }
@@ -1203,6 +1267,8 @@ mod tests {
                 width: 800,
                 height: 500,
                 visible: true,
+                resizable: true,
+                limits: requests::WindowLimits::default(),
                 probe: Probe::default(),
                 document: None,
                 native: None,

@@ -45,6 +45,14 @@ use ui4me_engine_types::status::Status;
 /// back into the pipeline.
 pub type SharedResources = Arc<Mutex<ResourceManager>>;
 
+/// The existing resource caches and the registered source-byte store, counted separately.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ResourceStats {
+    pub cache: ui4me_assets::cache::CacheStats,
+    pub bundles: ui4me_assets::bundles::BundleStats,
+    pub svg_rasters: ui4me_assets::svg::raster_cache::RasterStats,
+}
+
 /// What the pipeline of one document uses of 007.
 pub struct PipelineResources {
     manager: SharedResources,
@@ -220,6 +228,55 @@ impl PipelineResources {
 
     pub fn document(&self) -> DocumentId {
         self.document
+    }
+
+    /// Atomically replace an in-memory bundle. The caller applies `apply_bundle_change` to
+    /// every affected document after this method returns (the manager lock is released).
+    pub fn register_bundle(
+        &self,
+        name: &str,
+        entries: Vec<ui4me_assets::bundles::BundleEntryInput>,
+    ) -> Result<ui4me_assets::bundles::BundleChange, Status> {
+        self.manager().bundle_register(name, entries)
+    }
+
+    /// Remove source bytes and restart affected resource requests as missing. Idempotent.
+    pub fn unregister_bundle(
+        &self,
+        name: &str,
+    ) -> Result<ui4me_assets::bundles::BundleChange, Status> {
+        if !ui4me_assets::bundles::valid_name(name) {
+            return Err(Status::new(
+                Code::InvalidArgument,
+                ui4me_engine_types::stage::Stage::Resource,
+            )
+            .with_message("invalid resource bundle name"));
+        }
+        Ok(self.manager().bundle_unregister(name))
+    }
+
+    pub fn resource_stats(&self) -> ResourceStats {
+        let manager = self.manager();
+        ResourceStats {
+            cache: manager.cache_stats(),
+            bundles: manager.bundles().stats(),
+            svg_rasters: manager.svg_raster_stats(),
+        }
+    }
+
+    /// Purge unused decoded cache entries only; registered bundles and live images remain.
+    /// `url` is an optional exact absolute resource URL, not a filesystem path or prefix.
+    pub fn purge_unused_resources(&self, url: Option<&str>) -> Result<usize, Status> {
+        if let Some(url) = url {
+            Url::parse(url).map_err(|_| {
+                Status::new(
+                    Code::InvalidArgument,
+                    ui4me_engine_types::stage::Stage::Resource,
+                )
+                .with_message("purge URL must be an absolute resource URL")
+            })?;
+        }
+        Ok(self.manager().purge_unused_resources(url))
     }
 
     /// The URL the document was loaded from (`about:blank` for a string document).

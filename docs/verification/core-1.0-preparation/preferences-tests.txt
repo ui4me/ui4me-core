@@ -1,0 +1,74 @@
+$ cargo test --locked -p ui4me-host --lib platform::preferences -j2
+Observed exit code: 0
+
+   Compiling serde_core v1.0.229
+   Compiling regex-syntax v0.8.11
+   Compiling serde v1.0.229
+   Compiling string_cache v0.11.0
+   Compiling zvariant_utils v4.2.0
+   Compiling zcheapstr v1.2.0
+   Compiling enumflags2 v0.7.12
+   Compiling zvariant v5.15.1
+   Compiling uuid v1.29.2
+   Compiling zbus_names v4.3.5
+   Compiling euclid v0.22.14
+   Compiling thin-vec v0.2.21
+   Compiling servo_arc v0.6.0 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/patches/stylo/stylo/servo_arc)
+   Compiling cssparser v0.38.0
+   Compiling zbus v5.19.0
+   Compiling to_shmem v0.7.0 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/patches/stylo/stylo/to_shmem)
+   Compiling zbus_xml v5.2.1
+   Compiling regex-automata v0.4.18
+   Compiling selectors v0.42.0 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/patches/stylo/stylo/selectors)
+   Compiling web_atoms v0.3.0
+   Compiling zbus-lockstep v0.5.2
+   Compiling app_units v0.7.8
+   Compiling stylo_malloc_size_of v0.23.0 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/patches/stylo/stylo/malloc_size_of)
+   Compiling url v2.5.8
+   Compiling atspi-common v0.13.0
+   Compiling guillotiere v0.7.0
+   Compiling accesskit v0.25.2
+   Compiling getrandom v0.4.3
+   Compiling vello_common v0.3.0
+   Compiling markup5ever v0.40.0
+   Compiling serde_json v1.0.154
+   Compiling stylo_atoms v0.23.0 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/patches/stylo/stylo/stylo_atoms)
+   Compiling stylo_traits v0.23.0 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/patches/stylo/stylo/style_traits)
+   Compiling html5ever v0.40.1
+   Compiling glifo v0.4.0
+   Compiling accesskit_consumer v0.39.2
+   Compiling atspi-proxies v0.13.0
+   Compiling stylo_dom v0.23.0 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/patches/stylo/stylo/stylo_dom)
+   Compiling regex v1.13.1
+   Compiling matchers v0.2.0
+   Compiling toml_datetime v0.6.11
+   Compiling serde_spanned v0.6.9
+   Compiling tracing-serde v0.2.0
+   Compiling num-integer v0.1.47
+   Compiling strum v0.28.0
+   Compiling stylo v0.23.0 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/patches/stylo/stylo/style)
+   Compiling toml_edit v0.22.27
+   Compiling tracing-subscriber v0.3.23
+   Compiling atspi v0.29.0
+   Compiling ui4me-document v1.0.0-rc.1 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/crates/ui4me-document)
+   Compiling accesskit_atspi_common v0.21.1 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/third_party/accesskit_atspi_common-0.21.1)
+   Compiling ui4me-assets v1.0.0-rc.1 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/crates/ui4me-assets)
+   Compiling vello_cpu v0.3.0
+   Compiling ui4me-renderer v1.0.0-rc.1 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/crates/ui4me-renderer)
+   Compiling tracing-appender v0.2.5
+   Compiling ashpd v0.13.13
+   Compiling accesskit_unix v0.24.1
+   Compiling toml v0.8.23
+   Compiling tempfile v3.27.0
+   Compiling ui4me-host v1.0.0-rc.1 (/workspace/scratch/3c4bbc64a9f5/build/core-1.0/ui4me-core/crates/ui4me-host)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5m 52s
+     Running unittests src/lib.rs (target/debug/deps/ui4me_host-3166d451c32dfa1b)
+
+running 4 tests
+test platform::preferences::tests::headless_preferences_remain_unknown ... ok
+test platform::preferences::tests::unchanged_observation_does_not_wake_or_advance_revision ... ok
+test platform::preferences::linux::tests::portal_preferences_distinguish_missing_from_no_preference ... ok
+test platform::preferences::tests::pending_availability_is_unknown_until_an_observation ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.00s
+

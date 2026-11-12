@@ -97,6 +97,9 @@ impl DeferredClipboard {
     pub(super) fn is_enabled(&self) -> bool {
         self.enabled
     }
+    pub(super) fn request_serial(&self) -> u64 {
+        self.next_id
+    }
 }
 
 pub(super) fn changes_clipboard_context(input: &Input, buttons: u16) -> bool {

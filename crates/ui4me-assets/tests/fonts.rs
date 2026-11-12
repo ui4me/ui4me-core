@@ -439,6 +439,7 @@ fn rule(id: u64, family: &str, sources: Vec<FaceSourceSpec>, base: &Url) -> Font
     let _ = base;
     FontFaceRule {
         rule_id: id,
+        settings: Default::default(),
         family: family.into(),
         weight: (400.0, 400.0),
         style: FaceStyle::Normal,

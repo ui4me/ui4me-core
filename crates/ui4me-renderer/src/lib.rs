@@ -23,7 +23,7 @@ pub(crate) mod text;
 /// parsed as inert screen CSS, but no page-output capability is provided.
 pub fn css_profile() -> (&'static str, Vec<(&'static str, &'static str)>) {
     (
-        "ui4me-desktop-0.2",
+        "ui4me-desktop-1.0",
         style::profile::table::FEATURES
             .iter()
             .map(|(id, s)| {
@@ -44,7 +44,7 @@ pub fn css_profile() -> (&'static str, Vec<(&'static str, &'static str)>) {
 pub(crate) use document::paged_facade::PageSize;
 pub use document::{
     Clipboard, ClipboardRequest, DefaultActionRule, Document, DomOp, Error, ImeState,
-    ImeSurrounding, Input, MAX_PIXELS, MAX_TEXT, Rect, Result, ScrollState,
+    ImeSurrounding, Input, MAX_PIXELS, MAX_TEXT, NodeOp, Rect, Result, ScrollState,
 };
 /// Generation-checked DOM node identity (opaque to hosts).
 pub use ui4me_engine_types::ids::NodeId;

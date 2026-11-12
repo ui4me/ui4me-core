@@ -445,6 +445,59 @@ impl HostTree {
                             &bs.text,
                         )
                     }
+                    ReplacedKind::Control(
+                        crate::layout::replaced::controls::ControlSpec::Select { native, .. },
+                    ) if bs.field_sizing_content
+                        && r.inner.as_ref().is_some_and(|i| i.select.is_some()) =>
+                    {
+                        let facts = r
+                            .inner
+                            .as_ref()
+                            .and_then(|i| i.select.as_ref())
+                            .expect("checked");
+                        let dropdown = facts.display_size == 1;
+                        let options = if dropdown {
+                            vec![
+                                facts
+                                    .rows
+                                    .iter()
+                                    .find(|r| r.selected && !r.group)
+                                    .map_or_else(String::new, |r| r.label.clone()),
+                            ]
+                        } else {
+                            facts
+                                .rows
+                                .iter()
+                                .map(|r| {
+                                    // The listbox paints a 12px indent; representing it as measured
+                                    // width is handled below, without modifying displayed labels.
+                                    r.label.clone()
+                                })
+                                .collect()
+                        };
+                        let spec = crate::layout::replaced::controls::ControlSpec::Select {
+                            options,
+                            rows: (!dropdown).then_some(facts.rows.len().clamp(1, 999_999) as u32),
+                            native: *native,
+                        };
+                        let mut natural = spec.natural(text, boxes.document, &bs.text);
+                        if !dropdown {
+                            let widest = facts
+                                .rows
+                                .iter()
+                                .map(|r| {
+                                    crate::layout::replaced::controls::text_width(
+                                        text,
+                                        boxes.document,
+                                        &bs.text,
+                                        r.label.trim(),
+                                    ) + if r.indent { 12.0 } else { 0.0 }
+                                })
+                                .fold(0.0f32, f32::max);
+                            natural.width = Some(widest + 4.0);
+                        }
+                        natural
+                    }
                     ReplacedKind::Control(spec) => spec.natural(text, boxes.document, &bs.text),
                     ReplacedKind::MarkerSymbol { shape, .. } => {
                         // A drawn bullet (FR-083): its box and margins follow the font's ascent.

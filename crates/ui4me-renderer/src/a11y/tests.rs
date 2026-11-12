@@ -196,7 +196,10 @@ fn bootstrap_form_roles_names_and_states() {
     assert_eq!(by_html_id(&t, "icon").name, "Delete");
     assert_eq!(by_html_id(&t, "go").name, "Submit");
     let dis = by_html_id(&t, "dis");
-    assert!(dis.states.disabled && dis.actions.is_empty());
+    assert!(dis.states.disabled);
+    // Disabled controls cannot focus, edit or activate, but an assistive client may still
+    // reveal them so the user can inspect their label and disabled state.
+    assert_eq!(dis.actions, vec![A11yAction::ScrollIntoView]);
     let tog = by_html_id(&t, "tog");
     assert_eq!(
         (tog.states.checked, tog.states.expanded),
@@ -212,12 +215,16 @@ fn bootstrap_form_roles_names_and_states() {
         ),
         (Role::ProgressIndicator, Some(30.0), Some(100.0))
     );
-    // `label` and `div` containers are flattened: no generic nodes appear
+    // Ordinary wrappers are flattened. A referenced labelling node is retained so the
+    // native labelled-by relationship resolves to an exposed, stable target.
     assert!(
-        t.nodes.values().all(|n| n.role != Role::GenericContainer),
+        t.nodes
+            .values()
+            .all(|n| n.role != Role::GenericContainer || n.html_id.as_deref() == Some("badlbl")),
         "{}",
         t.to_json()
     );
+    assert_eq!(bad.relations.labelled_by, vec![by_html_id(&t, "badlbl").id]);
 }
 
 #[test]

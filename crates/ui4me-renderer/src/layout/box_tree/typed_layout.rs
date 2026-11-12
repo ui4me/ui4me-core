@@ -5,8 +5,7 @@
 //! replaced the CSSOM-text bridge of `projection_reports.rs` for these properties (lane L-GRID-r14).
 //!
 //! A value outside what layout consumes is reported (`css.property.<name>`, stage `layout`) and
-//! treated as the property's initial value, never approximated: `flex-basis` with an intrinsic
-//! keyword, `flex-wrap: wrap balance`, `left`/`right`/`legacy` alignment, `last baseline`
+//! treated as the property's initial value, never approximated: `left`/`right`/`legacy` alignment, `last baseline`
 //! (FR-043: `safe end` plus `css.value.last-baseline`) and `subgrid`. Named lines, named areas and
 //! named spans are consumed.
 
@@ -40,16 +39,13 @@ pub fn flex_style(f: &t::Flex, un: &mut Unconsumed<'_>) -> FlexStyle {
         t::FlexDirection::Column => FlexDirectionValue::Column,
         t::FlexDirection::ColumnReverse => FlexDirectionValue::ColumnReverse,
     };
-    if f.wrap_balance {
-        // `wrap balance` is flex-wrap level 2: reported, laid out as the initial value.
-        un.property("flex-wrap");
-    } else {
-        s.wrap = match f.wrap {
-            t::FlexWrap::NoWrap => FlexWrapValue::NoWrap,
-            t::FlexWrap::Wrap => FlexWrapValue::Wrap,
-            t::FlexWrap::WrapReverse => FlexWrapValue::WrapReverse,
-        };
-    }
+    s.wrap = match (f.wrap, f.wrap_balance) {
+        (t::FlexWrap::NoWrap, _) => FlexWrapValue::NoWrap,
+        (t::FlexWrap::Wrap, false) => FlexWrapValue::Wrap,
+        (t::FlexWrap::WrapReverse, false) => FlexWrapValue::WrapReverse,
+        (t::FlexWrap::Wrap, true) => FlexWrapValue::Balance,
+        (t::FlexWrap::WrapReverse, true) => FlexWrapValue::BalanceReverse,
+    };
     s.grow = if f.grow.is_finite() {
         f.grow.max(0.0)
     } else {
@@ -64,8 +60,13 @@ pub fn flex_style(f: &t::Flex, un: &mut Unconsumed<'_>) -> FlexStyle {
         t::FlexBasis::Content => s.basis = FlexBasisValue::Content,
         t::FlexBasis::Size(g::Size::Auto) => {}
         t::FlexBasis::Size(g::Size::LengthPercentage(v)) => s.basis = FlexBasisValue::Lp(lp(v)),
-        // `min-content`, `max-content`, `fit-content`, `stretch`.
-        t::FlexBasis::Size(_) => un.property("flex-basis"),
+        t::FlexBasis::Size(g::Size::MinContent) => s.basis = FlexBasisValue::MinContent,
+        t::FlexBasis::Size(g::Size::MaxContent) => s.basis = FlexBasisValue::MaxContent,
+        t::FlexBasis::Size(g::Size::FitContent(limit)) => {
+            s.basis = FlexBasisValue::FitContent(limit.as_ref().map(lp));
+        }
+        t::FlexBasis::Size(g::Size::Stretch) => s.basis = FlexBasisValue::Stretch,
+        t::FlexBasis::Size(g::Size::None) => un.property("flex-basis"),
     }
     s
 }

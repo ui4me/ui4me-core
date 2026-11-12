@@ -387,6 +387,12 @@ pub struct DocumentPipeline {
     pub(crate) layout_font_gen: u64,
     /// Box styles mapped from the style snapshot, reused for elements whose computed values did not change.
     pub(crate) box_styles: crate::layout::box_tree::BoxStyleCache,
+    /// Derived presentation only; selected paths remain owned by the public Document.
+    pub(crate) file_input_labels:
+        std::collections::HashMap<ui4me_engine_types::ids::NodeId, String>,
+    /// The derived label cache is outside the DOM journal. Until a successful
+    /// commit, its changes invalidate box/layout and scene reuse independently.
+    pub(crate) file_input_labels_dirty: bool,
     /// Paint styles of the last scene, by element and computed values (L-PERF-b3).
     pub(crate) paint_styles: std::cell::RefCell<crate::pipeline::update::PaintStyleCache>,
     /// Updates that reused the committed layout because the box tree did not change.

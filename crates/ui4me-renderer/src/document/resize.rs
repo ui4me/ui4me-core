@@ -25,10 +25,15 @@ fn px(v: Option<String>) -> f64 {
 impl Document {
     fn resize_style(&self, n: NodeId) -> Option<(bool, bool, (f64, f64))> {
         let v = self.pipeline.committed.as_deref()?.style.view(n)?;
+        let vertical = v
+            .serialize("writing-mode")
+            .is_some_and(|m| m.starts_with("vertical-") || m.starts_with("sideways-"));
         let (h, vert) = match v.serialize("resize")?.as_str() {
             "both" => (true, true),
-            "horizontal" | "inline" => (true, false),
-            "vertical" | "block" => (false, true),
+            "horizontal" => (true, false),
+            "vertical" => (false, true),
+            "inline" => (!vertical, vertical),
+            "block" => (vertical, !vertical),
             _ => return None,
         };
         if v.serialize("overflow-x").as_deref() == Some("visible")

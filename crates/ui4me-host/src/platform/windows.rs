@@ -984,48 +984,6 @@ pub fn standard_paths(app_id: &str) -> Result<serde_json::Value> {
     )
 }
 
-pub fn open_external(target: &str) -> Result<()> {
-    use windows_sys::Win32::System::Com::{
-        CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
-    };
-    use windows_sys::Win32::UI::Shell::ShellExecuteW;
-    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-    let result = unsafe {
-        CoInitializeEx(
-            null(),
-            COINIT_APARTMENTTHREADED as u32 | COINIT_DISABLE_OLE1DDE as u32,
-        )
-    };
-    if result < 0 {
-        bail!("external opening requires an STA service worker: HRESULT {result:#x}");
-    }
-    struct Apartment;
-    impl Drop for Apartment {
-        fn drop(&mut self) {
-            unsafe {
-                CoUninitialize();
-            }
-        }
-    }
-    let _apartment = Apartment;
-    let action = wide_str("open")?;
-    let target = wide_str(target)?;
-    let result = unsafe {
-        ShellExecuteW(
-            null_mut(),
-            action.as_ptr(),
-            target.as_ptr(),
-            null(),
-            null(),
-            SW_SHOWNORMAL,
-        )
-    } as isize;
-    if result <= 32 {
-        bail!("Windows Shell rejected external open (code {result})");
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

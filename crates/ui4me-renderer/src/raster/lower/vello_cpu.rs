@@ -47,6 +47,30 @@ use vello_cpu::{
     RenderContext, RenderMode, RenderSettings, Resources, TargetInit,
 };
 
+/// Deterministic unhinted rendering remains the default. Set before process startup;
+/// the choice is cached once and affects both ordinary and synthetic-bold glyphs.
+fn glyph_hinting_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        std::env::var("UI4ME_GLYPH_HINTING").is_ok_and(|v| matches!(v.trim(), "1" | "true" | "on"))
+    })
+}
+
+fn high_precision_requested() -> bool {
+    static REQUESTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *REQUESTED.get_or_init(|| {
+        std::env::var("UI4ME_RASTER_QUALITY").is_ok_and(|v| v.trim().eq_ignore_ascii_case("high"))
+    })
+}
+
+fn raster_quality_mode() -> RenderMode {
+    #[cfg(feature = "diagnostic-raster-quality")]
+    if high_precision_requested() {
+        return RenderMode::OptimizeQuality;
+    }
+    RenderMode::OptimizeSpeed
+}
+
 fn alpha_color(c: &Color) -> AlphaColor<Srgb> {
     AlphaColor::new([c.r, c.g, c.b, c.a])
 }
@@ -426,6 +450,10 @@ impl VelloRaster {
         out: &mut [u8],
         diagnostics: &mut Vec<Status>,
     ) -> Result<(), Status> {
+        if high_precision_requested() && !cfg!(feature = "diagnostic-raster-quality") {
+            return Err(Status::new(Code::UnsupportedFeature, Stage::Raster)
+                .with_message("UI4ME_RASTER_QUALITY=high requires the diagnostic-raster-quality build feature"));
+        }
         let mut backdrops = std::collections::HashMap::new();
         let mut budget = BackdropBudget {
             bounded: scene
@@ -830,7 +858,7 @@ impl VelloRaster {
             target,
             resources,
             RasterizerSettings {
-                render_mode: RenderMode::OptimizeSpeed,
+                render_mode: raster_quality_mode(),
                 target_init: TargetInit::Clear(AlphaColor::TRANSPARENT),
                 pixel_format: vello_cpu::PixelFormat::Rgba8,
                 offset: (0, 0),
@@ -942,7 +970,7 @@ fn draw_op(
             let font = FontData::new(Blob::from_raw_parts(data, run.font.blob), run.font.index);
             set_paint(ctx, scene, &run.paint);
             ctx.set_fill_rule(Fill::NonZero);
-            // Unhinted grayscale anti-aliasing (R-31): no hinting, no subpixel AA.
+            // Grayscale anti-aliasing; hinting is an explicit process opt-in. No subpixel AA.
             // At 1x, pure translations place the run baseline on the device pixel grid.
             // Keep offsets within the shaped run unchanged, including combining marks.
             let (dx, dy) = glyph_origin_adjustment(run.origin, scene, *scale, *origin);
@@ -985,7 +1013,7 @@ fn draw_op(
             let mut builder = ctx
                 .glyph_run(resources, &font)
                 .font_size(run.size_px)
-                .hint(false)
+                .hint(glyph_hinting_enabled())
                 .normalized_coords(&run.coords);
             if let Some(skew) = skew {
                 builder = builder.glyph_transform(skew);
@@ -1002,7 +1030,7 @@ fn draw_op(
                 let mut builder = ctx
                     .glyph_run(resources, &font)
                     .font_size(run.size_px)
-                    .hint(false)
+                    .hint(glyph_hinting_enabled())
                     .normalized_coords(&run.coords);
                 if let Some(skew) = skew {
                     builder = builder.glyph_transform(skew);
@@ -1139,7 +1167,7 @@ impl Masker<'_> {
                 target,
                 self.resources,
                 RasterizerSettings {
-                    render_mode: RenderMode::OptimizeSpeed,
+                    render_mode: raster_quality_mode(),
                     target_init: TargetInit::Clear(AlphaColor::TRANSPARENT),
                     pixel_format: vello_cpu::PixelFormat::Rgba8,
                     offset: (0, 0),
@@ -1793,7 +1821,7 @@ fn close_filter(
                 target,
                 resources,
                 RasterizerSettings {
-                    render_mode: RenderMode::OptimizeSpeed,
+                    render_mode: raster_quality_mode(),
                     target_init: TargetInit::Clear(AlphaColor::TRANSPARENT),
                     pixel_format: vello_cpu::PixelFormat::Rgba8,
                     offset: (0, 0),
@@ -2081,10 +2109,43 @@ fn inset_shadow(ctx: &mut RenderContext, sh: &Shadow<'_>, id: u32, diagnostics: 
             radii: sh.padding.radii.map(shrink),
         }
     };
+    let sigma = sh.blur / 2.0;
+    if sigma > 0.0
+        && hole.rect.width > 0.0
+        && hole.rect.height > 0.0
+        && uniform_radius(&hole).is_none()
+    {
+        // Blur the complement of the exact elliptical/per-corner hole, with a
+        // finite outer edge beyond the Gaussian reach. Put the padding clip on
+        // the filtered layer itself (the same shifted-space rule as outer shadows).
+        let pad = &sh.padding.rect;
+        let margin = sigma * 4.0 + 2.0;
+        let exterior = KRect::new(
+            f64::from(pad.x.min(hole.rect.x) - margin),
+            f64::from(pad.y.min(hole.rect.y) - margin),
+            f64::from(pad.right().max(hole.rect.right()) + margin),
+            f64::from(pad.bottom().max(hole.rect.bottom()) + margin),
+        );
+        let mut ring = BezPath::new();
+        ring.extend(exterior.path_elements(0.1));
+        ring.extend(bez(&rrect_path(&hole)).elements().iter().copied());
+        ctx.set_fill_rule(Fill::NonZero);
+        ctx.push_layer(
+            Some(&bez(&rrect_path(sh.padding))),
+            None,
+            None,
+            None,
+            Some(peniko_filter(sigma)),
+        );
+        ctx.set_fill_rule(Fill::EvenOdd);
+        ctx.set_paint(alpha_color(&sh.color));
+        ctx.fill_path(&ring);
+        ctx.pop_layer();
+        return;
+    }
     ctx.set_fill_rule(Fill::NonZero);
     ctx.push_clip_path(&bez(&rrect_path(sh.padding)));
     ctx.set_paint(alpha_color(&sh.color));
-    let sigma = sh.blur / 2.0;
     if hole.rect.width <= 0.0 || hole.rect.height <= 0.0 {
         ctx.fill_rect(&krect(&sh.padding.rect));
     } else if sigma <= 0.0 {
@@ -2109,14 +2170,9 @@ fn inset_shadow(ctx: &mut RenderContext, sh: &Shadow<'_>, id: u32, diagnostics: 
         ctx.set_fill_rule(Fill::EvenOdd);
         ctx.fill_path(&ring);
         ctx.fill_blurred_rounded_rect(&krect(&hole.rect), radius, sigma, true);
-    } else {
-        unsupported(
-            diagnostics,
-            id,
-            "inset box-shadow on a box with non-uniform or elliptical corner radii is not drawn",
-        );
     }
     ctx.pop_clip();
+    let _ = (id, diagnostics);
 }
 
 fn peniko_filter(sigma: f32) -> vello_cpu::filter_effects::Filter {

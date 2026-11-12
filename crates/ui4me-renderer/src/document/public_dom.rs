@@ -60,36 +60,39 @@ fn kind_name(k: NodeKind) -> &'static str {
     }
 }
 
+pub(super) fn model_live_ref(d: &Model, reference: &str) -> Result<NodeId> {
+    let n = parse_ref(reference)?;
+    if !d.arena().contains(n) {
+        return Err(stale(format!("Stale node reference: {reference}")));
+    }
+    if d.is_connected(n).unwrap_or(false) {
+        return Ok(n);
+    }
+    // Inside the contents of a connected template.
+    let mut root = n;
+    while let Ok(Some(p)) = d.parent(root) {
+        root = p;
+    }
+    let in_template = d.node_kind(root).ok() == Some(NodeKind::DocumentFragment)
+        && d.arena()
+            .subtree(d.document_node())
+            .into_iter()
+            .any(|t| d.template_contents(t).ok().flatten() == Some(root));
+    if in_template {
+        Ok(n)
+    } else {
+        Err(stale(format!("Stale node reference: {reference}")))
+    }
+}
+
 impl Document {
     /// Resolve a node reference to a live node of this document.
-    fn live_ref(&self, reference: &str) -> Result<NodeId> {
-        let n = parse_ref(reference)?;
-        let d = self.pipeline.document();
-        if !d.arena().contains(n) {
-            return Err(stale(format!("Stale node reference: {reference}")));
-        }
-        if d.is_connected(n).unwrap_or(false) {
-            return Ok(n);
-        }
-        // Inside the contents of a connected template.
-        let mut root = n;
-        while let Ok(Some(p)) = d.parent(root) {
-            root = p;
-        }
-        let in_template = d.node_kind(root).ok() == Some(NodeKind::DocumentFragment)
-            && d.arena()
-                .subtree(d.document_node())
-                .into_iter()
-                .any(|t| d.template_contents(t).ok().flatten() == Some(root));
-        if in_template {
-            Ok(n)
-        } else {
-            Err(stale(format!("Stale node reference: {reference}")))
-        }
+    pub(super) fn live_ref(&self, reference: &str) -> Result<NodeId> {
+        model_live_ref(self.pipeline.document(), reference)
     }
 
     /// `element` (an HTML id) or `node` (a node reference), or the document when both are absent.
-    fn target_of(&self, element: Option<&str>, node: Option<&str>) -> Result<NodeId> {
+    pub(super) fn target_of(&self, element: Option<&str>, node: Option<&str>) -> Result<NodeId> {
         match (element, node) {
             (Some(_), Some(_)) => Err(arg("Give either element or node, not both")),
             (Some(e), None) => self.node(e),

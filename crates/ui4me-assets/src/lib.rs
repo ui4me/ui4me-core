@@ -1197,6 +1197,22 @@ impl ResourceManager {
         self.cache.lock().expect("cache lock").stats()
     }
 
+    /// Release only unused decoded resources. Live image pixels and registered source bytes
+    /// remain available; purging is a memory-management operation, never a silent reload.
+    pub fn purge_unused_resources(&mut self, url: Option<&str>) -> usize {
+        let decoded = self
+            .cache
+            .lock()
+            .expect("cache lock")
+            .purge_unreferenced(url);
+        decoded
+            + if url.is_none() {
+                self.svg_rasters.purge_unused()
+            } else {
+                0
+            }
+    }
+
     /// Diagnostic records retained so far (bounded).
     pub fn diagnostic_records(&self) -> Vec<ResourceDiagnosticRecord> {
         self.log.records().cloned().collect()

@@ -182,7 +182,7 @@ impl Document {
             "auto" => self.props_of(target).smooth,
             _ => return Err(arg("behavior must be auto, instant or smooth")),
         };
-        Ok(smooth && !self.env.app_reduced_motion.unwrap_or(false))
+        Ok(smooth && !self.effective_reduced_motion())
     }
 
     /// Run the animations at the clock's time; each moves its container, `scroll` fires per step
@@ -334,6 +334,17 @@ impl Document {
         behavior: &str,
     ) -> Result<()> {
         let n = self.node(element)?;
+        self.scroll_node_into_view(n, block, inline, behavior)
+    }
+
+    /// The same scroll operation for assistive and generation-scoped anonymous DOM targets.
+    pub(super) fn scroll_node_into_view(
+        &mut self,
+        n: NodeId,
+        block: &str,
+        inline: &str,
+        behavior: &str,
+    ) -> Result<()> {
         let modes = ["start", "center", "end", "nearest"];
         if !modes.contains(&block) || !modes.contains(&inline) {
             return Err(arg(
@@ -412,7 +423,7 @@ impl Document {
             let plain = clamp2(want, e.range.min, e.range.max);
             let to = self.snap_target(target, e.offset, want, true, false);
             let moved = (to.0 - plain.0).abs() + (to.1 - plain.1).abs() > EPS;
-            if moved && props.smooth && !self.env.app_reduced_motion.unwrap_or(false) {
+            if moved && props.smooth && !self.effective_reduced_motion() {
                 self.start_anim(target, e.offset, to);
                 return Ok(ScrollApplied {
                     offset: e.offset,
@@ -444,7 +455,7 @@ impl Document {
         if (to.0 - e.offset.0).abs() + (to.1 - e.offset.1).abs() < EPS {
             return Ok(false);
         }
-        if props.smooth && !self.env.app_reduced_motion.unwrap_or(false) {
+        if props.smooth && !self.effective_reduced_motion() {
             self.start_anim(target, e.offset, to);
             return Ok(false);
         }

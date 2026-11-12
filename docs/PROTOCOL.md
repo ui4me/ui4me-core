@@ -1,10 +1,13 @@
 # UI4ME host protocol, wire version 1
 
-UI4ME Core 0.2 retains this native-service wire contract and adds the document
+UI4ME Core 1.0 retains this native-service wire contract and adds the document
 methods in [PROTOCOL_DOCUMENTS.md](PROTOCOL_DOCUMENTS.md). Product version and
 wire framing version are separate. `host.capabilities` now advertises
-`html_css: true`, the `ui4me-desktop-0.2` CSS profile, CPU rendering, and a
+`html_css: true`, the `ui4me-desktop-1.0` CSS profile, CPU rendering, and a
 16-document limit. The native probe remains available.
+
+The authoritative completion extensions and schema-2 capability semantics are
+in [CORE_1.0_PROTOCOL.md](CORE_1.0_PROTOCOL.md).
 
 
 This document describes the implemented local protocol. It is independent of
@@ -107,23 +110,27 @@ Treat native events as the authoritative indication of observed changes.
 | dialog.open_files | Dialog options below | cancelled and paths array |
 | dialog.save_file | Dialog options below | cancelled and paths array (zero or one path) |
 | dialog.choose_folder | Dialog options below | cancelled and paths array (zero or one path) |
-| desktop.open_external | target | accepted: true, meaning OS handoff accepted |
+| desktop.open_external | target, optional window_id | accepted, cancelled, parent_forwarded; presentation is not inferred |
+| desktop.reveal_file | path, optional window_id | Native reveal outcome with truthful parent support |
+| desktop.preferences | Empty object | Observed optional settings, availability, source, revision |
+| window.request_attention | window_id, kind | Request acknowledgement; compositor policy applies |
 | desktop.paths | Empty object | Per-application config/data/cache/state paths and platform-available runtime path |
 | request.cancel | id of an outstanding backend-to-host request | cancelled: boolean, if sent as a request |
 
 ### Windows
 
 Creation defaults to 900 × 560 logical units, visible and resizable. Logical
-dimensions must be within 160..8192 by 120..8192; the diagnostic surface sets a
-native minimum so its basic controls remain usable. The manifest limits the
-number of application windows.
+dimensions must be within 1..8192 by 1..8192. Paired optional minimum/maximum
+constraints are explicit. The manifest limits the number of application windows.
 
 window.set accepts title, width, height, visible, resizable, minimized,
 maximized, fullscreen, focus, and x/y. Position requires both x and y and is
 only available on Windows. Unsupported placement on Wayland is an error, as is
 minimized: false (xdg-shell cannot restore a minimized window; the user or
-compositor does). A focus request on Wayland uses xdg-activation and may be
-declined by compositor focus-stealing prevention.
+compositor does). The pinned Wayland backend's visibility and focus operations
+are not implemented: hidden creation and explicit visibility/focus requests are
+rejected rather than reported successful. Attention uses available compositor
+activation support. See the capability object and Core 1.0 protocol for details.
 Properties are native requests, not a promise that compositor policy can be
 overridden.
 

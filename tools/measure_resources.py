@@ -43,7 +43,7 @@ def backend(args):
         result = client.call("document.load", {"window_id": window,
             "path": str(ROOT / "examples/python/ui/index.html")}, timeout=30)
         key = {"window_id": window, "document_id": result["document_id"]}
-        client.call("document.command", {**key, "command": {"op": "set_environment", "reduced_motion": "reduce"}})
+        client.call("document.command", {**key, "command": {"op": "set_environment", "reduced_motion": args.reduced_motion}})
         deadline = time.monotonic() + 20
         while client.call("document.get", {"window_id": window})["pending_resources"]:
             if time.monotonic() > deadline:
@@ -209,14 +209,14 @@ def first_frame_time(log_path):
     return None, None
 
 
-def run_once(host, folder, index, idle, cycles, sample_every, *, renderer=False, dom_cycles=0):
+def run_once(host, folder, index, idle, cycles, sample_every, *, renderer=False, dom_cycles=0, reduced_motion="system"):
     events = folder / f"events-{index}.jsonl"
     log_path = folder / f"host-{index}.log"
     app = folder / f"app-{index}.toml"
     backend_args = [str(Path(__file__).resolve()), "--backend", "--events", str(events),
                     "--idle", str(idle), "--cycles", str(cycles), "--sample-every", str(sample_every)]
     if renderer:
-        backend_args += ["--renderer", "--dom-cycles", str(dom_cycles)]
+        backend_args += ["--renderer", "--dom-cycles", str(dom_cycles), "--reduced-motion", reduced_motion]
     q = lambda value: json.dumps(value, ensure_ascii=False)
     app.write_text("\n".join([
         "[app]", 'id = "org.ui4me.Measurement"', 'name = "UI4ME measurement"', "",
@@ -284,7 +284,9 @@ def main():
     parser.add_argument("--idle", type=float, default=25)
     parser.add_argument("--cycles", type=int, default=200)
     parser.add_argument("--sample-every", type=int, default=50)
-    parser.add_argument("--renderer", action="store_true", help="Measure loaded HTML/CSS documents with animation disabled")
+    parser.add_argument("--renderer", action="store_true", help="Measure the actual loaded HTML/CSS reference document")
+    parser.add_argument("--reduced-motion", choices=("system", "reduce", "no-preference"), default="system",
+                        help="Default follows the OS; an explicit override is recorded in the report")
     parser.add_argument("--dom-cycles", type=int, default=400, help="Additional insert/update/remove cycles with --renderer")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
@@ -298,7 +300,8 @@ def main():
     report = {"schema": 1, "time_utc": datetime.now(timezone.utc).isoformat(), "host": host,
               "source_sha256": source_identity(), "surface": "renderer" if args.renderer else "probe",
               "first_frame_scope": "First native window frame; not proof that asynchronous document resources are visible",
-              "readiness_scope": "HTML loaded and resources settled, reduced motion enabled" if args.renderer else "Probe created",
+              "readiness_scope": "HTML loaded and resources settled" if args.renderer else "Probe created",
+              "reduced_motion_request": args.reduced_motion if args.renderer else None,
               "platform": platform.platform(), "python": sys.version.split()[0],
               "cpu_metric": "Linux: summed per-thread schedstat runtime" if os.name != "nt"
               else "Windows: GetProcessTimes kernel+user time",
@@ -312,9 +315,11 @@ def main():
         raw = None
     with nullcontext(str(raw)) if raw else tempfile.TemporaryDirectory(prefix="ui4me-measure-") as tmp:
         folder = Path(tmp)
-        report["startup"] = [run_once(host, folder, i, 0, 0, 1, renderer=args.renderer) for i in range(args.startup_runs)]
+        report["startup"] = [run_once(host, folder, i, 0, 0, 1, renderer=args.renderer,
+                                     reduced_motion=args.reduced_motion) for i in range(args.startup_runs)]
         report["sustained"] = run_once(host, folder, 99, args.idle, args.cycles, args.sample_every,
-                                       renderer=args.renderer, dom_cycles=args.dom_cycles if args.renderer else 0)
+                                       renderer=args.renderer, dom_cycles=args.dom_cycles if args.renderer else 0,
+                                       reduced_motion=args.reduced_motion)
     text = json.dumps(report, indent=2)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -176,6 +176,73 @@ class FacadeTests(unittest.TestCase):
                 factory.assert_called_once_with(ordered_notifications=True)
 
 
+class CompletionFacadeTests(unittest.TestCase):
+    def setUp(self):
+        self.rpc = FakeRpc()
+        self.app = Application(self.rpc)
+        self.window = self.app.open_html("<input>")
+        self.document = self.window.document
+
+    def tearDown(self):
+        self.app.close()
+
+    def test_close_policy_is_routed_per_window_and_does_not_hold_registry_lock(self):
+        other = self.app.open_html("<p>Other</p>")
+        calls = []
+        self.window.on_before_close(lambda: calls.append("first") or False)
+        other.on_before_close(lambda: calls.append("second") or True)
+        callback = self.rpc.requests["window.before_close"]
+        self.assertEqual(callback({"window_id": self.window.id}), {"allow": False})
+        self.assertEqual(callback({"window_id": other.id}), {"allow": True})
+        self.assertEqual(callback({"window_id": "retired"}), {"allow": True})
+        self.assertEqual(calls, ["first", "second"])
+
+    def test_node_target_rejects_other_documents_and_replaced_generation_before_rpc(self):
+        node = self.document.node(reference="node:1:1")
+        other = self.app.open_html("<input>").document
+        count = len(self.rpc.calls)
+        with self.assertRaises(ValueError):
+            other.control_selection(node)
+        self.assertEqual(len(self.rpc.calls), count)
+        self.window.load_html("<p>Replacement</p>")
+        count = len(self.rpc.calls)
+        with self.assertRaises(StaleDocumentError):
+            node.set_text("stale")
+        self.assertEqual(len(self.rpc.calls), count)
+
+    def test_utf16_offsets_and_submitter_node_are_preserved_without_python_index_conversion(self):
+        node = self.document.node(reference="node:1:1")
+        self.document.replace_control_range(node, "👩‍💻", start=1, end=3, selection_mode="select")
+        fields = self.rpc.calls[-1][1]["command"]
+        self.assertEqual((fields["node"], fields["start"], fields["end"]), (node.id, 1, 3))
+        self.document.form_data("form", submitter=node)
+        self.assertEqual(self.rpc.calls[-1][1]["command"],
+            {"op": "get_form_data", "element": "form", "submitter_node": node.id})
+
+    def test_resources_are_one_transaction_and_reject_oversized_input_before_rpc(self):
+        import base64
+        self.document.register_resources("app", {"pixel.svg": (b"\x00\xff", "image/svg+xml")})
+        fields = self.rpc.calls[-1][1]["command"]
+        self.assertEqual(fields["op"], "register_resource_bundle")
+        self.assertEqual(base64.b64decode(fields["entries"][0]["data_url"].split(",", 1)[1]), b"\x00\xff")
+        count = len(self.rpc.calls)
+        with self.assertRaises(ValueError):
+            self.document.register_resources("app", {"big": b"x" * (1024 * 1024 + 1)})
+        self.assertEqual(len(self.rpc.calls), count)
+
+    def test_dialog_future_is_returned_directly_so_cancel_keeps_transport_semantics(self):
+        from concurrent.futures import Future
+        future = Future()
+        cancelled = []
+        future.add_done_callback(lambda item: cancelled.append(item.cancelled()))
+        with patch.object(self.rpc, "call_async", return_value=future, create=True) as call:
+            result = self.window.open_files(multiple=True, wait=False)
+            self.assertIs(result, future)
+            self.assertEqual(call.call_args.args[1]["window_id"], self.window.id)
+            self.assertTrue(result.cancel())
+        self.assertEqual(cancelled, [True])
+
+
 class OrderedTransportTests(unittest.TestCase):
     def test_single_worker_preserves_notifications_during_nested_rpc(self):
         local, remote = socket.socketpair()

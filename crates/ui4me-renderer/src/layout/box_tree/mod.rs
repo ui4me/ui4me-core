@@ -328,6 +328,8 @@ pub enum FlexWrapValue {
     NoWrap,
     Wrap,
     WrapReverse,
+    Balance,
+    BalanceReverse,
 }
 
 /// `flex-basis`.
@@ -336,6 +338,10 @@ pub enum FlexBasisValue {
     Auto,
     Content,
     Lp(LengthPercentage),
+    MinContent,
+    MaxContent,
+    FitContent(Option<LengthPercentage>),
+    Stretch,
 }
 
 /// The flex item and container longhands (FR-037–FR-047) except alignment and gaps.
@@ -1222,6 +1228,10 @@ pub trait StyledSource {
     /// elements and form controls (FR-013–FR-016, FR-070–FR-075). `None` for sources that carry no
     /// HTML identity (the plain `InputTree`): the element is then an ordinary box.
     fn html(&self, _node: NodeId) -> Option<HtmlInfo> {
+        None
+    }
+    /// Display text derived from the host-authoritative selection of a file input.
+    fn file_input_label(&self, _node: NodeId) -> Option<&str> {
         None
     }
     /// 007's natural-size view of the `img` element `node` (FR-070). `None` = the source has no

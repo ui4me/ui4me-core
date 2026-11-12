@@ -9,7 +9,8 @@
 //! precede their compatibility mouse events (a canceled `pointerdown` suppresses `mousedown`);
 //! pointer capture retargets the pointer's events to the capturing element until the release,
 //! with `gotpointercapture`/`lostpointercapture` (a removed capture target loses it at the
-//! Document). `auxclick` and `dblclick` are outside the profile.
+//! Document). Matching releases emit click/auxclick, consecutive primary clicks emit dblclick,
+//! and right-click or the keyboard context-menu command emits contextmenu.
 //!
 //! Keyboard events route to the focused element or document body, then apply
 //! Tab navigation, control activation, editing and clipboard defaults. IME
@@ -26,10 +27,11 @@ use ui4me_engine_types::ids::{DocumentId, NodeId};
 use ui4me_engine_types::status::Status;
 
 /// Per-document pointer state (press target for click matching).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct PointerState {
     pub press_target: Option<NodeId>,
     pub press_button: Option<i8>,
+    last_click: Option<(NodeId, f64, f64, f64, i32)>,
 }
 
 /// Per-document pointer capture of the mouse pointer (`pointer_id` 1; 0.8 F0807). Capture
@@ -374,10 +376,8 @@ fn run_item_inner(host: &mut dyn DispatchHost, item: &InputItem) -> Result<(), S
             }
             eng(host, doc, |ix, _| {
                 if let Ok(s) = ix.doc_state(doc) {
-                    s.pointer = PointerState {
-                        press_target: Some(target),
-                        press_button: Some(p.button),
-                    };
+                    s.pointer.press_target = Some(target);
+                    s.pointer.press_button = Some(p.button);
                 }
             })?;
             if !out.canceled && p.button == 0 && !disabled {
@@ -459,21 +459,62 @@ fn run_item_inner(host: &mut dyn DispatchHost, item: &InputItem) -> Result<(), S
                 }
                 let press = ix
                     .doc_state(doc)
-                    .map(|s| std::mem::take(&mut s.pointer))
+                    .map(|s| (s.pointer.press_target.take(), s.pointer.press_button.take()))
                     .unwrap_or_default();
                 (press, d.arena().is_connected(target))
             })?;
-            let same = press.press_target == Some(target) && press.press_button == Some(0);
+            let same = press.0 == Some(target) && press.1 == Some(p.button);
             let disabled = eng(host, doc, |_, d| {
                 crate::interaction::activation::disabled_click_target(d, target)
             })?;
             if p.button == 0 && same && connected && !disabled {
+                let now = ts.unwrap_or_else(|| host.now_ms());
+                let count = rt(host, |ix| {
+                    let Ok(state) = ix.doc_state(doc) else {
+                        return 1;
+                    };
+                    let count = match state.pointer.last_click {
+                        Some((old, x, y, time, count))
+                            if old == target
+                                && now >= time
+                                && now - time <= 500.0
+                                && (p.x - x).abs() <= 4.0
+                                && (p.y - y).abs() <= 4.0 =>
+                        {
+                            count.saturating_add(1)
+                        }
+                        _ => 1,
+                    };
+                    state.pointer.last_click = Some((target, p.x, p.y, now, count));
+                    count
+                });
+                let mut click = mouse(
+                    "click",
+                    EventInterface::PointerEvent,
+                    p,
+                    p.buttons,
+                    item.modifiers,
+                );
+                click.detail = count;
+                run_dispatch(host, doc, target, click, true, origin, ts)?;
+                if count == 2 {
+                    let mut double = mouse(
+                        "dblclick",
+                        EventInterface::MouseEvent,
+                        p,
+                        p.buttons,
+                        item.modifiers,
+                    );
+                    double.detail = 2;
+                    run_dispatch(host, doc, target, double, true, origin, ts)?;
+                }
+            } else if p.button != 0 && same && connected && !disabled {
                 run_dispatch(
                     host,
                     doc,
                     target,
                     mouse(
-                        "click",
+                        "auxclick",
                         EventInterface::PointerEvent,
                         p,
                         p.buttons,
@@ -483,6 +524,17 @@ fn run_item_inner(host: &mut dyn DispatchHost, item: &InputItem) -> Result<(), S
                     origin,
                     ts,
                 )?;
+            }
+            if p.button == 2 && same && connected && !disabled {
+                let mut menu = mouse(
+                    "contextmenu",
+                    EventInterface::PointerEvent,
+                    p,
+                    p.buttons,
+                    item.modifiers,
+                );
+                menu.detail = 0;
+                run_dispatch(host, doc, target, menu, true, origin, ts)?;
             }
         }
         InputKind::KeyDown(k) => {
@@ -500,6 +552,23 @@ fn run_item_inner(host: &mut dyn DispatchHost, item: &InputItem) -> Result<(), S
             )?;
             if down.canceled {
                 // A canceled keydown: no keypress, beforeinput, input or default action.
+                return Ok(());
+            }
+            if !k.is_composing
+                && (k.key == "ContextMenu"
+                    || (k.key == "F10"
+                        && item.modifiers.shift
+                        && !item.modifiers.ctrl
+                        && !item.modifiers.alt
+                        && !item.modifiers.meta))
+            {
+                let mut menu = EventInit::new("contextmenu")
+                    .interface(EventInterface::PointerEvent)
+                    .bubbles(true)
+                    .cancelable(true);
+                menu.modifiers = item.modifiers;
+                menu.data.button = Some(2);
+                run_dispatch(host, doc, target, menu, true, origin, ts)?;
                 return Ok(());
             }
             // Select, range, number and radio keys (012 `controls.md`), then text editing.

@@ -13,7 +13,7 @@ def copy_reference(destination: Path, *, probe: bool = False) -> Path:
     if destination.exists() and (not destination.is_dir() or any(destination.iterdir())):
         raise ValueError("The reference destination must be new or empty")
     destination.mkdir(parents=True, exist_ok=True)
-    names = ("client.py", "demo.py") if probe else ("client.py", "application.py", "renderer_demo.py")
+    names = ("client.py", "demo.py") if probe else ("client.py", "application.py", "renderer_demo.py", "completion_checks.py")
     for name in names:
         shutil.copy2(ROOT / "examples/python" / name, destination / name)
     if not probe:

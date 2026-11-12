@@ -13,7 +13,9 @@ pub mod registry;
 pub mod validate;
 pub mod woff2;
 
-pub use faces::{FaceId, FaceSet, FaceSourceSpec, FaceState, FaceStyle, FaceView, FontFaceRule};
+pub use faces::{
+    FaceId, FaceSet, FaceSettings, FaceSourceSpec, FaceState, FaceStyle, FaceView, FontFaceRule,
+};
 pub use last_resort::{LastResortInfo, LastResortStatus};
 pub use pinned::PinnedFontConfig;
 pub use registry::{

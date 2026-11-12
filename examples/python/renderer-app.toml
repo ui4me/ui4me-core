@@ -1,7 +1,7 @@
 [app]
 id = "org.ui4me.RendererReference"
 name = "UI4ME Desktop Workspace"
-version = "0.2.0"
+version = "1.0.0-rc.1"
 icon = "{app_dir}/../../crates/ui4me-host/assets/ui4me.png"
 
 [backend]

@@ -91,14 +91,19 @@ impl DialogOptions {
 }
 
 pub struct DialogHandle {
-    state: Arc<native::Cancellation>,
+    cancel: Arc<dyn Fn() + Send + Sync>,
 }
 
 impl DialogHandle {
     /// Request native cancellation. Completion reports `Ok(None)` once the
     /// dialog is actually closed; cancellation itself never blocks the GUI.
     pub fn cancel(&self) {
-        self.state.cancel();
+        (self.cancel)();
+    }
+
+    /// Shared lifetime handle for a native chooser or portal request.
+    pub(crate) fn from_cancel(cancel: Arc<dyn Fn() + Send + Sync>) -> Self {
+        Self { cancel }
     }
 }
 
@@ -133,7 +138,7 @@ pub fn start(
             completion(result);
             drop(parent);
         })?;
-    Ok(DialogHandle { state })
+    Ok(DialogHandle::from_cancel(Arc::new(move || state.cancel())))
 }
 
 #[cfg(test)]

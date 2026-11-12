@@ -402,9 +402,43 @@ full builds.
 
 ## Preparation-time checks
 
-Use [STATUS.md](../docs/STATUS.md) and its linked v0.2 preparation reports for the
-checks actually completed on this source. Reports retained from the v0.1
-preparation and qualified host describe their original revisions/environments.
-They do not qualify the newly integrated renderer. A Windows source check is not
+Use [STATUS.md](../docs/STATUS.md) and its linked Core 1.0 preparation reports for
+the checks actually completed on this source. The retained v0.1/v0.2 reports
+describe their original revisions and environments. They do not qualify this
+completion candidate. A Windows source check is not
 Windows execution, a socket-pair test is not the real named-pipe test, and a
 headless PNG is not native presentation/input evidence.
+
+## Core 1.0 completion qualification
+
+Start with `python3 tools/verify_package.py` before changing the delivered source.
+Follow [LOCAL_FINISH_PROMPT.md](../LOCAL_FINISH_PROMPT.md) for the complete
+Linux/Python qualification, commit and push, Windows qualification, commit and
+push, then final common-source stabilization. Preserve the existing Git history.
+
+The added C01–C12 ledger complements the retained N01–N15 and R01–R12 ledgers:
+
+```sh
+python3 tools/verify.py --stage completion-native
+python3 tools/completion_acceptance.py --help
+```
+
+Read the concrete procedures in
+[CORE_1.0_ACCEPTANCE.md](../docs/CORE_1.0_ACCEPTANCE.md). An unobserved desktop
+behavior stays BLOCKED; creating a ledger is not a completed test. The renderer
+backend now also includes `completion_checks.py`, which exercises the new Python
+facade through real IPC during the renderer verifier stage.
+
+`tools/windows/uia_probe_matrix.py` runs the independent Windows UI Automation
+diagnostic with per-operation logs and hard process deadlines. Use `--pid` and
+optionally `--title` to identify the installed target. Choose exactly one of
+`--automation-id`, `--control-name`, or `--first-edit`; the default reference
+selector is AutomationId `name`. Run `--apartment MTA` for the required client
+and STA separately for diagnosis. Restore the target selection between cases.
+The tool changes selection only in `select` mode and focus only with `--focus`;
+its watchdog terminates its own probe process, never the target application.
+
+`measure_resources.py` now defaults to the real system motion preference.
+`--reduced-motion reduce` and `--reduced-motion no-preference` provide explicit
+comparison cases. The normal reference page is static; animation is enabled
+deliberately by adding its documented demonstration class.

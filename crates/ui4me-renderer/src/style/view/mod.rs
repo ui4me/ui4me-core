@@ -397,6 +397,44 @@ impl<'s> ComputedStyleView<'s> {
         scroll_props::scroll_props(self.values)
     }
 
+    /// Computed anchor-size expressions, including ones introduced through var().
+    /// They are explicitly reported until anchor size dependency resolution exists.
+    pub fn uses_anchor_size(&self) -> bool {
+        use style::values::generics::length::{GenericMargin, GenericMaxSize, GenericSize};
+        let p = self.values.get_position();
+        let m = self.values.get_margin();
+        [&p.width, &p.height, &p.min_width, &p.min_height]
+            .into_iter()
+            .any(|s| {
+                matches!(
+                    s,
+                    GenericSize::AnchorSizeFunction(_)
+                        | GenericSize::AnchorContainingCalcFunction(_)
+                )
+            })
+            || [&p.max_width, &p.max_height].into_iter().any(|s| {
+                matches!(
+                    s,
+                    GenericMaxSize::AnchorSizeFunction(_)
+                        | GenericMaxSize::AnchorContainingCalcFunction(_)
+                )
+            })
+            || [
+                &m.margin_top,
+                &m.margin_right,
+                &m.margin_bottom,
+                &m.margin_left,
+            ]
+            .into_iter()
+            .any(|s| {
+                matches!(
+                    s,
+                    GenericMargin::AnchorSizeFunction(_)
+                        | GenericMargin::AnchorContainingCalcFunction(_)
+                )
+            })
+    }
+
     /// Layout consumes typed computed facts. CSSOM serialization remains for
     /// explicit style queries and diagnostics.
     pub fn claims_fixed_descendants(&self) -> bool {

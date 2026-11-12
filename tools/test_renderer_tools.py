@@ -22,7 +22,7 @@ class PackageTests(unittest.TestCase):
             manifest = tomllib.loads(app.read_text(encoding="utf-8"))
             self.assertEqual(manifest["app"]["id"], "org.ui4me.RendererReference")
             self.assertEqual(manifest["backend"]["program"], sys.executable)
-            for name in ("client.py", "application.py", "renderer_demo.py", "ui/index.html", "ui/details.html",
+            for name in ("client.py", "application.py", "renderer_demo.py", "completion_checks.py", "ui/index.html", "ui/details.html",
                          "ui/style.css", "ui/mark.svg", "ui/landscape.png", "ui/fonts/NotoSans-Regular.ttf",
                          "ui/fonts/FONT-LICENSE.txt", "ui4me.png"):
                 self.assertTrue((destination / name).is_file(), name)

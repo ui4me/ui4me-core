@@ -16,7 +16,7 @@
 //!    context over the loaded faces and relays out (`FONT_EPOCH`), exactly like one image batch.
 //!
 //! Descriptors the engine parses but does not honour (`size-adjust`, the metric overrides,
-//! `font-feature-settings`, `font-variation-settings`, `font-language-override`) are reported
+//! `font-language-override`) are reported
 //! `UNSUPPORTED_FEATURE` (`css.at-rule.font-face.<descriptor>`); the rule's line and column are
 //! those within its sheet (the rule does not carry its sheet's number, so the sheet field is 0).
 
@@ -56,6 +56,7 @@ pub(crate) fn to_rule(e: &FontFaceExport) -> FontFaceRule {
     FontFaceRule {
         rule_id: 0,
         family: e.family.clone(),
+        settings: e.settings.clone(),
         weight: e.weight,
         style: match e.style {
             FontStyleExport::Normal => FaceStyle::Normal,

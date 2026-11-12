@@ -13,7 +13,7 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-STAGES = ("fmt", "check", "test", "python", "headless", "renderer", "faults", "native", "renderer-native", "browser")
+STAGES = ("fmt", "check", "test", "python", "headless", "renderer", "faults", "native", "renderer-native", "completion-native", "browser")
 
 
 def stop_process_tree(process):
@@ -74,6 +74,8 @@ def main():
                       "--evidence", str(output / "renderer-headless.json")]],
         "renderer-native": [[sys.executable, "tools/renderer_acceptance.py", "--automated",
                              "--output", str(output / "renderer-native")]],
+        "completion-native": [[sys.executable, "tools/completion_acceptance.py", "--automated",
+                              "--output", str(output / "completion-native")]],
         "browser": [[sys.executable, "tools/browser_reference.py", "--output", str(output / "browser" / uuid.uuid4().hex[:10])]],
     }
     commands["faults"] = [["cargo", "build", "--locked", "-p", "ui4me-host"]] + [
@@ -120,7 +122,7 @@ def main():
                         rc = 124
                 row["commands"].append({"argv": command, "exit_code": rc, "log": str(log.relative_to(output))})
                 if rc:
-                    row["status"] = "BLOCKED" if rc == 2 and stage in ("native", "renderer-native", "browser") else "FAIL"
+                    row["status"] = "BLOCKED" if rc == 2 and stage in ("native", "renderer-native", "completion-native", "browser") else "FAIL"
                     break
             except (OSError, KeyboardInterrupt) as error:
                 if process is not None and process.poll() is None:

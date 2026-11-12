@@ -7,7 +7,7 @@ use winit::{
     data_transfer::{DataTransferSendBuilder, TypeHint, TypedData},
     dpi::{PhysicalPosition, PhysicalSize},
     event::{ButtonSource, Ime, KeyEvent, MouseButton, WindowEvent},
-    event_loop::{ControlFlow, DndAction},
+    event_loop::ControlFlow,
     keyboard::{Key, NamedKey},
     window::{
         ImeCapabilities, ImeEnableRequest, ImeHint, ImePurpose, ImeRequest, ImeRequestData,
@@ -189,11 +189,19 @@ impl Host {
             TransferTarget::DocumentDrop {
                 window_id,
                 document_id,
+                target,
                 files,
                 x,
                 y,
             } => {
-                self.complete_document_drop(&window_id, &document_id, files, (x, y), result);
+                self.complete_document_drop(
+                    &window_id,
+                    &document_id,
+                    &target,
+                    files,
+                    (x, y),
+                    result,
+                );
             }
             TransferTarget::Rpc(reply) => {
                 self.respond(&reply, result.map(|text| json!({"text":text})))
@@ -467,12 +475,12 @@ impl Host {
             // Wayland window must retain the document's dirty state if no buffer
             // is available yet (qualified v0.1 softbuffer fix).
             if let Some(document) = &mut record.document {
-                let pixels = document.engine.render(
+                document.engine.render_into(
                     size.width,
                     size.height,
                     native.window.scale_factor(),
+                    &mut buffer,
                 )?;
-                buffer.copy_from_slice(&pixels);
             } else {
                 record.probe.render(
                     &mut buffer,
@@ -755,51 +763,102 @@ impl ApplicationHandler for Host {
                     self.text_changed(&id);
                 }
             }
-            WindowEvent::DragEntered { id: transfer, .. }
-            | WindowEvent::DragPosition { id: transfer, .. } => {
-                if event_loop.data_transfer(transfer).is_ok_and(|data| {
-                    data.has_type(&TypeHint::UriList) || data.has_type(&TypeHint::Plaintext)
-                }) {
-                    let _ = event_loop.set_valid_dnd_actions(transfer, &[DndAction::Copy]);
+            WindowEvent::DragEntered {
+                id: transfer,
+                position,
+            } => {
+                self.incoming_drag(
+                    &id,
+                    transfer,
+                    position.map(|p| (p.x, p.y)),
+                    "enter",
+                    event_loop,
+                );
+            }
+            WindowEvent::DragPosition {
+                id: transfer,
+                position,
+                ..
+            } => {
+                self.incoming_drag(
+                    &id,
+                    transfer,
+                    Some((position.x, position.y)),
+                    "over",
+                    event_loop,
+                );
+            }
+            WindowEvent::DragLeft { id: transfer } => {
+                if let Some(state) = self
+                    .windows
+                    .get_mut(&id)
+                    .and_then(|w| w.native.as_mut())
+                    .and_then(|n| n.incoming_drop.take_if(|state| state.transfer == transfer))
+                {
+                    self.emit_drop_feedback(&id, &state, "leave");
                 }
             }
             WindowEvent::DragDropped { id: transfer, .. } => {
-                if self.transfers.len() + self.jobs.len() < protocol::MAX_PENDING {
-                    let file_drop = event_loop
-                        .data_transfer(transfer)
-                        .is_ok_and(|data| data.has_type(&TypeHint::UriList));
-                    let hint = if file_drop {
+                let state = self
+                    .windows
+                    .get_mut(&id)
+                    .and_then(|w| w.native.as_mut())
+                    .and_then(|n| n.incoming_drop.take_if(|state| state.transfer == transfer));
+                if let Some(state) = state {
+                    self.emit_drop_feedback(&id, &state, "leave");
+                    if self.transfers.len() + self.jobs.len() >= protocol::MAX_PENDING {
+                        return;
+                    }
+                    let Some(files) = state.files else {
+                        return;
+                    };
+                    let target = if let Some(document_id) = state.document_id {
+                        let Some(target) = state.target else {
+                            return;
+                        };
+                        let current = self
+                            .windows
+                            .get(&id)
+                            .filter(|w| !w.closing)
+                            .and_then(|w| w.document.as_ref())
+                            .is_some_and(|d| {
+                                d.id == document_id && d.engine.native_drop_accepts(&target, files)
+                            });
+                        if !current {
+                            return;
+                        }
+                        TransferTarget::DocumentDrop {
+                            window_id: id.clone(),
+                            document_id,
+                            target,
+                            files,
+                            x: state.point.0,
+                            y: state.point.1,
+                        }
+                    } else if files {
+                        TransferTarget::Drop(id.clone())
+                    } else {
+                        TransferTarget::DropText(id.clone())
+                    };
+                    let hint = if files {
                         TypeHint::UriList
                     } else {
                         TypeHint::Plaintext
                     };
-                    if let Ok(serial) = event_loop.fetch_data_transfer(transfer, &hint) {
-                        self.transfers.insert(
-                            serial,
-                            PendingTransfer {
-                                target: if let Some(document) =
-                                    self.windows.get(&id).and_then(|w| w.document.as_ref())
-                                {
-                                    let (x, y) = self
-                                        .windows
-                                        .get(&id)
-                                        .and_then(|w| w.native.as_ref())
-                                        .map_or((0.0, 0.0), |n| n.pointer);
-                                    TransferTarget::DocumentDrop {
-                                        window_id: id.clone(),
-                                        document_id: document.id.clone(),
-                                        files: file_drop,
-                                        x,
-                                        y,
-                                    }
-                                } else if file_drop {
-                                    TransferTarget::Drop(id.clone())
-                                } else {
-                                    TransferTarget::DropText(id.clone())
+                    match event_loop.fetch_data_transfer(transfer, &hint) {
+                        Ok(serial) => {
+                            self.transfers.insert(
+                                serial,
+                                PendingTransfer {
+                                    target,
+                                    deadline: Instant::now() + Duration::from_secs(10),
                                 },
-                                deadline: Instant::now() + Duration::from_secs(10),
-                            },
-                        );
+                            );
+                        }
+                        Err(error) => self.finish_transfer(
+                            target,
+                            Err(RpcError::unavailable(format!("Fetch native drop: {error}"))),
+                        ),
                     }
                 }
             }

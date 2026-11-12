@@ -593,4 +593,90 @@ mod tests {
         assert_eq!(state.next_native, counter);
         assert_eq!(state.document_id, None);
     }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn atspi_combo_exposes_selected_option_and_active_descendant_changes() {
+        use accesskit_atspi_common::{
+            Adapter, AdapterCallback, AppContext, Event, FullNodeId, InterfaceSet, ObjectEvent,
+            WindowBounds,
+        };
+        struct Callback(Arc<Mutex<Vec<(FullNodeId, FullNodeId)>>>);
+        impl AdapterCallback for Callback {
+            fn register_interfaces(&self, _: &Adapter, _: FullNodeId, _: InterfaceSet) {}
+            fn unregister_interfaces(&self, _: &Adapter, _: FullNodeId, _: InterfaceSet) {}
+            fn emit_event(&self, _: &Adapter, event: Event) {
+                if let Event::Object {
+                    target: accesskit_atspi_common::NodeIdOrRoot::Node(parent),
+                    event: ObjectEvent::ActiveDescendantChanged(child),
+                } = event
+                {
+                    self.0.lock().unwrap().push((parent, child));
+                }
+            }
+        }
+        struct Handler;
+        impl ActionHandler for Handler {
+            fn do_action(&mut self, _: ActionRequest) {}
+        }
+        let mut root = Node::new(Role::Window);
+        root.set_children([NodeId(1)]);
+        let mut combo = Node::new(Role::ComboBox);
+        combo.set_label("Choice");
+        combo.set_value("First");
+        combo.set_children([NodeId(2), NodeId(3)]);
+        combo.set_active_descendant(NodeId(2));
+        combo.set_expanded(false);
+        let mut first = Node::new(Role::ListBoxOption);
+        first.set_label("First");
+        first.set_selected(true);
+        let mut second = Node::new(Role::ListBoxOption);
+        second.set_label("Second");
+        second.set_selected(false);
+        let app = AppContext::new(Some("Manifest App".into()));
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let mut adapter = Adapter::new(
+            &app,
+            Callback(events.clone()),
+            TreeUpdate {
+                nodes: vec![
+                    (NodeId(0), root),
+                    (NodeId(1), combo.clone()),
+                    (NodeId(2), first.clone()),
+                    (NodeId(3), second.clone()),
+                ],
+                tree: Some(TreeInfo::new(NodeId(0))),
+                tree_id: TreeId::ROOT,
+                focus: NodeId(1),
+            },
+            true,
+            WindowBounds::default(),
+            Handler,
+        );
+        let root = adapter.platform_node(adapter.root_id());
+        let combo_id = root.child_at_index(0).unwrap().unwrap();
+        let node = adapter.platform_node(combo_id);
+        assert_eq!(node.name().unwrap(), "Choice");
+        assert_eq!(node.n_selected_children().unwrap(), 1);
+        let selected = node.selected_child(0).unwrap().unwrap();
+        assert_eq!(adapter.platform_node(selected).name().unwrap(), "First");
+        combo.set_value("Second");
+        combo.set_active_descendant(NodeId(3));
+        first.set_selected(false);
+        second.set_selected(true);
+        adapter.update(TreeUpdate {
+            nodes: vec![(NodeId(1), combo), (NodeId(2), first), (NodeId(3), second)],
+            tree: None,
+            tree_id: TreeId::ROOT,
+            focus: NodeId(1),
+        });
+        let selected = node.selected_child(0).unwrap().unwrap();
+        assert_eq!(adapter.platform_node(selected).name().unwrap(), "Second");
+        assert!(events.lock().unwrap().contains(&(combo_id, selected)));
+        assert_eq!(
+            node.name().unwrap(),
+            "Choice",
+            "Label stays distinct from value"
+        );
+    }
 }

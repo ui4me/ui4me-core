@@ -1,5 +1,4 @@
 use anyhow::{bail, Context, Result};
-use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -729,48 +728,6 @@ impl Drop for NativeChild {
             }
         }
     }
-}
-
-/// Use the desktop broker so launched viewers do not enter the host's cgroup.
-/// The result acknowledges the request, not proof that another app presented UI.
-pub fn open_external(target: &str) -> Result<()> {
-    use std::os::fd::AsFd;
-    let connection = zbus::blocking::Connection::session()?;
-    let options: HashMap<&str, zbus::zvariant::Value<'_>> = HashMap::new();
-    let parsed = url::Url::parse(target);
-    if let Ok(uri) = &parsed {
-        if uri.scheme() != "file" {
-            connection.call_method(
-                Some("org.freedesktop.portal.Desktop"),
-                "/org/freedesktop/portal/desktop",
-                Some("org.freedesktop.portal.OpenURI"),
-                "OpenURI",
-                &("", target, options),
-            )?;
-            return Ok(());
-        }
-    }
-    let path = match parsed {
-        Ok(uri) => uri
-            .to_file_path()
-            .map_err(|_| anyhow::anyhow!("invalid file URL"))?,
-        Err(_) => PathBuf::from(target),
-    };
-    let file = File::open(&path)?;
-    let descriptor = zbus::zvariant::Fd::from(file.as_fd());
-    let method = if path.is_dir() {
-        "OpenDirectory"
-    } else {
-        "OpenFile"
-    };
-    connection.call_method(
-        Some("org.freedesktop.portal.Desktop"),
-        "/org/freedesktop/portal/desktop",
-        Some("org.freedesktop.portal.OpenURI"),
-        method,
-        &("", descriptor, options),
-    )?;
-    Ok(())
 }
 
 pub fn standard_paths(app_id: &str) -> Result<serde_json::Value> {

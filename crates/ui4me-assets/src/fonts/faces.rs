@@ -37,12 +37,26 @@ pub enum FaceSourceSpec {
     Local(String),
 }
 
+/// Defaults belong to the selected face, never to every font in an element's fallback list.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FaceSettings {
+    pub features: Vec<([u8; 4], u32)>,
+    pub variations: Vec<([u8; 4], f32)>,
+}
+
+impl FaceSettings {
+    pub fn is_empty(&self) -> bool {
+        self.features.is_empty() && self.variations.is_empty()
+    }
+}
+
 /// An effective `@font-face` rule of one document (06's `FontFaceRule`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct FontFaceRule {
     /// Stable identity of the rule in the cascade; unchanged rules keep their face and state.
     pub rule_id: u64,
     pub family: String,
+    pub settings: FaceSettings,
     pub weight: (f32, f32),
     pub style: FaceStyle,
     pub width: (f32, f32),
@@ -110,6 +124,7 @@ impl FaceState {
 pub struct FaceView {
     pub id: FaceId,
     pub family: String,
+    pub settings: FaceSettings,
     pub weight: (f32, f32),
     pub style: FaceStyle,
     pub width: (f32, f32),
@@ -135,6 +150,7 @@ impl Face {
         FaceView {
             id: self.id,
             family: self.rule.family.clone(),
+            settings: self.rule.settings.clone(),
             weight: self.rule.weight,
             style: self.rule.style,
             width: self.rule.width,

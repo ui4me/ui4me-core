@@ -30,7 +30,7 @@ def locate_host(explicit=None, release=False):
 
 
 def manifest(backend_args, app_id="org.ui4me.HostReference", backend_path=None, icon_path=None,
-             app_name="UI4ME Host Reference", app_version="0.2.0", startup_timeout_ms=15000):
+             app_name="UI4ME Host Reference", app_version="1.0.0-rc.1", startup_timeout_ms=15000):
     backend_path = Path(backend_path) if backend_path else ROOT / "examples/python/demo.py"
     icon_path = icon_path if icon_path is not None else str(ROOT / "crates/ui4me-host/assets/ui4me.png")
     def q(value):

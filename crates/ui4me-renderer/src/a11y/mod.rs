@@ -21,6 +21,7 @@
 //!   runtime executes on the owner thread through 012's assistive entry points.
 
 mod build;
+mod metadata;
 
 pub use build::{BuildInput, RenderInfo, Rendering, TextLine, build};
 
@@ -119,6 +120,45 @@ pub struct States {
     /// `log` polite, `alert` assertive). Descendants inherit it in AccessKit.
     #[serde(skip_serializing_if = "LivePoliteness::is_off")]
     pub live: LivePoliteness,
+    /// Busy live regions defer announcements; atomic live regions announce the whole region.
+    pub busy: bool,
+    pub live_atomic: bool,
+}
+
+/// Table/grid coordinates use ARIA's one-based indices in diagnostics. AccessKit conversion
+/// subtracts one once. Container set size and item position use the same rule.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct Structure {
+    pub row_count: Option<usize>,
+    pub column_count: Option<usize>,
+    pub row_index: Option<usize>,
+    pub column_index: Option<usize>,
+    pub row_span: Option<usize>,
+    pub column_span: Option<usize>,
+    pub size_of_set: Option<usize>,
+    pub position_in_set: Option<usize>,
+    pub sort_direction: Option<SortOrder>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SortOrder {
+    Ascending,
+    Descending,
+    Other,
+}
+
+/// Relationships point only to nodes exposed in this tree, never stale or hidden targets.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct Relations {
+    pub labelled_by: Vec<u64>,
+    pub described_by: Vec<u64>,
+    pub controls: Vec<u64>,
+    pub details: Vec<u64>,
+    pub flow_to: Vec<u64>,
+    pub owns: Vec<u64>,
+    pub active_descendant: Option<u64>,
+    pub error_message: Option<u64>,
 }
 
 /// Live-region politeness of a node (ARIA `aria-live`).
@@ -154,6 +194,7 @@ pub enum A11yAction {
     SetTextSelection,
     /// Replace the selected text (AT-SPI EditableText, UIA), 0.5 F0504.
     ReplaceSelectedText,
+    ScrollIntoView,
 }
 
 impl A11yAction {
@@ -168,6 +209,7 @@ impl A11yAction {
             A11yAction::Collapse => Action::Collapse,
             A11yAction::SetTextSelection => Action::SetTextSelection,
             A11yAction::ReplaceSelectedText => Action::ReplaceSelectedText,
+            A11yAction::ScrollIntoView => Action::ScrollIntoView,
         }
     }
 }
@@ -209,6 +251,8 @@ pub struct A11yNode {
     /// A text field's caret / selection.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub selection: Option<TextSel>,
+    pub structure: Structure,
+    pub relations: Relations,
 }
 
 /// The characters of one text run (0.5 F0504). A character is a caret stop of the editing engine
@@ -369,6 +413,9 @@ impl A11yTree {
 
 fn ak_node(n: &A11yNode, scale: f64) -> Node {
     let mut a = Node::new(n.role);
+    if n.actions.contains(&A11yAction::ScrollIntoView) {
+        a.add_action(Action::ScrollIntoView);
+    }
     if n.role == Role::TextRun {
         let v = n.value.clone().unwrap_or_default();
         match &n.run {
@@ -435,6 +482,64 @@ fn ak_node(n: &A11yNode, scale: f64) -> Node {
         // AccessKit levels are zero-based (ARIA's are one-based).
         a.set_level(l.saturating_sub(1) as usize);
     }
+    let m = &n.structure;
+    if let Some(v) = m.row_count {
+        a.set_row_count(v);
+    }
+    if let Some(v) = m.column_count {
+        a.set_column_count(v);
+    }
+    if let Some(v) = m.row_index {
+        a.set_row_index(v.saturating_sub(1));
+    }
+    if let Some(v) = m.column_index {
+        a.set_column_index(v.saturating_sub(1));
+    }
+    if let Some(v) = m.row_span {
+        a.set_row_span(v);
+    }
+    if let Some(v) = m.column_span {
+        a.set_column_span(v);
+    }
+    if let Some(v) = m.size_of_set {
+        a.set_size_of_set(v);
+    }
+    if let Some(v) = m.position_in_set {
+        a.set_position_in_set(v.saturating_sub(1));
+    }
+    if let Some(v) = m.sort_direction {
+        a.set_sort_direction(match v {
+            SortOrder::Ascending => accesskit::SortDirection::Ascending,
+            SortOrder::Descending => accesskit::SortDirection::Descending,
+            SortOrder::Other => accesskit::SortDirection::Other,
+        });
+    }
+    let rel = &n.relations;
+    let ids = |v: &Vec<u64>| v.iter().copied().map(AkId).collect::<Vec<_>>();
+    if !rel.labelled_by.is_empty() {
+        a.set_labelled_by(ids(&rel.labelled_by));
+    }
+    if !rel.described_by.is_empty() {
+        a.set_described_by(ids(&rel.described_by));
+    }
+    if !rel.controls.is_empty() {
+        a.set_controls(ids(&rel.controls));
+    }
+    if !rel.details.is_empty() {
+        a.set_details(ids(&rel.details));
+    }
+    if !rel.flow_to.is_empty() {
+        a.set_flow_to(ids(&rel.flow_to));
+    }
+    if !rel.owns.is_empty() {
+        a.set_owns(ids(&rel.owns));
+    }
+    if let Some(v) = rel.active_descendant {
+        a.set_active_descendant(AkId(v));
+    }
+    if let Some(v) = rel.error_message {
+        a.set_error_message(AkId(v));
+    }
     if let Some(num) = n.numeric {
         if let Some(v) = num.now {
             a.set_numeric_value(v);
@@ -480,6 +585,12 @@ fn ak_node(n: &A11yNode, scale: f64) -> Node {
     }
     if s.multiselectable {
         a.set_multiselectable();
+    }
+    if s.busy {
+        a.set_busy();
+    }
+    if s.live_atomic {
+        a.set_live_atomic();
     }
     match s.live {
         LivePoliteness::Off => {}
@@ -571,6 +682,13 @@ pub enum A11yRequestKind {
     Increment,
     Decrement,
     ScrollIntoView,
+    /// Preserve the synthetic text-run identity and native alignment hint. Converting the run
+    /// immediately to its field would otherwise scroll only the textarea's outer box.
+    ScrollIntoViewWithHint {
+        target_id: u64,
+        block: &'static str,
+        inline: &'static str,
+    },
     /// Expand / collapse: the runtime activates the element only when its current expanded state differs.
     Expand,
     Collapse,
@@ -613,7 +731,23 @@ pub fn decode_request(r: &ActionRequest) -> Option<A11yRequest> {
         }
         (Action::Increment, _) => A11yRequestKind::Increment,
         (Action::Decrement, _) => A11yRequestKind::Decrement,
-        (Action::ScrollIntoView, _) => A11yRequestKind::ScrollIntoView,
+        (Action::ScrollIntoView, hint) => {
+            use accesskit::ScrollHint as H;
+            let (block, inline) = match hint {
+                Some(ActionData::ScrollHint(H::TopLeft)) => ("start", "start"),
+                Some(ActionData::ScrollHint(H::BottomRight)) => ("end", "end"),
+                Some(ActionData::ScrollHint(H::TopEdge)) => ("start", "nearest"),
+                Some(ActionData::ScrollHint(H::BottomEdge)) => ("end", "nearest"),
+                Some(ActionData::ScrollHint(H::LeftEdge)) => ("nearest", "start"),
+                Some(ActionData::ScrollHint(H::RightEdge)) => ("nearest", "end"),
+                _ => ("nearest", "nearest"),
+            };
+            A11yRequestKind::ScrollIntoViewWithHint {
+                target_id: r.target_node.0,
+                block,
+                inline,
+            }
+        }
         (Action::Expand, _) => A11yRequestKind::Expand,
         (Action::Collapse, _) => A11yRequestKind::Collapse,
         _ => return None,

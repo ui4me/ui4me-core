@@ -3,6 +3,8 @@ param(
     [Parameter(Mandatory=$true)][string]$UserName,
     [Parameter(Mandatory=$true)][string]$ScriptPath,
     [int]$TimeoutSeconds = 180,
+    # Clipboard jobs normally need STA; UI Automation client probes use MTA.
+    [ValidateSet('STA', 'MTA')][string]$Apartment = 'STA',
     [switch]$KeepTask,
     # Run without a console window, so observation jobs do not take the
     # foreground (and keyboard focus) from the application being observed.
@@ -15,7 +17,7 @@ $resolved = (Resolve-Path -LiteralPath $ScriptPath).Path
 if ($resolved.Contains('"')) { throw 'Invalid script path' }
 $identity = if ($UserName.Contains('\') -or $UserName.Contains('@')) { $UserName } else { "$env:COMPUTERNAME\$UserName" }
 $taskName = 'UI4ME-Interactive-' + [guid]::NewGuid().ToString('N')
-$arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -STA -File "' + $resolved + '"'
+$arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -' + $Apartment + ' -File "' + $resolved + '"'
 $executable = 'powershell.exe'
 if ($Hidden) {
     # A headless console host creates no window that could take the foreground.

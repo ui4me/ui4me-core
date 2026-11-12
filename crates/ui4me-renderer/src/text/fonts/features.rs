@@ -35,6 +35,27 @@ pub struct FontSettings {
 }
 
 impl FontSettings {
+    /// CSS Fonts §7.2: face defaults precede element properties; letter spacing
+    /// disables optional ligatures after face defaults and before explicit properties.
+    pub(crate) fn with_face_defaults(
+        &self,
+        face: &ui4me_assets::fonts::FaceSettings,
+        letter_spacing: f32,
+    ) -> Self {
+        let mut features = face.features.clone();
+        if letter_spacing != 0.0 {
+            features.extend([*b"liga", *b"clig", *b"dlig", *b"hlig"].map(|tag| (tag, 0)));
+        }
+        features.extend(self.features.iter().copied());
+        let mut variations = face.variations.clone();
+        variations.extend(self.variations.iter().copied());
+        Self {
+            features: features.into(),
+            variations: variations.into(),
+            ..self.clone()
+        }
+    }
+
     /// Whether nothing differs from the initial values.
     pub fn is_initial(&self) -> bool {
         self.variations.is_empty()

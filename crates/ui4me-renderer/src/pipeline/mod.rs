@@ -27,3 +27,6 @@ pub mod state;
 pub mod turn;
 pub mod update;
 pub mod views;
+
+#[cfg(test)]
+mod core1_tests;

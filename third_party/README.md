@@ -99,3 +99,35 @@ different issues and must not overwrite one another when updating upstream.
 The 0.1 measured results above are historical, not a 0.2 rerun. The complete
 0.1 status report remains in `docs/BASELINE_0.1_STATUS.md`. Further source patches
 needed by the renderer are documented separately in `patches/README.md`.
+
+## Core 1.0 AT-SPI application identity and active descendant
+
+`accesskit_atspi_common-0.21.1/core-1.0-identity-selection.patch` contains only
+the changes made after the supplied, locally qualified 0.2 tree. It is a diff
+against that tree, not against pristine upstream. The package version, upstream
+checksum and licenses above remain unchanged. No 1.0 changes were made to
+`adapter.rs`; its qualified teardown patch is retained byte for byte.
+
+The new `set_application_name` function in `context.rs`, exported by `lib.rs`,
+sets the process's accessible display name once, before the first adapter is
+created. `AppContext::new` uses it in preference to the executable name. The
+host supplies `app.name` from its manifest; a later attempt to change that
+process identity is an error. This avoids exposing every application as
+`ui4me-host` to AT-SPI clients. Replace this patch with an upstream application
+identity API when one is available.
+
+The `node.rs` addition emits the existing AT-SPI `ActiveDescendantChanged`
+event when an AccessKit container's active descendant changes. The renderer
+now supplies the selected option as a combobox's active descendant while
+retaining separate accessible label and value. The adapter already exposes
+selected options through its Selection interface; it must also report this
+semantic navigation change. The host test
+`atspi_combo_exposes_selected_option_and_active_descendant_changes` exercises
+both the native adapter's selected-child/name projection and the new event
+without a running desktop bus.
+
+These are new source changes, not a claim of a completed Orca journey. Current
+Linux screen-reader qualification must check initial focus, keyboard selection
+changes, app naming and teardown. The independent Windows UI Automation R05
+text-selection hang is a separate blocker; no speculative Windows provider
+patch is included here.

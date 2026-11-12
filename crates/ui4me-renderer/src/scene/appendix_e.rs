@@ -1252,6 +1252,7 @@ fn hide_own_painting(
     }
     extras.layers.clear();
     extras.shadows.clear();
+    extras.resize_grip = None;
     extras.border_image = None;
     extras.outline = None;
     extras.replaced = None;

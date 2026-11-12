@@ -303,7 +303,8 @@ pub enum OverflowWrap {
     Anywhere,
 }
 
-/// `word-break` (`break-word` is Off in the profile and never computed).
+/// `word-break`; the legacy `break-word` keyword is normalized to `normal` plus
+/// `overflow-wrap: anywhere` when exporting the computed text properties.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum WordBreak {
     Normal,
@@ -1264,12 +1265,18 @@ pub(crate) fn inline_text(epoch: u64, cv: &ComputedValues) -> InlineText {
             full_size_kana: has("full-size-kana"),
         }
     };
-    let overflow_wrap = match css(&t.overflow_wrap).as_str() {
+    let mut overflow_wrap = match css(&t.overflow_wrap).as_str() {
         "break-word" => OverflowWrap::BreakWord,
         "anywhere" => OverflowWrap::Anywhere,
         _ => OverflowWrap::Normal,
     };
     let word_break = match css(&t.word_break).as_str() {
+        "break-word" => {
+            // CSS Text: legacy break-word has the effect of normal + anywhere,
+            // regardless of the author's overflow-wrap value, including min-content.
+            overflow_wrap = OverflowWrap::Anywhere;
+            WordBreak::Normal
+        }
         "break-all" => WordBreak::BreakAll,
         "keep-all" => WordBreak::KeepAll,
         _ => WordBreak::Normal,

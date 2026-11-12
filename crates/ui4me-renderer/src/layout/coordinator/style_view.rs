@@ -105,6 +105,21 @@ impl CalcTable {
         }
     }
 
+    fn fit_content(&mut self, limit: Option<&CssLp>) -> Dimension {
+        match limit {
+            None => Dimension::fit_content(),
+            Some(CssLp::Px(px)) => Dimension::fit_content_px(quantize_input(*px)),
+            Some(CssLp::Percent(p)) if self.truncate_percentages => {
+                Dimension::fit_content_calc(self.trunc_ptr(*p))
+            }
+            Some(CssLp::Percent(p)) => Dimension::fit_content_percent(*p),
+            Some(CssLp::Calc(e)) if !e.has_percent() => {
+                Dimension::fit_content_px(resolve_calc_value(e, 0.0))
+            }
+            Some(CssLp::Calc(e)) => Dimension::fit_content_calc(self.ptr(e)),
+        }
+    }
+
     fn min(&mut self, v: &SizeValue) -> LengthPercentageAuto {
         match v {
             SizeValue::Auto => LengthPercentageAuto::auto(),
@@ -455,6 +470,10 @@ pub(crate) fn taffy_style(
             FlexBasisValue::Auto => Dimension::auto(),
             FlexBasisValue::Content => Dimension::content(),
             FlexBasisValue::Lp(lp) => calcs.dim_lp(lp),
+            FlexBasisValue::MinContent => Dimension::min_content(),
+            FlexBasisValue::MaxContent => Dimension::max_content(),
+            FlexBasisValue::FitContent(limit) => calcs.fit_content(limit.as_ref()),
+            FlexBasisValue::Stretch => Dimension::stretch(),
         };
         style.align_self = align_self(s.align.align_self);
     }
@@ -470,6 +489,8 @@ pub(crate) fn taffy_style(
                 FlexWrapValue::NoWrap => FlexWrap::NoWrap,
                 FlexWrapValue::Wrap => FlexWrap::Wrap,
                 FlexWrapValue::WrapReverse => FlexWrap::WrapReverse,
+                FlexWrapValue::Balance => FlexWrap::Balance,
+                FlexWrapValue::BalanceReverse => FlexWrap::BalanceReverse,
             };
             style.gap = Size {
                 width: calcs.gap(&s.align.column_gap),

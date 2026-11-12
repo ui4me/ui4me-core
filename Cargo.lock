@@ -1361,6 +1361,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "log",
  "peniko",
+ "png",
  "skrifa",
  "smallvec",
  "vello_common",
@@ -3886,7 +3887,7 @@ dependencies = [
 
 [[package]]
 name = "ui4me-assets"
-version = "0.2.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "brotli-decompressor",
  "data-url",
@@ -3905,7 +3906,7 @@ dependencies = [
 
 [[package]]
 name = "ui4me-document"
-version = "0.2.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "html5ever",
  "markup5ever",
@@ -3918,22 +3919,25 @@ dependencies = [
 
 [[package]]
 name = "ui4me-engine-types"
-version = "0.2.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "proptest",
 ]
 
 [[package]]
 name = "ui4me-host"
-version = "0.2.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "accesskit",
+ "accesskit_atspi_common",
  "accesskit_unix",
  "accesskit_windows",
  "anyhow",
  "ashpd",
+ "async-channel",
  "async-io",
  "clap",
+ "data-url",
  "embed-resource",
  "fontdue",
  "futures-lite",
@@ -3950,6 +3954,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "ui4me-assets",
  "ui4me-engine-types",
  "ui4me-renderer",
  "unicode-segmentation",
@@ -3962,7 +3967,7 @@ dependencies = [
 
 [[package]]
 name = "ui4me-renderer"
-version = "0.2.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "accesskit",
  "app_units",
@@ -3990,6 +3995,7 @@ dependencies = [
  "ui4me-assets",
  "ui4me-document",
  "ui4me-engine-types",
+ "unicode-segmentation",
  "url",
  "vello_cpu",
  "web_atoms",
@@ -4119,6 +4125,7 @@ dependencies = [
  "guillotiere",
  "log",
  "peniko",
+ "png",
  "smallvec",
  "thiserror 2.0.21",
 ]
@@ -4132,6 +4139,7 @@ dependencies = [
  "bytemuck",
  "glifo",
  "hashbrown 0.17.1",
+ "png",
  "vello_common",
 ]
 

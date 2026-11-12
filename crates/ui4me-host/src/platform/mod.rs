@@ -4,6 +4,8 @@
 //! transport and backend state machines are used on both supported platforms.
 
 pub mod dialogs;
+pub mod external;
+pub mod preferences;
 
 #[cfg(target_os = "linux")]
 mod linux;

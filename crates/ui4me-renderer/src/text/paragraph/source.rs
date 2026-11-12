@@ -283,7 +283,7 @@ pub enum WrapOverflow {
     Anywhere,
 }
 
-/// `word-break` (`break-word` is off in the profile).
+/// `word-break`; legacy `break-word` is normalized by the computed-style bridge.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum WordBreakKind {
     #[default]
@@ -910,6 +910,15 @@ pub(crate) fn text_properties<'a>(
     props
 }
 
+/// A bounded override for an actual shaped font range, after CSS cluster fallback.
+#[derive(Clone)]
+struct FaceRangeStyle {
+    range: Range<usize>,
+    settings: crate::text::fonts::features::FontSettings,
+    size: f32,
+    slnt: Option<f32>,
+}
+
 impl TextServices {
     /// Font matching, bidi analysis and shaping (008 `ifc-interface.md` §5.1). Characters no
     /// font covers are drawn as `.notdef`; the first one yields one `RESOURCE_PENDING`
@@ -934,6 +943,14 @@ impl TextServices {
 
     /// `shape` without the content cache.
     pub fn shape_uncached(&mut self, source: &ParagraphSource) -> Arc<ShapedParagraph> {
+        self.shape_with_face_defaults(source, None)
+    }
+
+    fn shape_with_face_defaults(
+        &mut self,
+        source: &ParagraphSource,
+        face_styles: Option<&[FaceRangeStyle]>,
+    ) -> Arc<ShapedParagraph> {
         // Limits are checked before any Parley call (FR-092, FR-096): Parley asserts on more than
         // u16::MAX styles.
         let limited = super::limits::apply_limits(source);
@@ -1022,6 +1039,7 @@ impl TextServices {
                 let ov = super::hyphen::BreakOverride::new(&shaped_text, &hplan);
                 Some(Box::new(move |cx| ov.call(cx)))
             };
+        let opsz_available = self.env.opsz_available();
         let mut b = self
             .lcx
             .ranged_builder(&mut self.env.fcx, &shaped_text, 1.0, true);
@@ -1102,7 +1120,84 @@ impl TextServices {
                 other => unsupported_items.push(other),
             }
         }
+        if let Some(face_styles) = face_styles {
+            for style in face_styles {
+                for property in crate::text::fonts::features::style_properties(
+                    &style.settings,
+                    style.size,
+                    opsz_available,
+                    style.slnt,
+                ) {
+                    b.push(property, style.range.clone());
+                }
+            }
+        }
         let layout = b.build(&shaped_text);
+        if face_styles.is_none() && self.env.face_table().has_settings() {
+            // Font features never affect font selection (CSS Fonts §4.6). Resolve
+            // fallback once, then add defaults only to the font actually chosen.
+            // This leaves fallback scripts, unicode ranges and installed fonts alone.
+            let mut probe = layout.clone();
+            probe.break_all_lines(None);
+            let mut overrides = Vec::new();
+            let budget = super::limits::MAX_STYLES.saturating_sub(source.spans.len()) / 2;
+            'face_ranges: for line in probe.lines() {
+                for item in line.items() {
+                    let PositionedLayoutItem::GlyphRun(gr) = item else {
+                        continue;
+                    };
+                    let run = gr.run();
+                    let mut range = run.text_range();
+                    let span = source.spans.get(gr.style().brush.0 as usize);
+                    let (style, props) = if let Some(span) = span {
+                        range.start = range.start.max(span.range.start);
+                        range.end = range.end.min(span.range.end);
+                        (&span.style, span.props.clone())
+                    } else {
+                        (&source.root, SpanProps::default())
+                    };
+                    if range.is_empty() {
+                        continue;
+                    }
+                    let ch = shaped_text[range.clone()].chars().next().unwrap_or(' ');
+                    let Some(defaults) = self
+                        .env
+                        .settings_for_shaped_font(&style.font, ch, run.font())
+                        .filter(|d| !d.is_empty())
+                    else {
+                        continue;
+                    };
+                    if overrides.len() >= budget {
+                        self.shape_diag_events += 1;
+                        self.text_diagnostics.record(
+                            source.document,
+                            source.root_node,
+                            TextDiagnosticKind::SizeLimit {
+                                limit: "font-face-style-ranges",
+                            },
+                            source.dom_revision,
+                        );
+                        break 'face_ranges;
+                    }
+                    let settings = props
+                        .font_settings
+                        .with_face_defaults(&defaults, props.letter_spacing);
+                    let slnt = self.env.slant_axis_for(
+                        &self.env.resolve_families(&style.font.families),
+                        style.font.style,
+                    );
+                    overrides.push(FaceRangeStyle {
+                        range,
+                        settings,
+                        size: style.font_size,
+                        slnt,
+                    });
+                }
+            }
+            if !overrides.is_empty() {
+                return self.shape_with_face_defaults(source, Some(&overrides));
+            }
+        }
         for kind in unsupported_items {
             self.shape_diag_events += 1;
             self.text_diagnostics.record(

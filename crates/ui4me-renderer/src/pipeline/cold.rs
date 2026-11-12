@@ -51,6 +51,7 @@ impl DocumentPipeline {
             &self.fonts,
             self.images.as_ref(),
             self.resources.as_ref(),
+            &self.file_input_labels,
             live.scene.generation,
             live.revision,
             &self.scroll,

@@ -1979,6 +1979,7 @@ pub struct StyleBridgeSource<'a> {
     pseudos: Arc<HashMap<(NodeId, super::PseudoKind), Arc<super::BoxStyle>>>,
     images: Option<&'a dyn Fn(NodeId) -> Option<ui4me_assets::view::ImageState>>,
     css_images: Option<CssImageStates<'a>>,
+    file_input_labels: Option<&'a HashMap<NodeId, String>>,
 }
 
 /// 007's natural-size view of CSS images by (element, property key).
@@ -2167,6 +2168,9 @@ pub(super) mod map {
             v.inline_text(),
         );
         let mut un = Vec::new();
+        if v.uses_anchor_size() {
+            un.push(static_feature("css.function.anchor-size".into()));
+        }
         let rtl = it.direction == g::Direction::Rtl;
         if matches!(df.display.keyword(), "-webkit-box" | "-webkit-inline-box") {
             un.push(static_feature(df.display.feature_id()));
@@ -2269,7 +2273,7 @@ pub(super) mod map {
         };
         let lf = v.line_flow();
         // The legacy `-webkit-line-clamp` clamps only on a vertical `-webkit-box`, as in the reference (elsewhere
-        // it does nothing there either); the standard `line-clamp` is not implemented by either, here reported.
+        // it does nothing there either); standard `line-clamp` is outside this engine's profile.
         if lf.standard_clamp {
             un.push(prop("line-clamp"));
         }
@@ -3147,6 +3151,7 @@ impl<'a> StyleBridgeSource<'a> {
             pseudos: Arc::new(pseudos),
             images: None,
             css_images: None,
+            file_input_labels: None,
         }
     }
 
@@ -3155,6 +3160,11 @@ impl<'a> StyleBridgeSource<'a> {
     /// 007's natural-size view of CSS images (`list-style-image`, `content: url()`), by node and property.
     pub fn with_css_images(mut self, images: CssImageStates<'a>) -> Self {
         self.css_images = Some(images);
+        self
+    }
+
+    pub fn with_file_input_labels(mut self, labels: &'a HashMap<NodeId, String>) -> Self {
+        self.file_input_labels = Some(labels);
         self
     }
 
@@ -3295,6 +3305,9 @@ impl StyledSource for StyleBridgeSource<'_> {
             control_value,
             select,
         })
+    }
+    fn file_input_label(&self, node: NodeId) -> Option<&str> {
+        self.file_input_labels?.get(&node).map(String::as_str)
     }
     fn image_state(&self, node: NodeId) -> Option<ui4me_assets::view::ImageState> {
         self.images.and_then(|f| f(node))

@@ -32,9 +32,10 @@ use crate::layout::box_tree::{FlexDirectionValue, FlexStyle, FlexWrapValue};
 /// Whether a flex container with this style is broken by this module (its runs follow the block axis forwards).
 pub(crate) fn flex_breakable(flex: &FlexStyle) -> bool {
     match flex.direction {
-        FlexDirectionValue::Row | FlexDirectionValue::RowReverse => {
-            flex.wrap != FlexWrapValue::WrapReverse
-        }
+        FlexDirectionValue::Row | FlexDirectionValue::RowReverse => !matches!(
+            flex.wrap,
+            FlexWrapValue::WrapReverse | FlexWrapValue::BalanceReverse
+        ),
         FlexDirectionValue::Column => flex.wrap == FlexWrapValue::NoWrap,
         FlexDirectionValue::ColumnReverse => false,
     }

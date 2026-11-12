@@ -321,7 +321,7 @@ fn hosted_scope_is_enforced_on_html_and_mutations_with_atomic_rollback() {
         .unwrap();
     assert!(d.render(240, 160, 1.0).is_ok());
     assert!(d.paginate(None, None, true).is_err());
-    assert_eq!(crate::css_profile().0, "ui4me-desktop-0.2");
+    assert_eq!(crate::css_profile().0, "ui4me-desktop-1.0");
 }
 
 #[test]

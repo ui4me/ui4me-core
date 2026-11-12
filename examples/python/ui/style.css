@@ -18,7 +18,9 @@ button.secondary { background: var(--panel-alt); color: var(--text); border-colo
 .content { min-width: 0; display: flex; flex-direction: column; gap: 18px; }
 .heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; } .heading h2 { margin-top: 5px; }
 .badge { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 16px; color: var(--muted); font-size: 11px; }
-.pulse { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #79d4b2; animation: pulse 2s ease-in-out infinite; }
+.pulse { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #79d4b2; }
+/* Animation is an explicit demo mode, never an application's idle default. */
+.demonstrate-animation .pulse { animation: pulse 2s ease-in-out infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
 .card { background: var(--panel); padding: 20px; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 18px #00000010; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; } .full { grid-column: 1 / -1; }

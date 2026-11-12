@@ -293,6 +293,9 @@ pub fn sheet_selector_feature(text: &str) -> Option<FeatureId> {
 }
 
 fn declaration_feature(name: &str, value: &str) -> Option<FeatureId> {
+    if value.to_ascii_lowercase().contains("anchor-size(") {
+        return FeatureId::new("css.function.anchor-size");
+    }
     let id = match name {
         // `vertical-align` expands to baseline-source: auto; css-wide keywords come from that expansion; only `first`/`last` are the author's.
         "baseline-source"

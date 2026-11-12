@@ -2,7 +2,72 @@ use super::*;
 use serde::Deserialize;
 use winit::dpi::{LogicalPosition, LogicalSize};
 use winit::monitor::Fullscreen;
-use winit::window::WindowAttributes;
+use winit::window::{UserAttentionType, WindowAttributes};
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct WindowLimits {
+    min: Option<(u32, u32)>,
+    max: Option<(u32, u32)>,
+}
+
+impl WindowLimits {
+    fn validate(self) -> Result<Self, RpcError> {
+        for size in [self.min, self.max].into_iter().flatten() {
+            if !(1..=8192).contains(&size.0) || !(1..=8192).contains(&size.1) {
+                return Err(RpcError::invalid_params(
+                    "Window constraints must be 1..8192 CSS pixels",
+                ));
+            }
+        }
+        if let (Some(min), Some(max)) = (self.min, self.max) {
+            if min.0 > max.0 || min.1 > max.1 {
+                return Err(RpcError::invalid_params(
+                    "Minimum size must not exceed maximum size",
+                ));
+            }
+        }
+        Ok(self)
+    }
+    fn clamp(self, width: u32, height: u32) -> (u32, u32) {
+        let min = self.min.unwrap_or((1, 1));
+        let max = self.max.unwrap_or((8192, 8192));
+        (width.clamp(min.0, max.0), height.clamp(min.1, max.1))
+    }
+    fn value(self) -> Value {
+        json!({"min_width":self.min.map(|s|s.0),"min_height":self.min.map(|s|s.1),
+            "max_width":self.max.map(|s|s.0),"max_height":self.max.map(|s|s.1)})
+    }
+}
+
+/// Missing means unchanged, explicit null means remove a constraint.
+fn patch_value<'de, D>(deserializer: D) -> Result<Option<Option<u32>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<u32>::deserialize(deserializer).map(Some)
+}
+fn paired_size(width: Option<u32>, height: Option<u32>) -> Result<Option<(u32, u32)>, RpcError> {
+    match (width, height) {
+        (None, None) => Ok(None),
+        (Some(w), Some(h)) => Ok(Some((w, h))),
+        _ => Err(RpcError::invalid_params(
+            "Size constraints require both width and height",
+        )),
+    }
+}
+fn patched_size(
+    previous: Option<(u32, u32)>,
+    width: Option<Option<u32>>,
+    height: Option<Option<u32>>,
+) -> Result<Option<(u32, u32)>, RpcError> {
+    match (width, height) {
+        (None, None) => Ok(previous),
+        (Some(w), Some(h)) => paired_size(w, h),
+        _ => Err(RpcError::invalid_params(
+            "Update or clear both dimensions of a size constraint",
+        )),
+    }
+}
 
 fn decode<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, RpcError> {
     serde_json::from_value(value).map_err(|e| RpcError::invalid_params(e.to_string()))
@@ -17,9 +82,9 @@ fn title_ok(title: &str) -> Result<(), RpcError> {
     }
 }
 fn size_ok(width: u32, height: u32) -> Result<(), RpcError> {
-    if !(160..=8192).contains(&width) || !(120..=8192).contains(&height) {
+    if !(1..=8192).contains(&width) || !(1..=8192).contains(&height) {
         Err(RpcError::invalid_params(
-            "Logical window size must be 160..8192 by 120..8192",
+            "Logical window size must be 1..8192 by 1..8192 CSS pixels",
         ))
     } else {
         Ok(())
@@ -48,6 +113,10 @@ struct CreateWindow {
     visible: bool,
     #[serde(default = "yes")]
     resizable: bool,
+    min_width: Option<u32>,
+    min_height: Option<u32>,
+    max_width: Option<u32>,
+    max_height: Option<u32>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -69,6 +138,20 @@ struct SetWindow {
     focus: Option<bool>,
     x: Option<i32>,
     y: Option<i32>,
+    #[serde(default, deserialize_with = "patch_value")]
+    min_width: Option<Option<u32>>,
+    #[serde(default, deserialize_with = "patch_value")]
+    min_height: Option<Option<u32>>,
+    #[serde(default, deserialize_with = "patch_value")]
+    max_width: Option<Option<u32>>,
+    #[serde(default, deserialize_with = "patch_value")]
+    max_height: Option<Option<u32>>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Attention {
+    window_id: String,
+    kind: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -85,6 +168,13 @@ struct Text {
 #[serde(deny_unknown_fields)]
 struct Target {
     target: String,
+    window_id: Option<String>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RevealFile {
+    path: PathBuf,
+    window_id: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -177,6 +267,7 @@ impl Host {
                 self.create_window(params, event_loop)?
             }
             "window.set" => self.set_window(params)?,
+            "window.request_attention" => self.request_attention(params)?,
             "window.get" => {
                 let key: WindowKey = decode(params)?;
                 self.describe_window(&key.window_id)?
@@ -216,6 +307,7 @@ impl Host {
             }
             "desktop.paths" => platform::standard_paths(&self.config.app.id)
                 .map_err(|e| RpcError::unavailable(e.to_string()))?,
+            "desktop.preferences" => self.preferences.snapshot().value(),
             "desktop.open_external" => {
                 if self.headless {
                     return Err(RpcError::unsupported(
@@ -224,11 +316,33 @@ impl Host {
                 }
                 let target: Target = decode(params)?;
                 validate_external_target(&target.target)?;
-                self.start_job(reply, None, JobKind::External, move || {
-                    platform::open_external(&target.target)
-                        .map_err(|e| RpcError::unavailable(e.to_string()))?;
-                    Ok(json!({"accepted":true}))
-                })?;
+                self.start_external(
+                    reply,
+                    target.window_id,
+                    platform::external::Operation::Open(target.target),
+                )?;
+                return Ok(None);
+            }
+            "desktop.reveal_file" => {
+                let request: RevealFile = decode(params)?;
+                let text = request
+                    .path
+                    .to_str()
+                    .ok_or_else(|| RpcError::invalid_params("Reveal requires a Unicode path"))?;
+                if !request.path.is_absolute()
+                    || text.is_empty()
+                    || text.len() > 32768
+                    || text.chars().any(char::is_control)
+                {
+                    return Err(RpcError::invalid_params(
+                        "Reveal requires a bounded absolute local path",
+                    ));
+                }
+                self.start_external(
+                    reply,
+                    request.window_id,
+                    platform::external::Operation::Reveal(request.path),
+                )?;
                 return Ok(None);
             }
             "clipboard.write_text" => {
@@ -300,6 +414,17 @@ impl Host {
         }
         title_ok(&request.title)?;
         size_ok(request.width, request.height)?;
+        if !self.headless && cfg!(target_os = "linux") && !request.visible {
+            return Err(RpcError::unsupported(
+                "The pinned Wayland backend cannot create a hidden top-level window",
+            ));
+        }
+        let limits = WindowLimits {
+            min: paired_size(request.min_width, request.min_height)?,
+            max: paired_size(request.max_width, request.max_height)?,
+        }
+        .validate()?;
+        (request.width, request.height) = limits.clamp(request.width, request.height);
         let id = format!("w{}", self.next_window);
         self.next_window += 1;
         let mut probe = Probe::default();
@@ -318,13 +443,18 @@ impl Host {
         } else {
             let event_loop =
                 event_loop.ok_or_else(|| RpcError::unavailable("Native surfaces are not ready"))?;
-            let attributes = WindowAttributes::default()
+            let mut attributes = WindowAttributes::default()
                 .with_title(request.title.clone())
                 .with_window_icon(Some(self.icon.clone()))
                 .with_surface_size(LogicalSize::new(request.width, request.height))
-                .with_min_surface_size(LogicalSize::new(480, 320))
                 .with_resizable(request.resizable)
                 .with_visible(false);
+            if let Some((w, h)) = limits.min {
+                attributes = attributes.with_min_surface_size(LogicalSize::new(w, h));
+            }
+            if let Some((w, h)) = limits.max {
+                attributes = attributes.with_max_surface_size(LogicalSize::new(w, h));
+            }
             #[cfg(target_os = "linux")]
             let attributes = attributes.with_platform_attributes(Box::new(
                 winit::platform::wayland::WindowAttributesWayland::default()
@@ -377,6 +507,7 @@ impl Host {
                 ime_quiet_until: None,
                 preedit_cleared: false,
                 ime_sent: None,
+                incoming_drop: None,
             };
             native::update_ime(&probe, &mut native);
             native.window.set_visible(request.visible);
@@ -390,6 +521,8 @@ impl Host {
                 width: request.width,
                 height: request.height,
                 visible: request.visible,
+                resizable: request.resizable,
+                limits,
                 native,
                 probe,
                 document: None,
@@ -405,11 +538,22 @@ impl Host {
             .get(id)
             .ok_or_else(|| RpcError::closed("Window does not exist"))?;
         let native = record.native.as_ref();
+        let observed = json!({
+            "focused":native.map(|n|n.window.has_focus()),
+            "minimized":native.and_then(|n|n.window.is_minimized()),
+            "maximized":native.map(|n|n.window.is_maximized()),
+            "fullscreen":native.map(|n|n.window.fullscreen().is_some()),
+            "resizable":native.map(|n|n.window.is_resizable()),
+            "visible":native.and_then(|n|n.window.is_visible()),
+            "theme":native.and_then(|n|n.window.theme()).map(|t|if t==winit::window::Theme::Dark {"dark"}else{"light"}),
+            "position":native.and_then(|n|n.window.outer_position().ok()).map(|p|json!({"x":p.x,"y":p.y,"unit":"physical_pixels"})),
+        });
         Ok(
             json!({"window_id":id,"title":record.title,"width":record.width,"height":record.height,
             "visible":record.visible,"native":native.is_some(),"scale_factor":native.map_or(1.0, |n| n.window.scale_factor()),
             "physical_size":native.map(|n| {let s=n.window.surface_size(); json!({"width":s.width,"height":s.height})}),
-            "closing":record.closing}),
+            "requested":{"visible":record.visible,"resizable":record.resizable,"size_constraints":record.limits.value()},
+            "observed":observed,"closing":record.closing}),
         )
     }
 
@@ -422,14 +566,30 @@ impl Host {
         if window.closing {
             return Err(RpcError::closed("Window is closing"));
         }
-        let width = request.width.unwrap_or(window.width);
-        let height = request.height.unwrap_or(window.height);
+        let width = request.width.unwrap_or(window.width.max(1));
+        let height = request.height.unwrap_or(window.height.max(1));
         size_ok(width, height)?;
+        let limits = WindowLimits {
+            min: patched_size(window.limits.min, request.min_width, request.min_height)?,
+            max: patched_size(window.limits.max, request.max_width, request.max_height)?,
+        }
+        .validate()?;
+        let (width, height) = limits.clamp(width, height);
         if let Some(title) = &request.title {
             title_ok(title)?;
         }
         if request.x.is_some() != request.y.is_some() {
             return Err(RpcError::invalid_params("Position requires both x and y"));
+        }
+        if window.native.is_some() && cfg!(target_os = "linux") {
+            if request.visible.is_some() {
+                return Err(RpcError::unsupported(
+                    "The pinned Wayland backend cannot show or hide an existing top-level window",
+                ));
+            }
+            if request.focus == Some(true) {
+                return Err(RpcError::unsupported("Wayland focus is compositor-owned; use request_attention for an advisory request"));
+            }
         }
         if !cfg!(target_os = "windows") && request.x.is_some() {
             return Err(RpcError::unsupported(
@@ -444,10 +604,22 @@ impl Host {
             ));
         }
         if let Some(native) = &window.native {
+            if limits != window.limits {
+                // Clear the old opposite bound first: both changes were validated
+                // atomically above, and a shrinking max must not cross an old min.
+                native.window.set_min_surface_size(None);
+                native.window.set_max_surface_size(None);
+                native
+                    .window
+                    .set_min_surface_size(limits.min.map(|(w, h)| LogicalSize::new(w, h).into()));
+                native
+                    .window
+                    .set_max_surface_size(limits.max.map(|(w, h)| LogicalSize::new(w, h).into()));
+            }
             if let Some(title) = &request.title {
                 native.window.set_title(title);
             }
-            if request.width.is_some() || request.height.is_some() {
+            if request.width.is_some() || request.height.is_some() || limits != window.limits {
                 let _ = native
                     .window
                     .request_surface_size(LogicalSize::new(width, height).into());
@@ -485,6 +657,10 @@ impl Host {
         }
         window.width = width;
         window.height = height;
+        window.limits = limits;
+        if let Some(resizable) = request.resizable {
+            window.resizable = resizable;
+        }
         if let Some(visible) = request.visible {
             window.visible = visible;
         }
@@ -492,43 +668,113 @@ impl Host {
         self.describe_window(&request.window_id)
     }
 
-    fn start_job<F>(
+    fn request_attention(&self, params: Value) -> Result<Value, RpcError> {
+        let request: Attention = decode(params)?;
+        let kind = match request.kind.as_deref() {
+            Some("critical") => Some(UserAttentionType::Critical),
+            Some("informational") => Some(UserAttentionType::Informational),
+            None => None,
+            _ => {
+                return Err(RpcError::invalid_params(
+                    "Attention kind must be critical, informational, or null",
+                ))
+            }
+        };
+        let record = self
+            .windows
+            .get(&request.window_id)
+            .ok_or_else(|| RpcError::closed("Window does not exist"))?;
+        if record.closing {
+            return Err(RpcError::closed("Window is closing"));
+        }
+        let native = record
+            .native
+            .as_ref()
+            .ok_or_else(|| RpcError::unsupported("Attention requires a native desktop window"))?;
+        #[cfg(target_os = "linux")]
+        {
+            if kind.is_none() {
+                return Err(RpcError::unsupported(
+                    "Wayland leaves clearing an attention request to the compositor",
+                ));
+            }
+            // The portable attention method returns no result. A token request
+            // first verifies that this compositor actually has xdg-activation;
+            // its unused completion is harmless and never changes focus.
+            let window = native
+                .window
+                .cast_ref::<winit::platform::wayland::Window>()
+                .ok_or_else(|| {
+                    RpcError::unsupported("Attention requires the Wayland native backend")
+                })?;
+            window.request_activation_token().map_err(|e| {
+                RpcError::unsupported(format!("Compositor attention unavailable: {e}"))
+            })?;
+        }
+        native.window.request_user_attention(kind);
+        Ok(
+            json!({"requested":true,"kind":request.kind,"presented":null,
+            "policy":"The window manager decides whether and how to present attention"}),
+        )
+    }
+
+    fn start_external(
         &mut self,
         reply: Option<Reply>,
         parent: Option<String>,
-        kind: JobKind,
-        work: F,
-    ) -> Result<(), RpcError>
-    where
-        F: FnOnce() -> Result<Value, RpcError> + Send + 'static,
-    {
+        operation: platform::external::Operation,
+    ) -> Result<(), RpcError> {
+        if self.headless {
+            return Err(RpcError::unsupported(
+                "External services require a desktop session",
+            ));
+        }
         if self.jobs.len() >= 16 || self.jobs.len() + self.transfers.len() >= protocol::MAX_PENDING
         {
             return Err(RpcError::busy(
                 "Native service worker or pending request limit reached",
             ));
         }
+        let native_parent = parent
+            .as_ref()
+            .map(|id| {
+                let record = self
+                    .windows
+                    .get(id)
+                    .ok_or_else(|| RpcError::closed("External-service parent does not exist"))?;
+                if record.closing {
+                    return Err(RpcError::closed("External-service parent is closing"));
+                }
+                record
+                    .native
+                    .as_ref()
+                    .map(|n| n.window.clone())
+                    .ok_or_else(|| RpcError::unavailable("Native parent unavailable"))
+            })
+            .transpose()?;
         let id = self.next_job;
         self.next_job += 1;
         let sender = self.job_tx.clone();
         let wake = self.wake.clone();
-        std::thread::Builder::new()
-            .name("ui4me-native-service".into())
-            .spawn(move || {
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(work))
-                    .unwrap_or_else(|_| Err(RpcError::internal("Native service worker panicked")));
+        let handle = platform::external::start(
+            native_parent,
+            operation,
+            Box::new(move |result| {
+                let result =
+                    result.map_err(|e| RpcError::unavailable(format!("External service: {e:#}")));
                 let _ = sender.send(JobResult { id, value: result });
                 wake();
-            })
-            .map_err(|e| RpcError::unavailable(e.to_string()))?;
+            }),
+        )
+        .map_err(|e| RpcError::unavailable(e.to_string()))?;
         self.jobs.insert(
             id,
             PendingJob {
                 reply,
                 parent,
-                kind,
+                kind: JobKind::External,
                 cancelled: false,
-                dialog: None,
+                dialog: Some(handle),
             },
         );
         Ok(())
@@ -684,6 +930,79 @@ mod tests {
         assert!(title_ok("bad\0title").is_err());
         assert!(decode::<CreateWindow>(json!({"width":-1})).is_err());
         assert!(decode::<CreateWindow>(json!({"unsupported":true})).is_err());
+    }
+    #[test]
+    fn constraints_are_atomic_paired_and_explicitly_clearable() {
+        let limit = WindowLimits {
+            min: Some((300, 200)),
+            max: Some((600, 500)),
+        }
+        .validate()
+        .unwrap();
+        assert_eq!(limit.clamp(100, 900), (300, 500));
+        assert!(WindowLimits {
+            min: Some((700, 200)),
+            ..limit
+        }
+        .validate()
+        .is_err());
+        assert!(paired_size(Some(100), None).is_err());
+        let unchanged: SetWindow = decode(json!({"window_id":"w1"})).unwrap();
+        assert_eq!(
+            patched_size(limit.min, unchanged.min_width, unchanged.min_height).unwrap(),
+            limit.min
+        );
+        let clear: SetWindow =
+            decode(json!({"window_id":"w1","min_width":null,"min_height":null})).unwrap();
+        assert_eq!(
+            patched_size(limit.min, clear.min_width, clear.min_height).unwrap(),
+            None
+        );
+        assert!(patched_size(limit.min, Some(None), None).is_err());
+    }
+    #[test]
+    fn headless_state_does_not_invent_os_observations() {
+        let mut host = super::super::tests::controller(true);
+        let window = host
+            .create_window(
+                json!({"width":50,"height":40,"min_width":100,"min_height":80}),
+                None,
+            )
+            .unwrap();
+        let id = window["window_id"].as_str().unwrap();
+        assert_eq!(window["width"], 100);
+        assert_eq!(window["height"], 80);
+        assert_eq!(window["requested"]["size_constraints"]["min_width"], 100);
+        for key in [
+            "focused",
+            "minimized",
+            "maximized",
+            "fullscreen",
+            "visible",
+            "resizable",
+            "position",
+        ] {
+            assert!(
+                window["observed"][key].is_null(),
+                "{key} must remain unknown"
+            );
+        }
+        assert!(host.set_window(json!({"window_id":id,"min_width":600,"min_height":400,"max_width":200,"max_height":100})).is_err());
+        assert_eq!(
+            host.describe_window(id).unwrap()["requested"]["size_constraints"]["min_width"],
+            100
+        );
+        let cleared = host
+            .set_window(json!({"window_id":id,"min_width":null,"min_height":null}))
+            .unwrap();
+        assert!(cleared["requested"]["size_constraints"]["min_width"].is_null());
+        assert!(host
+            .request_attention(json!({"window_id":id,"kind":"informational"}))
+            .is_err());
+        assert_eq!(
+            host.capabilities()["features"]["file_dialogs"]["available"],
+            false
+        );
     }
     #[cfg(unix)]
     #[test]

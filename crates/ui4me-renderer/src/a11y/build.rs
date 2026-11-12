@@ -15,6 +15,7 @@ use std::collections::{BTreeMap, HashMap};
 use ui4me_document::document::Document;
 use ui4me_document::node::{ElementData, NodeKind};
 use ui4me_engine_types::ids::NodeId;
+use unicode_segmentation::UnicodeSegmentation;
 
 /// Tag bit of the text-run children of a text field (013 adapter-threading §5: a derived id space).
 pub(crate) const TEXT_RUN_TAG: u64 = 1 << 63;
@@ -140,6 +141,8 @@ pub fn build(input: &BuildInput<'_>) -> A11yTree {
             children,
             run: None,
             selection: None,
+            structure: super::Structure::default(),
+            relations: super::Relations::default(),
         },
     );
     let title = if input.title.is_empty() {
@@ -166,6 +169,8 @@ pub fn build(input: &BuildInput<'_>) -> A11yTree {
             children: vec![doc_key],
             run: None,
             selection: None,
+            structure: super::Structure::default(),
+            relations: super::Relations::default(),
         },
     );
     // Only nodes reachable from the root stay (static text folded into a name, for one, was built
@@ -180,6 +185,7 @@ pub fn build(input: &BuildInput<'_>) -> A11yTree {
         }
     }
     b.nodes.retain(|id, _| reachable.contains(id));
+    super::metadata::decorate(d, &mut b.nodes);
     let focus = input
         .focused
         .map(node_key)
@@ -205,6 +211,7 @@ struct Builder<'a> {
     labels_for: HashMap<String, Vec<NodeId>>,
     /// Element ids (first in tree order wins).
     ids: HashMap<String, NodeId>,
+    referenced: std::collections::HashSet<String>,
 }
 
 fn collapse(s: &str) -> String {
@@ -270,10 +277,13 @@ fn aria_role(token: &str, e: &ElementData) -> Option<Option<Role>> {
         "img" | "image" => Role::Image,
         "figure" => Role::Figure,
         "group" => Role::Group,
-        "table" | "grid" | "treegrid" => Role::Table,
+        "table" => Role::Table,
+        "grid" => Role::Grid,
+        "treegrid" => Role::TreeGrid,
         "row" => Role::Row,
         "rowgroup" => return Some(None),
-        "cell" | "gridcell" => Role::Cell,
+        "cell" => Role::Cell,
+        "gridcell" => Role::GridCell,
         "columnheader" => Role::ColumnHeader,
         "rowheader" => Role::RowHeader,
         "article" => Role::Article,
@@ -309,6 +319,7 @@ fn name_from_content(r: Role) -> bool {
             | Role::Link
             | Role::Heading
             | Role::Cell
+            | Role::GridCell
             | Role::ColumnHeader
             | Role::RowHeader
             | Role::ListBoxOption
@@ -436,10 +447,26 @@ impl<'a> Builder<'a> {
         let d = input.document;
         let mut labels_for: HashMap<String, Vec<NodeId>> = HashMap::new();
         let mut ids: HashMap<String, NodeId> = HashMap::new();
+        let mut referenced = std::collections::HashSet::new();
         for n in d.arena().subtree(d.document_node()) {
             let Some(e) = d.arena().get(n).and_then(|x| x.as_element()) else {
                 continue;
             };
+            for attr in [
+                "aria-labelledby",
+                "aria-describedby",
+                "aria-controls",
+                "aria-details",
+                "aria-flowto",
+                "aria-owns",
+                "aria-activedescendant",
+                "aria-errormessage",
+                "headers",
+            ] {
+                if let Some(value) = e.attr(attr) {
+                    referenced.extend(tokens(value).map(str::to_owned));
+                }
+            }
             if let Some(id) = e.attr("id").filter(|s| !s.is_empty()) {
                 ids.entry(id.to_string()).or_insert(n);
             }
@@ -455,6 +482,7 @@ impl<'a> Builder<'a> {
             nodes: BTreeMap::new(),
             labels_for,
             ids,
+            referenced,
         }
     }
 
@@ -600,7 +628,10 @@ impl<'a> Builder<'a> {
                     "polite" | "assertive"
                 )
             });
-            if !(focusable || named || live) {
+            let semantic_boundary = e.attr("aria-busy").is_some()
+                || e.attr("aria-atomic").is_some()
+                || e.attr("id").is_some_and(|id| self.referenced.contains(id));
+            if !(focusable || named || live || semantic_boundary) {
                 return self.walk_children(n);
             }
             return self.make(n, e, Role::GenericContainer, focusable);
@@ -701,6 +732,8 @@ impl<'a> Builder<'a> {
                 children,
                 run: None,
                 selection,
+                structure: super::Structure::default(),
+                relations: super::Relations::default(),
             },
         );
         vec![id]
@@ -740,15 +773,16 @@ impl<'a> Builder<'a> {
         let mut runs: Vec<(u64, RunText)> = Vec::new();
         for (li, line) in lines.iter().enumerate().take(MAX_RUNS) {
             let (start, end) = (line.start.min(len16), line.end.min(len16));
-            // Characters: the layout's clusters, gaps (and a missing layout) filled per code point.
+            // Characters: the layout's clusters, with gaps filled by the same Unicode grapheme
+            // segmentation used by the editor. AccessKit's byte lengths must cover the full text.
             let mut chars: Vec<RunChar> = Vec::new();
             let mut clusters = line.clusters.clone();
             clusters.sort_by_key(|c| c.0);
             let mut at = start;
             let fill = |chars: &mut Vec<_>, from: u32, to: u32| {
                 let mut o = from;
-                for c in value[byte(from)..byte(to)].chars() {
-                    let w = c.len_utf16() as u32;
+                for c in value[byte(from)..byte(to)].graphemes(true) {
+                    let w = c.encode_utf16().count() as u32;
                     chars.push((o, o + w, None, false));
                     o += w;
                 }
@@ -771,30 +805,39 @@ impl<'a> Builder<'a> {
                 ..RunText::default()
             };
             let mut text = String::new();
-            let mut prev_space = false;
             let mut last_x = if rtl { rb.x + rb.w } else { rb.x };
-            for (i, &(s, e, ext, _)) in chars.iter().enumerate() {
+            for &(s, e, ext, _) in &chars {
                 let piece = if password {
                     "\u{2022}"
                 } else {
                     &value[byte(s)..byte(e)]
                 };
-                text.push_str(piece);
-                run.offsets.push(s);
-                run.lengths.push(piece.len().min(255) as u8);
                 let (x0, x1) = ext.unwrap_or((last_x, last_x));
                 last_x = if rtl { x0 } else { x1 };
-                run.positions.push(if rtl {
+                let position = if rtl {
                     (rb.x + rb.w - x1) as f32
                 } else {
                     (x0 - rb.x) as f32
-                });
-                run.widths.push((x1 - x0) as f32);
-                let space = piece.chars().all(char::is_whitespace);
-                if i > 0 && i < 256 && prev_space && !space {
-                    run.word_starts.push(i as u8);
+                };
+                // A pathological extended grapheme can be longer than AccessKit's u8 length
+                // field. Split only that exceptional case at scalar boundaries; never truncate
+                // its byte count (which creates invalid native text ranges).
+                let mut remaining = piece;
+                let mut offset = s;
+                while !remaining.is_empty() {
+                    let mut end = remaining.len().min(u8::MAX as usize);
+                    while !remaining.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    let part = &remaining[..end];
+                    text.push_str(part);
+                    run.offsets.push(offset);
+                    run.lengths.push(end as u8);
+                    run.positions.push(position);
+                    run.widths.push((x1 - x0) as f32);
+                    offset += part.encode_utf16().count() as u32;
+                    remaining = &remaining[end..];
                 }
-                prev_space = space;
             }
             if hard_break {
                 text.push('\n');
@@ -809,6 +852,22 @@ impl<'a> Builder<'a> {
                 run.offsets.push(end + 1);
             } else {
                 run.offsets.push(end);
+            }
+            let mut byte_starts = Vec::with_capacity(run.lengths.len());
+            let mut byte_start = 0;
+            for &length in &run.lengths {
+                byte_starts.push(byte_start);
+                byte_start += usize::from(length);
+            }
+            for (byte, segment) in text.split_word_bound_indices() {
+                if byte == 0 || segment.chars().all(char::is_whitespace) {
+                    continue;
+                }
+                if let Ok(index) = byte_starts.binary_search(&byte)
+                    && index < 256
+                {
+                    run.word_starts.push(index as u8);
+                }
             }
             let rid = run_key(id, li);
             let mut node = plain(
@@ -1388,11 +1447,19 @@ impl<'a> Builder<'a> {
             expanded,
             selected,
             required,
-            invalid: aria_invalid || user_invalid,
+            invalid: aria_invalid
+                || user_invalid
+                || (self.d.will_validate(n)
+                    && cs.is_some_and(|c| !c.custom_validity_message.is_empty())),
             read_only,
             modal,
             multiselectable,
             live,
+            busy: attr_true(e, "aria-busy"),
+            live_atomic: e
+                .attr("aria-atomic")
+                .map(|v| v.trim().eq_ignore_ascii_case("true"))
+                .unwrap_or(matches!(role, Role::Status | Role::Alert)),
         }
     }
 
@@ -1580,5 +1647,7 @@ fn plain(
         children: Vec::new(),
         run: None,
         selection: None,
+        structure: super::Structure::default(),
+        relations: super::Relations::default(),
     }
 }
