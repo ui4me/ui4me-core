@@ -1,0 +1,55 @@
+# PowerShell binding CI. Never publishes; Gallery release is the separate manual
+# publish-powershell.yaml workflow.
+name: PowerShell binding CI
+on:
+  pull_request:
+    paths: ['powershell/**', 'skills/ui4me-powershell/**', 'docs/reference/powershell-api.md', 'tools/release/*psgallery*', 'tools/release/sync_powershell_docs.py', '.github/workflows/test-powershell.yaml']
+  push:
+    branches: [main]
+    paths: ['powershell/**', 'skills/ui4me-powershell/**', 'docs/reference/powershell-api.md', 'tools/release/*psgallery*', 'tools/release/sync_powershell_docs.py', '.github/workflows/test-powershell.yaml']
+permissions:
+  contents: read
+jobs:
+  module-qa:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Skill reference matches the command reference
+        run: python tools/release/sync_powershell_docs.py --check
+      - name: PowerShell 7 manifest, import and Pester
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSVersionTable.PSVersion.ToString()
+          Test-ModuleManifest powershell/UI4ME.Core/UI4ME.Core.psd1 | Out-Null
+          Import-Module ./powershell/UI4ME.Core/UI4ME.Core.psd1 -Force
+          if (-not (Get-Module -ListAvailable Pester | Where-Object Version -GE ([version]'5.5.0'))) {
+            Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
+          }
+          Import-Module Pester -MinimumVersion 5.5.0
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'powershell/tests'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $config
+      - name: Windows PowerShell 5.1 import and Pester
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSVersionTable.PSVersion.ToString()
+          if (-not (Get-Module -ListAvailable Pester | Where-Object Version -GE ([version]'5.5.0'))) {
+            Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
+          }
+          Import-Module Pester -MinimumVersion 5.5.0
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'powershell/tests'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $config

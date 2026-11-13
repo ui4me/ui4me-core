@@ -1,0 +1,216 @@
+# Only manual dispatch. Independent from the Python/PyPI publish.yaml workflow.
+# PSGallery uses a Gallery API key (NOT the PyPI OIDC trusted publisher).
+name: Publish UI4ME.Core to PowerShell Gallery
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'PowerShell module and Python release version (1.0.0)'
+        required: true
+        default: '1.0.0'
+        type: string
+      confirmation:
+        description: 'Type publish-powershell-1.0.0'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: ui4me-psgallery-${{ inputs.version }}
+  cancel-in-progress: false
+jobs:
+  build-and-check:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify explicit confirmation, version and source manifest
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$VERSION" = 1.0.0
+          test "$CONFIRMATION" = "publish-powershell-$VERSION"
+          grep -Fq "ModuleVersion = '$VERSION'" powershell/UI4ME.Core/UI4ME.Core.psd1
+          python tools/release/verify_source.py
+          python tools/verify_package.py
+      - name: Download canonical Python release wheels (same qualified Rust hosts)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null
+          mkdir -p wheels
+          gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" --dir wheels \
+            --pattern '*manylinux_2_34_x86_64.whl' --pattern '*win_amd64.whl' --pattern SHA256SUMS
+          test "$(find wheels -maxdepth 1 -type f -name '*.whl' | wc -l)" -eq 2
+          test -s wheels/SHA256SUMS
+          python - <<'PYWHEELS'
+          import pathlib, re
+          w=pathlib.Path('wheels')
+          files=sorted(p.name for p in w.glob('*.whl'))
+          sums=(w/'SHA256SUMS').read_text()
+          for f in files:
+              if not re.search(r'^[0-9a-fA-F]{64}\s+\*?'+re.escape(f)+r'$',sums,re.M):
+                  raise SystemExit('Missing wheel from checksum file: '+f)
+          PYWHEELS
+          (cd wheels && sha256sum -c SHA256SUMS --ignore-missing)
+      - name: Stage complete cross-platform module from released wheels
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/release/build_psgallery.py \
+            --linux-wheel "$(find wheels -name '*manylinux_2_34_x86_64.whl' -print -quit)" \
+            --windows-wheel "$(find wheels -name '*win_amd64.whl' -print -quit)" \
+            --source-identity "$(git rev-parse HEAD)" \
+            --out dist/psgallery
+          python tools/release/verify_psgallery.py dist/psgallery/UI4ME.Core
+      - name: PowerShell module and static unit verification
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Test-ModuleManifest dist/psgallery/UI4ME.Core/UI4ME.Core.psd1 | Out-Null
+          Import-Module ./dist/psgallery/UI4ME.Core/UI4ME.Core.psd1 -Force
+          $hostExe=Get-UI4MEHostPath
+          & $hostExe --version
+          if($LASTEXITCODE -ne 0){throw 'Host executable failed --version'}
+          if (-not (Get-Module -ListAvailable Pester | Where-Object Version -GE ([version]'5.5.0'))) {
+            Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
+          }
+          Import-Module Pester -MinimumVersion 5.5.0
+          # Test the exact staged package, not the source tree.
+          $env:UI4ME_TEST_MODULE = (Resolve-Path dist/psgallery/UI4ME.Core/UI4ME.Core.psd1).Path
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'powershell/tests'
+          $config.Run.Exit = $true
+          Invoke-Pester -Configuration $config
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui4me-powershell-staged-${{ inputs.version }}
+          path: dist/psgallery/UI4ME.Core-1.0.0.zip
+          if-no-files-found: error
+
+  windows-check:
+    needs: build-and-check
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui4me-powershell-staged-${{ inputs.version }}
+          path: staged
+      - name: Validate the staged module on PowerShell 7
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Expand-Archive staged/UI4ME.Core-1.0.0.zip -DestinationPath expanded
+          $module = Join-Path (Resolve-Path expanded).Path 'UI4ME.Core/UI4ME.Core.psd1'
+          Test-ModuleManifest $module | Out-Null
+          Import-Module $module -Force
+          & (Get-UI4MEHostPath) --version
+          if ($LASTEXITCODE -ne 0) { throw 'PS7 Windows host smoke failed' }
+          if (-not (Get-Module -ListAvailable Pester | Where-Object Version -GE ([version]'5.5.0'))) {
+            Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
+          }
+          Import-Module Pester -MinimumVersion 5.5.0
+          $env:UI4ME_TEST_MODULE = $module
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'powershell/tests'
+          $config.Run.Exit = $true
+          Invoke-Pester -Configuration $config
+      - name: Validate the staged module on Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $module = Join-Path (Resolve-Path expanded).Path 'UI4ME.Core/UI4ME.Core.psd1'
+          Import-Module $module -Force
+          & (Get-UI4MEHostPath) --version
+          if ($LASTEXITCODE -ne 0) { throw 'Windows PowerShell 5.1 host smoke failed' }
+          if (-not (Get-Module -ListAvailable Pester | Where-Object Version -GE ([version]'5.5.0'))) {
+            Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
+          }
+          Import-Module Pester -MinimumVersion 5.5.0
+          $env:UI4ME_TEST_MODULE = $module
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'powershell/tests'
+          $config.Run.Exit = $true
+          Invoke-Pester -Configuration $config
+
+  publish-psgallery:
+    needs: [build-and-check, windows-check]
+    runs-on: ubuntu-24.04
+    environment:
+      name: psgallery
+      url: https://www.powershellgallery.com/packages/UI4ME.Core/${{ inputs.version }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui4me-powershell-staged-${{ inputs.version }}
+          path: staged
+      - name: Verify and pack exact staged module
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p expanded
+          unzip -q staged/UI4ME.Core-1.0.0.zip -d expanded
+          chmod +x expanded/UI4ME.Core/runtimes/linux-x64/ui4me_core/_bin/ui4me-host
+          python tools/release/verify_psgallery.py expanded/UI4ME.Core
+      - name: Package and publish to PSGallery (manual action only)
+        shell: pwsh
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+        run: |
+          $ErrorActionPreference='Stop'
+          if([string]::IsNullOrWhiteSpace($env:PSGALLERY_API_KEY)){
+            throw 'Environment psgallery must supply the secret PSGALLERY_API_KEY'
+          }
+          $required=Get-Module -ListAvailable Microsoft.PowerShell.PSResourceGet |
+            Where-Object Version -ge ([version]'1.1.0') | Select-Object -First 1
+          if(-not $required){
+            Install-Module Microsoft.PowerShell.PSResourceGet -MinimumVersion 1.1.0 -Scope CurrentUser -Force -ErrorAction Stop
+          }
+          Import-Module Microsoft.PowerShell.PSResourceGet -MinimumVersion 1.1.0 -ErrorAction Stop
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-PSResource -Path expanded/UI4ME.Core -DestinationPath dist -ErrorAction Stop | Out-Null
+          $packages=@(Get-ChildItem -LiteralPath dist -Filter '*.nupkg' -File)
+          if($packages.Count -ne 1){throw 'Expected exactly one module .nupkg'}
+          Publish-PSResource -NupkgPath $packages[0].FullName -Repository PSGallery -ApiKey $env:PSGALLERY_API_KEY -ErrorAction Stop
+          Write-Output ('PSGallery publication submitted: ' + $packages[0].Name)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui4me-powershell-published-${{ inputs.version }}
+          path: dist/UI4ME.Core*.nupkg
+          if-no-files-found: error
+
+  github-release-asset:
+    needs: publish-psgallery
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui4me-powershell-published-${{ inputs.version }}
+          path: packages
+      - name: Attach PowerShell package to the existing qualified Python GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find packages -maxdepth 1 -type f -name '*.nupkg' | wc -l)" -eq 1
+          gh release view "v${{ inputs.version }}" --repo "$GITHUB_REPOSITORY" >/dev/null
+          gh release upload "v${{ inputs.version }}" packages/*.nupkg --repo "$GITHUB_REPOSITORY"

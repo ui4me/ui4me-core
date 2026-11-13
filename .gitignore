@@ -14,3 +14,6 @@ __pycache__/
 /dist-manylinux/
 /build/
 *.egg-info/
+
+# Native hosts are staged into the PowerShell module only by tools/release/build_psgallery.py
+powershell/UI4ME.Core/runtimes/

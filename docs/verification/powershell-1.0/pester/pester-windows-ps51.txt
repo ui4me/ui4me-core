@@ -1,0 +1,66 @@
+Pester v6.2.0
+
+Running tests from 2 files.
+
+Running tests from 'F:\ui4me\ps\src\powershell\tests\Transport.Tests.ps1'
+Describing UI4ME.Core transport against a local peer
+  [+] authenticates with host.hello 578ms
+  [+] runs a window and document lifecycle with Unicode text 93ms
+  [+] sends typed window fields with host names 123ms
+  [+] serializes arrays, nested objects and numbers faithfully 84ms
+  [+] delivers events to top-level and function-defined handlers, with nested RPC 82ms
+  [+] keeps notifications ordered and never nests them inside a running handler 18ms
+  [+] routes delegated handlers by event path and ignores stale-document events 15ms
+  [+] raises typed RPC errors with code, message and data 237ms
+  [+] times out, requests cancellation and discards the late reply 245ms
+  [+] supports explicit asynchronous cancel 7ms
+  [+] bounds queued notifications at 128 and counts drops instead of failing 1.6s
+  [+] rejects host requests beyond the queue bound with -32005 and answers the rest 1.57s
+  [+] maps, writes and presents RGBA8 frames, then retires the bitmap 124ms
+  [+] binds large frames quickly and accepts unrolled byte arrays 77ms
+  [+] returns $null from -Try while a present of the same bitmap is in progress 26ms
+  [+] invalidates the previous document, its handlers and bitmaps on replacement 17ms
+  [+] routes node operations and refuses nodes from another document 12ms
+UI4ME: document error (w-1, d-2): Renderer failed
+  [+] retires a document after a fatal document error and reports it to handlers 18ms
+  [+] applies a before-close veto, then allows and retires the window 221ms
+  [+] applies the quit policy, then shuts down on app.shutdown 11ms
+
+Describing UI4ME.Core failure handling
+  [+] refuses a wrong token 318ms
+  [+] surfaces an unexpected host disconnect 312ms
+  [+] treats a protocol violation as fatal to the connection 349ms
+  [+] fails fast when no host is listening 310ms
+
+Running tests from 'F:\ui4me\ps\src\powershell\tests\Unit.Tests.ps1'
+Describing UI4ME.Core manifest and exports
+  [+] has the 1.0.0 identity and matching manifest/module exports 30ms
+  [+] documents every exported command with a synopsis or help 800ms
+  [+] keeps module sources ASCII and gives non-ASCII scripts a BOM (Windows PowerShell 5.1 reads BOM-less files as ANSI) 910ms
+  [+] rejects connecting without host credentials 2ms
+
+Describing UI4ME JSON codec
+  [+] keeps date-like strings and numeric types 18ms
+  [+] decodes escapes and surrogate pairs 2ms
+  [+] preserves keys that differ only by case 2ms
+  [+] rejects invalid input 1.23s
+  [+] serializes PowerShell values without wrapper artifacts 80ms
+  [+] refuses values the host cannot interpret 8ms
+
+Describing New-UI4MEProject
+  [+] generates a runnable pwsh project 57ms
+  [+] generates a Windows PowerShell 5.1 project 5ms
+  [+] refuses to overwrite without -Force and validates names 15ms
+
+Describing Install-UI4MESkill
+  [+] plans without touching the file system 38ms
+  [+] installs for every agent in project scope 155ms
+  [+] refuses to replace or remove modified and unmanaged folders 72ms
+  [+] uninstalls cleanly and leaves no temporary folders 59ms
+  [+] validates agents and scope arguments 8ms
+
+Describing Get-UI4MEHostPath
+  [+] honors UI4ME_HOST_BINARY and reports a missing override 42ms
+Tests completed in 13.24s
+Tests Passed: 43, Failed: 0, Skipped: 0, Inconclusive: 0, NotRun: 0
+RESULT 5.1.20348.5756 Pester 6.2.0 passed=43 failed=0

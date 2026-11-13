@@ -1,0 +1,15 @@
+[app]
+id = "org.ui4me.PowerShellCounter"
+name = "PowerShell Counter"
+version = "1.0.0"
+
+[backend]
+program = "pwsh"
+args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "{app_dir}/backend.ps1"]
+cwd = "{app_dir}"
+
+[host]
+startup_timeout_ms = 15000
+shutdown_timeout_ms = 5000
+max_windows = 8
+instance = "single"

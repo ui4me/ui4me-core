@@ -5,6 +5,26 @@ and READY for Windows (Windows Server 2022 Desktop Experience x64, interactive R
 All gates passed on the final, unchanged source. Nothing has been published: PyPI upload and a
 GitHub Release remain a separate, manual decision. macOS is out of scope.
 
+## PowerShell module UI4ME.Core 1.0.0 (2026-11-13)
+
+**Qualified on Linux (pwsh 7.7, Pester also on 7.2) and Windows (pwsh 7.6 and Windows PowerShell 5.1)
+with the unchanged 1.0.0 native hosts.** Publication to the PowerShell Gallery is the separate manual
+workflow `publish-powershell.yaml`; its outcome is recorded here after it runs. No Rust or Python source changed; the Python release above is
+untouched.
+
+| Item | Value |
+| --- | --- |
+| Module | `UI4ME.Core` 1.0.0, 82 exported functions; `UI4ME.Core.psm1` `57ddaa5e…`, `UI4ME.Core.psd1` `bea30b74…`, `private/UI4ME.Transport.cs` `22717834…` |
+| Native hosts (from the `v1.0.0` wheels) | Linux `22ba596e499b3b8d94c4fee6092e6dd96e4e3ae9899761acd8c232831bf015e2`, Windows `c56698b654e794db2820bff73a2c8c7d658417c29ed511eaf6518a80e8ddaa47` |
+| Pester | 43/43 on Linux pwsh 7.7.0 and 7.2.24, Windows pwsh 7.6.9, Windows PowerShell 5.1.20348 |
+| Native runs | 28/28 checks on each of Linux pwsh, Windows pwsh, Windows PowerShell 5.1 (real input, real desktops); UIA COM TextPattern and Microsoft Pinyin 2/2 on both Windows editions; kill-while-streaming teardown clean on all three; doc examples 13/13; examples and generated project pass |
+| Evidence | [`docs/verification/powershell-1.0/`](verification/powershell-1.0/README.md) |
+
+Limitations: the 39 native host scenarios (screen readers, drag and drop, DPI variants) were not repeated
+with a PowerShell backend; they are host properties covered by the Core 1.0.0 evidence. Wayland refuses
+client focus/placement/un-minimize (documented); Linux/Windows x64 only; PowerShell 7.0/7.1 are refused
+at import.
+
 ## Final identities (one source, both platforms)
 
 | Item | Value |

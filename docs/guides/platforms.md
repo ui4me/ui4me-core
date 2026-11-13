@@ -6,6 +6,8 @@
 | Windows | Windows Server 2022 Desktop Experience, x86-64, normal user in interactive RDP | `py3-none-win_amd64` |
 | macOS, Linux X11, ARM64, Windows client editions, physical multi-monitor variations | Not qualified | None for 1.0.0 |
 
+The PowerShell module `UI4ME.Core` 1.0.0 contains the same two host binaries and was qualified on the same two desktops with PowerShell 7 (Linux: 7.7; Windows: 7.6) and Windows PowerShell 5.1; see the [PowerShell guide](powershell.md).
+
 These are the configurations tested for the first stable release. They are not claims that the library fails on other Linux/Windows installations; they are also not promises of universal compatibility. Native desktop testing, especially actual keyboard/IME and accessibility, cannot be replaced by running unit tests over SSH.
 
 ## Linux notes

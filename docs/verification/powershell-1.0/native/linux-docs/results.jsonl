@@ -1,0 +1,21 @@
+{"title":"UI4ME PS docs 504660","t":"2026-11-13T21:09:05.3239840Z","kind":"ready"}
+{"action":"click","kind":"request","y":20,"x":235.5,"button":"left","id":1,"t":"2026-11-13T21:09:05.3473806Z"}
+{"t":"2026-11-13T21:09:09.3162511Z","name":"guide: greet handler reads value and sets text","ms":0,"status":"pass","detail":"Hello, Grace!","kind":"check"}
+{"action":"click","kind":"request","y":98,"x":30.5,"button":"left","id":2,"t":"2026-11-13T21:09:09.3190000Z"}
+{"t":"2026-11-13T21:09:11.3184992Z","name":"README + reference: save handler and closure list","ms":0,"status":"pass","detail":"docs clicked","kind":"check"}
+{"action":"click","kind":"request","y":176,"x":20,"button":"left","id":3,"t":"2026-11-13T21:09:11.3200361Z"}
+{"action":"click","kind":"request","y":176,"x":20,"button":"left","id":4,"t":"2026-11-13T21:09:13.3489629Z"}
+{"t":"2026-11-13T21:09:15.3694464Z","name":"guide: Add-Counter closure keeps its own state","ms":0,"status":"pass","detail":2,"kind":"check"}
+{"t":"2026-11-13T21:09:15.3773650Z","name":"guide + skill: atomic batches","ms":0,"status":"pass","detail":{"attributes":{"class":"updated changed","id":"count"}},"kind":"check"}
+{"t":"2026-11-13T21:09:15.3876865Z","name":"skill: list from data with HtmlEncode","ms":0,"status":"pass","detail":"Tom & Jerry<b>bold</b>","kind":"check"}
+{"action":"click","kind":"request","y":276,"x":238.5,"button":"left","id":5,"t":"2026-11-13T21:09:15.3960640Z"}
+{"t":"2026-11-13T21:09:17.3974511Z","name":"skill: prevent submit, submit event, form data entries","ms":0,"status":"pass","detail":{"kind":"text","name":"title","value":"Draft"},"kind":"check"}
+{"t":"2026-11-13T21:09:17.4305744Z","name":"skill: window state and guide: observed maximize toggle","ms":0,"status":"pass","detail":"UI4ME PS docs 504660","kind":"check"}
+{"t":"2026-11-13T21:09:17.4325325Z","name":"skill: raw command scroll_into_view","ms":0,"status":"pass","detail":{"animating":false,"height":600,"max_x":0,"max_y":1147,"min_x":0,"min_y":0,"scrollable":true,"width":840,"x":0,"y":1131},"kind":"check"}
+{"t":"2026-11-13T21:09:17.4469517Z","name":"guide: generated resources","ms":0,"status":"pass","detail":{"bundles":{"bytes":70,"count":1,"entries":1},"cache":{"bytes":4,"entries":1,"evictions":0,"hits":0,"misses":1,"referenced_bytes":4,"reserved":0},"svg_rasters":{"bytes":0,"clamped":0,"hits":0,"rasterisations":0}},"kind":"check"}
+{"t":"2026-11-13T21:09:17.4815954Z","name":"guide + skill: live pixels snippet","ms":0,"status":"pass","detail":{"presented_to_engine":true,"sequence":1,"slot_released":true},"kind":"check"}
+{"t":"2026-11-13T21:09:17.4958049Z","name":"reference + skill: error handling snippet","ms":0,"status":"pass","detail":"Host refused: -32602 Unknown element ID: missing","kind":"check"}
+{"t":"2026-11-13T21:09:17.5028599Z","name":"guide: clipboard snippet","ms":0,"status":"pass","detail":"copied","kind":"check"}
+{"t":"2026-11-13T21:09:18.3326149Z","name":"guide: unsaved-changes close policy","ms":0,"status":"pass","detail":"vetoed while unsaved","kind":"check"}
+{"kind":"done","t":"2026-11-13T21:09:18.3328681Z"}
+{"kind":"exit","t":"2026-11-13T21:09:18.3487810Z"}

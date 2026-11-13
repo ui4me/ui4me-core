@@ -1,0 +1,6 @@
+body{font-family:system-ui,sans-serif;background:#101d31;color:#ebf3ff;padding:42px}
+main{max-width:660px;margin:0 auto;background:#1b2c48;border-radius:22px;padding:40px}
+.eyebrow{font-size:12px;letter-spacing:3px;color:#7fcde6} h1{font-size:30px}
+p{line-height:1.55;color:#b6c9e3}.number{font-size:88px;font-weight:800;margin:18px 0 28px;color:#ffffff}
+.buttons{display:flex;gap:12px}button{border:0;border-radius:10px;background:#65c5df;color:#102039;padding:13px 20px;font-size:16px;font-weight:700}
+button.secondary{background:#334e75;color:white}

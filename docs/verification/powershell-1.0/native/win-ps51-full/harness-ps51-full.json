@@ -1,0 +1,892 @@
+{
+  "edition": "ps51",
+  "mode": "full",
+  "setup": {
+    "pid": 6028,
+    "host": "C:\\Users\\ui4me_test\\Documents\\WindowsPowerShell\\Modules\\UI4ME.Core\\1.0.0\\runtimes\\win-x64\\ui4me_core\\_bin\\ui4me-host.exe",
+    "host_sha256": "c56698b654e794db2820bff73a2c8c7d658417c29ed511eaf6518a80e8ddaa47",
+    "temp": "C:\\Users\\UI4ME_~1\\AppData\\Local\\Temp",
+    "bitmaps_before": []
+  },
+  "observations": [
+    {
+      "request": {
+        "x": 450,
+        "action": "click",
+        "kind": "request",
+        "id": 1,
+        "y": 98.9375,
+        "button": "left",
+        "t": "2026-11-13T21:08:44.3094037Z"
+      },
+      "reply": {
+        "done": true
+      }
+    },
+    {
+      "request": {
+        "t": "2026-11-13T21:08:45.8833044Z",
+        "id": 2,
+        "action": "clipboard-read",
+        "kind": "request"
+      },
+      "reply": {
+        "text": "ui4me-ps-clip 3616 😀 ü"
+      }
+    },
+    {
+      "request": {
+        "t": "2026-11-13T21:08:45.9806280Z",
+        "kind": "request",
+        "id": 3,
+        "action": "clipboard-write",
+        "text": "external → PowerShell 3616 ✓"
+      },
+      "reply": {
+        "done": true
+      }
+    },
+    {
+      "request": {
+        "x": 98,
+        "action": "click",
+        "kind": "request",
+        "id": 4,
+        "y": 198.875,
+        "button": "left",
+        "t": "2026-11-13T21:08:54.8091168Z"
+      },
+      "reply": {
+        "done": true
+      }
+    },
+    {
+      "request": {
+        "x": 98,
+        "action": "click",
+        "kind": "request",
+        "id": 5,
+        "y": 198.875,
+        "button": "right",
+        "t": "2026-11-13T21:08:55.1142688Z"
+      },
+      "reply": {
+        "done": true
+      }
+    },
+    {
+      "request": {
+        "x": 98,
+        "action": "click",
+        "kind": "request",
+        "id": 6,
+        "y": 198.875,
+        "button": "middle",
+        "t": "2026-11-13T21:08:55.6954289Z"
+      },
+      "reply": {
+        "done": true
+      }
+    },
+    {
+      "request": {
+        "x": 142,
+        "action": "click",
+        "kind": "request",
+        "id": 7,
+        "y": 248.875,
+        "button": "left",
+        "t": "2026-11-13T21:08:56.2599272Z"
+      },
+      "reply": {
+        "done": true
+      }
+    },
+    {
+      "request": {
+        "t": "2026-11-13T21:08:56.8424975Z",
+        "kind": "request",
+        "id": 8,
+        "action": "type",
+        "text": "Hello PS"
+      },
+      "reply": {
+        "done": true
+      }
+    },
+    {
+      "request": {
+        "t": "2026-11-13T21:08:57.3253286Z",
+        "key": "Tab",
+        "id": 9,
+        "action": "key",
+        "kind": "request"
+      },
+      "reply": {
+        "done": true
+      }
+    },
+    {
+      "request": {
+        "x": 443.6875,
+        "action": "click",
+        "kind": "request",
+        "id": 10,
+        "y": 248.875,
+        "button": "left",
+        "t": "2026-11-13T21:08:57.6300302Z"
+      },
+      "reply": {
+        "done": true
+      }
+    },
+    {
+      "request": {
+        "id": 11,
+        "t": "2026-11-13T21:08:58.1962030Z",
+        "points": [
+          {
+            "y": 198.875,
+            "x": 98
+          },
+          {
+            "y": 198.875,
+            "x": 248
+          }
+        ],
+        "action": "clicks",
+        "kind": "request"
+      },
+      "reply": {
+        "done": true
+      }
+    },
+    {
+      "request": {
+        "title": "PS save test",
+        "t": "2026-11-13T21:08:59.0593805Z",
+        "id": 12,
+        "action": "dialog-accept",
+        "kind": "request"
+      },
+      "dialog": {
+        "hwnd": 2359596,
+        "title": "PS save test",
+        "class": "#32770",
+        "pid": 6028,
+        "rect": [
+          34,
+          57,
+          800,
+          500
+        ],
+        "frame": [
+          41,
+          57,
+          786,
+          493
+        ],
+        "client": [
+          42,
+          88,
+          784,
+          461
+        ],
+        "cx": 42,
+        "cy": 88,
+        "cw": 784,
+        "ch": 461,
+        "visible": true,
+        "iconic": false,
+        "zoomed": false,
+        "enabled": true,
+        "foreground": true,
+        "owner": 590546,
+        "style": 2529952452,
+        "exstyle": 65793,
+        "dpi": 96
+      },
+      "reply": {
+        "seen": true,
+        "caption": "PS save test",
+        "owner": 590546
+      }
+    },
+    {
+      "request": {
+        "title": "PS cancel test",
+        "t": "2026-11-13T21:09:00.4689250Z",
+        "id": 13,
+        "action": "dialog-observe",
+        "kind": "request"
+      },
+      "dialog": {
+        "hwnd": 1114804,
+        "title": "PS cancel test",
+        "class": "#32770",
+        "pid": 6028,
+        "rect": [
+          34,
+          57,
+          800,
+          500
+        ],
+        "frame": [
+          41,
+          57,
+          786,
+          493
+        ],
+        "client": [
+          42,
+          88,
+          784,
+          461
+        ],
+        "cx": 42,
+        "cy": 88,
+        "cw": 784,
+        "ch": 461,
+        "visible": true,
+        "iconic": false,
+        "zoomed": false,
+        "enabled": true,
+        "foreground": true,
+        "owner": 590546,
+        "style": 2529952452,
+        "exstyle": 65793,
+        "dpi": 96
+      },
+      "reply": {
+        "seen": true,
+        "caption": "PS cancel test",
+        "owner": 590546
+      }
+    },
+    {
+      "request": {
+        "title": "PS cancel test",
+        "t": "2026-11-13T21:09:00.7226192Z",
+        "id": 14,
+        "action": "dialog-gone",
+        "kind": "request"
+      },
+      "reply": {
+        "gone": true
+      }
+    },
+    {
+      "request": {
+        "t": "2026-11-13T21:09:01.0950361Z",
+        "expect": "minimized",
+        "id": 15,
+        "action": "observe-window",
+        "kind": "request"
+      },
+      "reply": {
+        "ok": true,
+        "window": {
+          "hwnd": 590546,
+          "title": "UI4ME PS qualification 3616",
+          "class": "Window Class",
+          "pid": 6028,
+          "rect": [
+            -32000,
+            -32000,
+            160,
+            28
+          ],
+          "frame": [
+            -31993,
+            -32000,
+            146,
+            28
+          ],
+          "client": [
+            -32000,
+            -32000,
+            0,
+            0
+          ],
+          "cx": -32000,
+          "cy": -32000,
+          "cw": 0,
+          "ch": 0,
+          "visible": true,
+          "iconic": true,
+          "zoomed": false,
+          "enabled": true,
+          "foreground": false,
+          "owner": 0,
+          "style": 919535616,
+          "exstyle": 262416,
+          "dpi": 96
+        }
+      }
+    },
+    {
+      "request": {
+        "t": "2026-11-13T21:09:01.3706049Z",
+        "expect": "normal",
+        "id": 16,
+        "action": "observe-window",
+        "kind": "request"
+      },
+      "reply": {
+        "ok": true,
+        "window": {
+          "hwnd": 590546,
+          "title": "UI4ME PS qualification 3616",
+          "class": "Window Class",
+          "pid": 6028,
+          "rect": [
+            26,
+            26,
+            916,
+            679
+          ],
+          "frame": [
+            33,
+            26,
+            902,
+            672
+          ],
+          "client": [
+            34,
+            57,
+            900,
+            640
+          ],
+          "cx": 34,
+          "cy": 57,
+          "cw": 900,
+          "ch": 640,
+          "visible": true,
+          "iconic": false,
+          "zoomed": false,
+          "enabled": true,
+          "foreground": true,
+          "owner": 0,
+          "style": 382664704,
+          "exstyle": 262416,
+          "dpi": 96
+        }
+      }
+    },
+    {
+      "request": {
+        "id": 17,
+        "y": 20,
+        "action": "drag",
+        "dy": 70,
+        "x": 100.5625,
+        "measure": "move",
+        "kind": "request",
+        "t": "2026-11-13T21:09:02.2083001Z",
+        "dx": 120
+      },
+      "reply": {
+        "moved": true,
+        "resized": false,
+        "before": [
+          26,
+          26,
+          916,
+          679
+        ],
+        "after": [
+          146,
+          96,
+          916,
+          679
+        ],
+        "edge": null
+      }
+    },
+    {
+      "request": {
+        "id": 18,
+        "y": 3,
+        "action": "drag",
+        "dy": -50,
+        "edge": "n",
+        "x": 360,
+        "measure": "resize",
+        "kind": "request",
+        "t": "2026-11-13T21:09:04.9056990Z",
+        "dx": 0
+      },
+      "reply": {
+        "moved": false,
+        "resized": true,
+        "before": [
+          300,
+          200,
+          720,
+          520
+        ],
+        "after": [
+          300,
+          150,
+          720,
+          570
+        ],
+        "edge": "n"
+      }
+    },
+    {
+      "request": {
+        "id": 19,
+        "y": 517,
+        "action": "drag",
+        "dy": 50,
+        "edge": "s",
+        "x": 360,
+        "measure": "resize",
+        "kind": "request",
+        "t": "2026-11-13T21:09:07.7680212Z",
+        "dx": 0
+      },
+      "reply": {
+        "moved": false,
+        "resized": true,
+        "before": [
+          300,
+          200,
+          720,
+          520
+        ],
+        "after": [
+          300,
+          200,
+          720,
+          570
+        ],
+        "edge": "s"
+      }
+    },
+    {
+      "request": {
+        "id": 20,
+        "y": 260,
+        "action": "drag",
+        "dy": 0,
+        "edge": "e",
+        "x": 717,
+        "measure": "resize",
+        "kind": "request",
+        "t": "2026-11-13T21:09:10.6417082Z",
+        "dx": 60
+      },
+      "reply": {
+        "moved": false,
+        "resized": true,
+        "before": [
+          300,
+          200,
+          720,
+          520
+        ],
+        "after": [
+          300,
+          200,
+          780,
+          520
+        ],
+        "edge": "e"
+      }
+    },
+    {
+      "request": {
+        "id": 21,
+        "y": 260,
+        "action": "drag",
+        "dy": 0,
+        "edge": "w",
+        "x": 3,
+        "measure": "resize",
+        "kind": "request",
+        "t": "2026-11-13T21:09:13.5453132Z",
+        "dx": -60
+      },
+      "reply": {
+        "moved": false,
+        "resized": true,
+        "before": [
+          300,
+          200,
+          720,
+          520
+        ],
+        "after": [
+          240,
+          200,
+          780,
+          520
+        ],
+        "edge": "w"
+      }
+    },
+    {
+      "request": {
+        "id": 22,
+        "y": 3,
+        "action": "drag",
+        "dy": -50,
+        "edge": "ne",
+        "x": 717,
+        "measure": "resize",
+        "kind": "request",
+        "t": "2026-11-13T21:09:16.4679274Z",
+        "dx": 60
+      },
+      "reply": {
+        "moved": false,
+        "resized": true,
+        "before": [
+          300,
+          200,
+          720,
+          520
+        ],
+        "after": [
+          300,
+          150,
+          780,
+          570
+        ],
+        "edge": "ne"
+      }
+    },
+    {
+      "request": {
+        "id": 23,
+        "y": 3,
+        "action": "drag",
+        "dy": -50,
+        "edge": "nw",
+        "x": 3,
+        "measure": "resize",
+        "kind": "request",
+        "t": "2026-11-13T21:09:19.3410719Z",
+        "dx": -60
+      },
+      "reply": {
+        "moved": false,
+        "resized": true,
+        "before": [
+          300,
+          200,
+          720,
+          520
+        ],
+        "after": [
+          240,
+          150,
+          780,
+          570
+        ],
+        "edge": "nw"
+      }
+    },
+    {
+      "request": {
+        "id": 24,
+        "y": 517,
+        "action": "drag",
+        "dy": 50,
+        "edge": "se",
+        "x": 717,
+        "measure": "resize",
+        "kind": "request",
+        "t": "2026-11-13T21:09:22.2149903Z",
+        "dx": 60
+      },
+      "reply": {
+        "moved": false,
+        "resized": true,
+        "before": [
+          300,
+          200,
+          720,
+          520
+        ],
+        "after": [
+          300,
+          200,
+          780,
+          570
+        ],
+        "edge": "se"
+      }
+    },
+    {
+      "request": {
+        "id": 25,
+        "y": 517,
+        "action": "drag",
+        "dy": 50,
+        "edge": "sw",
+        "x": 3,
+        "measure": "resize",
+        "kind": "request",
+        "t": "2026-11-13T21:09:25.1709203Z",
+        "dx": -60
+      },
+      "reply": {
+        "moved": false,
+        "resized": true,
+        "before": [
+          300,
+          200,
+          720,
+          520
+        ],
+        "after": [
+          240,
+          200,
+          780,
+          570
+        ],
+        "edge": "sw"
+      }
+    },
+    {
+      "request": {
+        "x": 698,
+        "action": "click",
+        "kind": "request",
+        "id": 26,
+        "y": 20,
+        "button": "left",
+        "t": "2026-11-13T21:09:27.4199012Z"
+      },
+      "reply": {
+        "done": true
+      }
+    },
+    {
+      "request": {
+        "x": 1518,
+        "action": "click",
+        "kind": "request",
+        "id": 27,
+        "y": 20,
+        "button": "left",
+        "t": "2026-11-13T21:09:27.9958170Z"
+      },
+      "reply": {
+        "done": true
+      }
+    },
+    {
+      "request": {
+        "x": 650,
+        "action": "click",
+        "kind": "request",
+        "id": 28,
+        "y": 20,
+        "button": "left",
+        "t": "2026-11-13T21:09:28.5969989Z"
+      },
+      "reply": {
+        "done": true
+      }
+    },
+    {
+      "request": {
+        "t": "2026-11-13T21:09:29.1566879Z",
+        "expect": "minimized",
+        "id": 29,
+        "action": "observe-window",
+        "kind": "request"
+      },
+      "reply": {
+        "ok": true,
+        "window": {
+          "hwnd": 590546,
+          "title": "UI4ME PS qualification 3616",
+          "class": "Window Class",
+          "pid": 6028,
+          "rect": [
+            -32000,
+            -32000,
+            160,
+            28
+          ],
+          "frame": [
+            -32000,
+            -32000,
+            160,
+            28
+          ],
+          "client": [
+            -32000,
+            -32000,
+            160,
+            28
+          ],
+          "cx": -32000,
+          "cy": -32000,
+          "cw": 160,
+          "ch": 28,
+          "visible": true,
+          "iconic": true,
+          "zoomed": false,
+          "enabled": true,
+          "foreground": false,
+          "owner": 0,
+          "style": 919535616,
+          "exstyle": 262416,
+          "dpi": 96
+        }
+      }
+    },
+    {
+      "request": {
+        "t": "2026-11-13T21:09:29.4860468Z",
+        "expect": "normal",
+        "id": 30,
+        "action": "observe-window",
+        "kind": "request"
+      },
+      "reply": {
+        "ok": true,
+        "window": {
+          "hwnd": 590546,
+          "title": "UI4ME PS qualification 3616",
+          "class": "Window Class",
+          "pid": 6028,
+          "rect": [
+            240,
+            200,
+            780,
+            570
+          ],
+          "frame": [
+            240,
+            200,
+            780,
+            570
+          ],
+          "client": [
+            240,
+            200,
+            780,
+            570
+          ],
+          "cx": 240,
+          "cy": 200,
+          "cw": 780,
+          "ch": 570,
+          "visible": true,
+          "iconic": false,
+          "zoomed": false,
+          "enabled": true,
+          "foreground": true,
+          "owner": 0,
+          "style": 382664704,
+          "exstyle": 262416,
+          "dpi": 96
+        }
+      }
+    },
+    {
+      "request": {
+        "t": "2026-11-13T21:09:29.7880882Z",
+        "id": 31,
+        "action": "native-close",
+        "kind": "request"
+      },
+      "reply": {
+        "done": true
+      }
+    },
+    {
+      "request": {
+        "id": 32,
+        "t": "2026-11-13T21:09:30.9641457Z",
+        "final": true,
+        "action": "native-close",
+        "kind": "request"
+      },
+      "reply": {
+        "done": true
+      }
+    }
+  ],
+  "ready_s": 0.609,
+  "window_at_ready": {
+    "hwnd": 590546,
+    "title": "UI4ME PS qualification 3616",
+    "class": "Window Class",
+    "pid": 6028,
+    "rect": [
+      26,
+      26,
+      916,
+      679
+    ],
+    "frame": [
+      33,
+      26,
+      902,
+      672
+    ],
+    "client": [
+      34,
+      57,
+      900,
+      640
+    ],
+    "cx": 34,
+    "cy": 57,
+    "cw": 900,
+    "ch": 640,
+    "visible": true,
+    "iconic": false,
+    "zoomed": false,
+    "enabled": true,
+    "foreground": false,
+    "owner": 0,
+    "style": 382664704,
+    "exstyle": 262416,
+    "dpi": 96
+  },
+  "taskbar_windows": {
+    "tree": [
+      {
+        "pid": 3616,
+        "name": "powershell.exe",
+        "ppid": 6028
+      },
+      {
+        "pid": 1112,
+        "name": "conhost.exe",
+        "ppid": 3616
+      }
+    ],
+    "visible_toplevel": [
+      {
+        "title": "UI4ME PS qualification 3616",
+        "cls": "Window Class",
+        "pid": 6028,
+        "owner": 0,
+        "exstyle": 262416
+      },
+      {
+        "title": "",
+        "cls": "Winit Thread Event Target",
+        "pid": 6028,
+        "owner": 0,
+        "exstyle": 134742176
+      }
+    ]
+  },
+  "final": {
+    "host_exit": 0,
+    "bitmaps_after": [],
+    "host_log": "{\"timestamp\":\"2026-11-13T21:08:43.670658Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"host started\",\"headless\":false,\"standalone\":false,\"containment\":\"Windows Job Object (backend assigned during creation)\"},\"target\":\"ui4me_host::host\"}\n{\"timestamp\":\"2026-11-13T21:08:44.019886Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"first frame presented\",\"window\":\"w1\",\"since_host_start_ms\":349},\"target\":\"ui4me_host::host::native\"}\n{\"timestamp\":\"2026-11-13T21:08:54.367834Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"first frame presented\",\"window\":\"w2\",\"since_host_start_ms\":10697},\"target\":\"ui4me_host::host::native\"}\n{\"timestamp\":\"2026-11-13T21:09:31.278168Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"backend output\",\"source\":\"backend\",\"stream\":\"stdout\",\"text\":\"0\"},\"target\":\"ui4me_host::logging\"}\n{\"timestamp\":\"2026-11-13T21:09:31.417426Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"host stopped\",\"exit_code\":0},\"target\":\"ui4me_host::host\"}\n",
+    "windows_left": []
+  }
+}

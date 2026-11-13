@@ -1,0 +1,140 @@
+{
+  "pester-linux-pwsh72": "RESULT 7.2.24 Pester 5.7.1 passed=43 failed=0",
+  "pester-linux-pwsh77": "RESULT 7.7.0 Pester 6.2.0 passed=43 failed=0",
+  "pester-windows-ps51": "RESULT 5.1.20348.5756 Pester 6.2.0 passed=43 failed=0",
+  "pester-windows-pwsh": "RESULT 7.6.9 Pester 6.2.0 passed=43 failed=0",
+  "linux-bitmap-kill": {
+    "mode": "bitmap-kill",
+    "checks": 0,
+    "failed": [],
+    "host_exit": 1,
+    "fatal": [],
+    "bitmap_files_after_exit": []
+  },
+  "linux-docs": {
+    "mode": "docs",
+    "checks": 13,
+    "failed": [],
+    "host_exit": 0,
+    "fatal": [],
+    "bitmap_files_after_exit": []
+  },
+  "linux-examples": [
+    {
+      "name": "counter",
+      "pass": true,
+      "exit": 0,
+      "errors": [],
+      "window_s": 1.56
+    },
+    {
+      "name": "live-bitmap",
+      "pass": true,
+      "exit": 0,
+      "errors": [],
+      "window_s": 1.56
+    },
+    {
+      "name": "frameless",
+      "pass": true,
+      "exit": 0,
+      "errors": [],
+      "window_s": 1.56
+    },
+    {
+      "name": "generated",
+      "pass": true,
+      "exit": 0,
+      "errors": [],
+      "window_s": 1.56
+    }
+  ],
+  "linux-full": {
+    "mode": "full",
+    "checks": 28,
+    "failed": [],
+    "host_exit": 0,
+    "fatal": [],
+    "bitmap_files_after_exit": []
+  },
+  "linux-idle": {
+    "mode": "idle",
+    "checks": 0,
+    "failed": [],
+    "host_exit": 0,
+    "fatal": [],
+    "bitmap_files_after_exit": []
+  },
+  "win-ps51-bitmap-kill": {
+    "edition": "ps51",
+    "mode": "bitmap-kill",
+    "checks": 0,
+    "failed": [],
+    "host_exit": 1,
+    "fatal": [],
+    "bitmaps_after": []
+  },
+  "win-ps51-full": {
+    "edition": "ps51",
+    "mode": "full",
+    "checks": 28,
+    "failed": [],
+    "host_exit": 0,
+    "fatal": [],
+    "bitmaps_after": []
+  },
+  "win-ps51-idle": {
+    "edition": "ps51",
+    "mode": "idle",
+    "checks": 0,
+    "failed": [],
+    "host_exit": 0,
+    "fatal": [],
+    "bitmaps_after": []
+  },
+  "win-ps51-winextras": {
+    "edition": "ps51",
+    "mode": "winextras",
+    "checks": 2,
+    "failed": [],
+    "host_exit": 0,
+    "fatal": [],
+    "bitmaps_after": []
+  },
+  "win-pwsh-bitmap-kill": {
+    "edition": "pwsh",
+    "mode": "bitmap-kill",
+    "checks": 0,
+    "failed": [],
+    "host_exit": 1,
+    "fatal": [],
+    "bitmaps_after": []
+  },
+  "win-pwsh-full": {
+    "edition": "pwsh",
+    "mode": "full",
+    "checks": 28,
+    "failed": [],
+    "host_exit": 0,
+    "fatal": [],
+    "bitmaps_after": []
+  },
+  "win-pwsh-idle": {
+    "edition": "pwsh",
+    "mode": "idle",
+    "checks": 0,
+    "failed": [],
+    "host_exit": 0,
+    "fatal": [],
+    "bitmaps_after": []
+  },
+  "win-pwsh-winextras": {
+    "edition": "pwsh",
+    "mode": "winextras",
+    "checks": 2,
+    "failed": [],
+    "host_exit": 0,
+    "fatal": [],
+    "bitmaps_after": []
+  }
+}

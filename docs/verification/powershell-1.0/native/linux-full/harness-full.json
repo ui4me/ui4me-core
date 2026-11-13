@@ -1,0 +1,454 @@
+{
+  "mode": "full",
+  "host": "$SCRATCH/stage/UI4ME.Core/runtimes/linux-x64/ui4me_core/_bin/ui4me-host",
+  "manifest": "/home/toor/projects/ui4me-core/powershell/tests/native/app-pwsh.toml",
+  "observations": [
+    {
+      "request": {
+        "x": 450,
+        "kind": "request",
+        "t": "2026-11-13T21:06:28.7205218Z",
+        "y": 98.9375,
+        "button": "left",
+        "action": "click",
+        "id": 1
+      }
+    },
+    {
+      "request": {
+        "id": 2,
+        "kind": "request",
+        "t": "2026-11-13T21:06:32.6242177Z",
+        "action": "clipboard-read"
+      }
+    },
+    {
+      "request": {
+        "id": 3,
+        "text": "external → PowerShell 503254 ✓",
+        "kind": "request",
+        "t": "2026-11-13T21:06:32.7327188Z",
+        "action": "clipboard-write"
+      }
+    },
+    {
+      "request": {
+        "x": 98,
+        "kind": "request",
+        "t": "2026-11-13T21:06:37.1669885Z",
+        "y": 199.875,
+        "button": "left",
+        "action": "click",
+        "id": 4
+      }
+    },
+    {
+      "request": {
+        "x": 98,
+        "kind": "request",
+        "t": "2026-11-13T21:06:38.9750127Z",
+        "y": 199.875,
+        "button": "right",
+        "action": "click",
+        "id": 5
+      }
+    },
+    {
+      "request": {
+        "x": 98,
+        "kind": "request",
+        "t": "2026-11-13T21:06:40.8527842Z",
+        "y": 199.875,
+        "button": "middle",
+        "action": "click",
+        "id": 6
+      }
+    },
+    {
+      "request": {
+        "x": 142,
+        "kind": "request",
+        "t": "2026-11-13T21:06:42.7388199Z",
+        "y": 249.875,
+        "button": "left",
+        "action": "click",
+        "id": 7
+      }
+    },
+    {
+      "request": {
+        "id": 8,
+        "text": "Hello PS",
+        "kind": "request",
+        "t": "2026-11-13T21:06:44.6105408Z",
+        "action": "type"
+      }
+    },
+    {
+      "request": {
+        "id": 9,
+        "kind": "request",
+        "key": "Tab",
+        "t": "2026-11-13T21:06:45.2182512Z",
+        "action": "key"
+      }
+    },
+    {
+      "request": {
+        "x": 446,
+        "kind": "request",
+        "t": "2026-11-13T21:06:45.4160077Z",
+        "y": 249.875,
+        "button": "left",
+        "action": "click",
+        "id": 10
+      }
+    },
+    {
+      "request": {
+        "id": 11,
+        "kind": "request",
+        "points": [
+          {
+            "x": 98,
+            "y": 199.875
+          },
+          {
+            "x": 248,
+            "y": 199.875
+          }
+        ],
+        "t": "2026-11-13T21:06:47.2989957Z",
+        "action": "clicks"
+      }
+    },
+    {
+      "request": {
+        "id": 12,
+        "kind": "request",
+        "title": "PS save test",
+        "t": "2026-11-13T21:06:49.4808518Z",
+        "action": "dialog-accept"
+      },
+      "dialog": {
+        "caption": "PS save test",
+        "pid": 2118,
+        "res": "org.freedesktop.impl.portal.desktop.kde",
+        "desktopFile": "org.freedesktop.impl.portal.desktop.kde",
+        "x": 511,
+        "y": 233.5,
+        "w": 1026,
+        "h": 569,
+        "cx": 512,
+        "cy": 261.5,
+        "cw": 1024,
+        "ch": 540,
+        "active": true,
+        "minimized": false,
+        "maximized": 0,
+        "fullScreen": false,
+        "noBorder": false,
+        "transient": true,
+        "modal": true,
+        "keepAbove": false,
+        "transientFor": "UI4ME PS qualification 503254"
+      }
+    },
+    {
+      "request": {
+        "id": 13,
+        "kind": "request",
+        "title": "PS cancel test",
+        "t": "2026-11-13T21:06:52.1754072Z",
+        "action": "dialog-observe"
+      },
+      "dialog": {
+        "caption": "PS cancel test",
+        "pid": 2118,
+        "res": "org.freedesktop.impl.portal.desktop.kde",
+        "desktopFile": "org.freedesktop.impl.portal.desktop.kde",
+        "x": 511,
+        "y": 233.5,
+        "w": 1026,
+        "h": 569,
+        "cx": 512,
+        "cy": 261.5,
+        "cw": 1024,
+        "ch": 540,
+        "active": true,
+        "minimized": false,
+        "maximized": 0,
+        "fullScreen": false,
+        "noBorder": false,
+        "transient": true,
+        "modal": true,
+        "keepAbove": false,
+        "transientFor": "UI4ME PS qualification 503254"
+      }
+    },
+    {
+      "request": {
+        "id": 14,
+        "kind": "request",
+        "title": "PS cancel test",
+        "t": "2026-11-13T21:06:52.9663366Z",
+        "action": "dialog-gone"
+      }
+    },
+    {
+      "request": {
+        "expect": "minimized",
+        "kind": "request",
+        "id": 15,
+        "t": "2026-11-13T21:06:53.7830969Z",
+        "action": "observe-window"
+      }
+    },
+    {
+      "request": {
+        "id": 16,
+        "kind": "request",
+        "t": "2026-11-13T21:06:54.5171018Z",
+        "action": "activate"
+      }
+    },
+    {
+      "request": {
+        "expect": "normal",
+        "kind": "request",
+        "id": 17,
+        "t": "2026-11-13T21:06:55.8039240Z",
+        "action": "observe-window"
+      }
+    },
+    {
+      "request": {
+        "id": 18,
+        "dy": 70,
+        "t": "2026-11-13T21:06:57.0973624Z",
+        "kind": "request",
+        "x": 107,
+        "y": 20,
+        "measure": "move",
+        "dx": 120,
+        "action": "drag"
+      }
+    },
+    {
+      "request": {
+        "id": 19,
+        "dy": -50,
+        "t": "2026-11-13T21:07:01.6221310Z",
+        "edge": "n",
+        "x": 360,
+        "y": 3,
+        "measure": "resize",
+        "dx": 0,
+        "kind": "request",
+        "action": "drag"
+      }
+    },
+    {
+      "request": {
+        "id": 20,
+        "dy": 50,
+        "t": "2026-11-13T21:07:06.1312315Z",
+        "edge": "s",
+        "x": 360,
+        "y": 517,
+        "measure": "resize",
+        "dx": 0,
+        "kind": "request",
+        "action": "drag"
+      }
+    },
+    {
+      "request": {
+        "id": 21,
+        "dy": 0,
+        "t": "2026-11-13T21:07:10.6574919Z",
+        "edge": "e",
+        "x": 717,
+        "y": 260,
+        "measure": "resize",
+        "dx": 60,
+        "kind": "request",
+        "action": "drag"
+      }
+    },
+    {
+      "request": {
+        "id": 22,
+        "dy": 0,
+        "t": "2026-11-13T21:07:15.1894027Z",
+        "edge": "w",
+        "x": 3,
+        "y": 260,
+        "measure": "resize",
+        "dx": -60,
+        "kind": "request",
+        "action": "drag"
+      }
+    },
+    {
+      "request": {
+        "id": 23,
+        "dy": -50,
+        "t": "2026-11-13T21:07:19.7206781Z",
+        "edge": "ne",
+        "x": 717,
+        "y": 3,
+        "measure": "resize",
+        "dx": 60,
+        "kind": "request",
+        "action": "drag"
+      }
+    },
+    {
+      "request": {
+        "id": 24,
+        "dy": -50,
+        "t": "2026-11-13T21:07:24.2696240Z",
+        "edge": "nw",
+        "x": 3,
+        "y": 3,
+        "measure": "resize",
+        "dx": -60,
+        "kind": "request",
+        "action": "drag"
+      }
+    },
+    {
+      "request": {
+        "id": 25,
+        "dy": 50,
+        "t": "2026-11-13T21:07:28.8086864Z",
+        "edge": "se",
+        "x": 717,
+        "y": 517,
+        "measure": "resize",
+        "dx": 60,
+        "kind": "request",
+        "action": "drag"
+      }
+    },
+    {
+      "request": {
+        "id": 26,
+        "dy": 50,
+        "t": "2026-11-13T21:07:33.8316107Z",
+        "edge": "sw",
+        "x": 3,
+        "y": 517,
+        "measure": "resize",
+        "dx": -60,
+        "kind": "request",
+        "action": "drag"
+      }
+    },
+    {
+      "request": {
+        "x": 698,
+        "kind": "request",
+        "t": "2026-11-13T21:07:37.7591744Z",
+        "y": 20,
+        "button": "left",
+        "action": "click",
+        "id": 27
+      }
+    },
+    {
+      "request": {
+        "x": 1966,
+        "kind": "request",
+        "t": "2026-11-13T21:07:39.6327567Z",
+        "y": 20,
+        "button": "left",
+        "action": "click",
+        "id": 28
+      }
+    },
+    {
+      "request": {
+        "x": 650,
+        "kind": "request",
+        "t": "2026-11-13T21:07:41.5176262Z",
+        "y": 20,
+        "button": "left",
+        "action": "click",
+        "id": 29
+      }
+    },
+    {
+      "request": {
+        "expect": "minimized",
+        "kind": "request",
+        "id": 30,
+        "t": "2026-11-13T21:07:43.3933642Z",
+        "action": "observe-window"
+      }
+    },
+    {
+      "request": {
+        "id": 31,
+        "kind": "request",
+        "t": "2026-11-13T21:07:44.1852280Z",
+        "action": "activate"
+      }
+    },
+    {
+      "request": {
+        "expect": "normal",
+        "kind": "request",
+        "id": 32,
+        "t": "2026-11-13T21:07:45.4670507Z",
+        "action": "observe-window"
+      }
+    },
+    {
+      "request": {
+        "id": 33,
+        "kind": "request",
+        "t": "2026-11-13T21:07:46.2575132Z",
+        "action": "native-close"
+      }
+    },
+    {
+      "request": {
+        "id": 34,
+        "final": true,
+        "kind": "request",
+        "t": "2026-11-13T21:07:47.5990236Z",
+        "action": "native-close"
+      }
+    }
+  ],
+  "ready_s": 1.052,
+  "window_at_ready": {
+    "caption": "UI4ME PS qualification 503254",
+    "pid": 503250,
+    "res": "org.ui4me.PowerShellQualification",
+    "desktopFile": "org.ui4me.PowerShellQualification",
+    "x": 573,
+    "y": 183,
+    "w": 902,
+    "h": 669,
+    "cx": 574,
+    "cy": 211,
+    "cw": 900,
+    "ch": 640,
+    "active": true,
+    "minimized": false,
+    "maximized": 0,
+    "fullScreen": false,
+    "noBorder": false,
+    "transient": false,
+    "modal": false,
+    "keepAbove": false,
+    "transientFor": null
+  },
+  "host_exit": 0,
+  "total_s": 80.943,
+  "bitmap_files_after_exit": [],
+  "windows_after_exit": []
+}

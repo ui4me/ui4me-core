@@ -102,6 +102,30 @@ ui4me-skill status --agents all
 
 There is no universal skill directory supported by every agent; the installer handles agent-specific locations. [Agent Skills guide](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/agent-skills.md) · [Skill source](https://github.com/ui4me/ui4me-core/blob/main/skills/ui4me-python/SKILL.md).
 
+## PowerShell support
+
+The same native host also runs desktop apps whose logic is **PowerShell** instead of Python. Install the **`UI4ME.Core`** module from the [PowerShell Gallery](https://www.powershellgallery.com/packages/UI4ME.Core); it includes the native hosts from the 1.0.0 wheels, so neither Python nor Rust is needed:
+
+```powershell
+Install-Module UI4ME.Core -Scope CurrentUser
+New-UI4MEProject -Path ./my-app -Name 'My Application' -AppId org.example.MyApplication
+Start-UI4MEHost -Manifest ./my-app/app.toml
+```
+
+```powershell
+$doc = Open-UI4MEFile -Window $window -Path (Join-Path $PSScriptRoot 'index.html')
+$null = Register-UI4MEDocumentEvent -Document $doc -Type click -Element save -Callback {
+    Set-UI4MEDocumentText -Document $doc -Element status -Text 'Saved'
+}
+```
+
+| Backend | Platforms |
+| --- | --- |
+| PowerShell 7.2+ (`pwsh`) | Linux x86-64 (glibc 2.34+), Windows x64 |
+| Windows PowerShell 5.1 | Windows x64 |
+
+File-based and generated HTML, callbacks, forms, native dialogs, clipboard, custom title bars and live pixel buffers all work from PowerShell. Coding agents get a separate skill: `Install-UI4MESkill -Agents all -Scope user`. [PowerShell guide](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/powershell.md) · [Command reference](https://github.com/ui4me/ui4me-core/blob/main/docs/reference/powershell-api.md) · [Skill](https://github.com/ui4me/ui4me-core/blob/main/skills/ui4me-powershell/SKILL.md).
+
 ## Why UI4ME?
 
 | Feature | What it enables |

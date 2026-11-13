@@ -1,0 +1,132 @@
+{
+  "edition": "ps51",
+  "mode": "bitmap-kill",
+  "setup": {
+    "pid": 6552,
+    "host": "C:\\Users\\ui4me_test\\Documents\\WindowsPowerShell\\Modules\\UI4ME.Core\\1.0.0\\runtimes\\win-x64\\ui4me_core\\_bin\\ui4me-host.exe",
+    "host_sha256": "c56698b654e794db2820bff73a2c8c7d658417c29ed511eaf6518a80e8ddaa47",
+    "temp": "C:\\Users\\UI4ME_~1\\AppData\\Local\\Temp",
+    "bitmaps_before": []
+  },
+  "observations": [],
+  "ready_s": 0.613,
+  "window_at_ready": {
+    "hwnd": 1245812,
+    "title": "UI4ME PS qualification 3728",
+    "class": "Window Class",
+    "pid": 6552,
+    "rect": [
+      156,
+      156,
+      916,
+      679
+    ],
+    "frame": [
+      163,
+      156,
+      902,
+      672
+    ],
+    "client": [
+      164,
+      187,
+      900,
+      640
+    ],
+    "cx": 164,
+    "cy": 187,
+    "cw": 900,
+    "ch": 640,
+    "visible": true,
+    "iconic": false,
+    "zoomed": false,
+    "enabled": true,
+    "foreground": false,
+    "owner": 0,
+    "style": 382664704,
+    "exstyle": 262416,
+    "dpi": 96
+  },
+  "taskbar_windows": {
+    "tree": [
+      {
+        "pid": 3728,
+        "name": "powershell.exe",
+        "ppid": 6552
+      },
+      {
+        "pid": 2496,
+        "name": "conhost.exe",
+        "ppid": 3728
+      }
+    ],
+    "visible_toplevel": [
+      {
+        "title": "UI4ME PS qualification 3728",
+        "cls": "Window Class",
+        "pid": 6552,
+        "owner": 0,
+        "exstyle": 262416
+      },
+      {
+        "title": "",
+        "cls": "Winit Thread Event Target",
+        "pid": 6552,
+        "owner": 0,
+        "exstyle": 134742176
+      }
+    ]
+  },
+  "kill": {
+    "while_streaming": [],
+    "killed": [
+      3728
+    ],
+    "after_kill": []
+  },
+  "window_after_kill": [
+    {
+      "hwnd": 1245812,
+      "title": "UI4ME PS qualification 3728",
+      "class": "Window Class",
+      "pid": 6552,
+      "rect": [
+        156,
+        156,
+        916,
+        679
+      ],
+      "frame": [
+        163,
+        156,
+        902,
+        672
+      ],
+      "client": [
+        164,
+        187,
+        900,
+        640
+      ],
+      "cx": 164,
+      "cy": 187,
+      "cw": 900,
+      "ch": 640,
+      "visible": true,
+      "iconic": false,
+      "zoomed": false,
+      "enabled": true,
+      "foreground": true,
+      "owner": 0,
+      "style": 382664704,
+      "exstyle": 262416,
+      "dpi": 96
+    }
+  ],
+  "final": {
+    "host_exit": 1,
+    "bitmaps_after": [],
+    "host_log": "{\"timestamp\":\"2026-11-13T21:10:36.244119Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"host started\",\"headless\":false,\"standalone\":false,\"containment\":\"Windows Job Object (backend assigned during creation)\"},\"target\":\"ui4me_host::host\"}\n{\"timestamp\":\"2026-11-13T21:10:36.588249Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"first frame presented\",\"window\":\"w1\",\"since_host_start_ms\":344},\"target\":\"ui4me_host::host::native\"}\n{\"timestamp\":\"2026-11-13T21:10:40.683541Z\",\"level\":\"ERROR\",\"fields\":{\"message\":\"application failed\",\"reason\":\"Backend connection lost: peer disconnected\"},\"target\":\"ui4me_host::host\"}\n{\"timestamp\":\"2026-11-13T21:10:44.081777Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"host stopped\",\"exit_code\":1},\"target\":\"ui4me_host::host\"}\n",
+    "windows_left": []
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "edition": "pwsh",
+  "mode": "idle",
+  "setup": {
+    "pid": 7136,
+    "host": "C:\\Users\\ui4me_test\\Documents\\PowerShell\\Modules\\UI4ME.Core\\1.0.0\\runtimes\\win-x64\\ui4me_core\\_bin\\ui4me-host.exe",
+    "host_sha256": "c56698b654e794db2820bff73a2c8c7d658417c29ed511eaf6518a80e8ddaa47",
+    "temp": "C:\\Users\\UI4ME_~1\\AppData\\Local\\Temp",
+    "bitmaps_before": []
+  },
+  "observations": [],
+  "ready_s": 0.914,
+  "window_at_ready": {
+    "hwnd": 656052,
+    "title": "UI4ME PS qualification 6236",
+    "class": "Window Class",
+    "pid": 7136,
+    "rect": [
+      182,
+      182,
+      916,
+      679
+    ],
+    "frame": [
+      189,
+      182,
+      902,
+      672
+    ],
+    "client": [
+      190,
+      213,
+      900,
+      640
+    ],
+    "cx": 190,
+    "cy": 213,
+    "cw": 900,
+    "ch": 640,
+    "visible": true,
+    "iconic": false,
+    "zoomed": false,
+    "enabled": true,
+    "foreground": false,
+    "owner": 0,
+    "style": 382664704,
+    "exstyle": 262416,
+    "dpi": 96
+  },
+  "taskbar_windows": {
+    "tree": [
+      {
+        "pid": 6236,
+        "name": "pwsh.exe",
+        "ppid": 7136
+      },
+      {
+        "pid": 5552,
+        "name": "conhost.exe",
+        "ppid": 6236
+      }
+    ],
+    "visible_toplevel": [
+      {
+        "title": "UI4ME PS qualification 6236",
+        "cls": "Window Class",
+        "pid": 7136,
+        "owner": 0,
+        "exstyle": 262416
+      },
+      {
+        "title": "",
+        "cls": "Winit Thread Event Target",
+        "pid": 7136,
+        "owner": 0,
+        "exstyle": 134742176
+      }
+    ]
+  },
+  "idle": {
+    "ui4me-host.exe:7136": {
+      "cpu_percent": 0.07,
+      "private_mb": 27.5
+    },
+    "pwsh.exe:6236": {
+      "cpu_percent": 0.07,
+      "private_mb": 83.7
+    },
+    "conhost.exe:5552": {
+      "cpu_percent": 0.0,
+      "private_mb": 6.2
+    }
+  },
+  "final": {
+    "host_exit": 0,
+    "bitmaps_after": [],
+    "host_log": "{\"timestamp\":\"2026-11-13T21:07:22.231700Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"host started\",\"headless\":false,\"standalone\":false,\"containment\":\"Windows Job Object (backend assigned during creation)\"},\"target\":\"ui4me_host::host\"}\n{\"timestamp\":\"2026-11-13T21:07:22.831029Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"first frame presented\",\"window\":\"w1\",\"since_host_start_ms\":599},\"target\":\"ui4me_host::host::native\"}\n{\"timestamp\":\"2026-11-13T21:08:24.311227Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"backend output\",\"source\":\"backend\",\"stream\":\"stdout\",\"text\":\"0\"},\"target\":\"ui4me_host::logging\"}\n{\"timestamp\":\"2026-11-13T21:08:24.416117Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"host stopped\",\"exit_code\":0},\"target\":\"ui4me_host::host\"}\n",
+    "windows_left": []
+  }
+}

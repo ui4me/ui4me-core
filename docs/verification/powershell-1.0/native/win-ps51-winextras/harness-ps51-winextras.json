@@ -1,0 +1,128 @@
+{
+  "edition": "ps51",
+  "mode": "winextras",
+  "setup": {
+    "pid": 6264,
+    "host": "C:\\Users\\ui4me_test\\Documents\\WindowsPowerShell\\Modules\\UI4ME.Core\\1.0.0\\runtimes\\win-x64\\ui4me_core\\_bin\\ui4me-host.exe",
+    "host_sha256": "c56698b654e794db2820bff73a2c8c7d658417c29ed511eaf6518a80e8ddaa47",
+    "temp": "C:\\Users\\UI4ME_~1\\AppData\\Local\\Temp",
+    "bitmaps_before": []
+  },
+  "observations": [
+    {
+      "request": {
+        "t": "2026-11-13T21:10:46.0570973Z",
+        "automation_id": "name",
+        "id": 1,
+        "action": "uia",
+        "kind": "request"
+      },
+      "reply": {
+        "rc": 0,
+        "log": "2026-11-13T21:10:47.093510+00:00 START apartment=MTA mode=document-text\n2026-11-13T21:10:47.110554+00:00 BEFORE root windows\n2026-11-13T21:10:47.124199+00:00 AFTER root windows count=2\n2026-11-13T21:10:47.126166+00:00 AFTER find control found=True\n2026-11-13T21:10:47.126187+00:00 BEFORE TextPattern\n2026-11-13T21:10:47.126286+00:00 AFTER TextPattern\n2026-11-13T21:10:47.126305+00:00 BEFORE DocumentRange\n2026-11-13T21:10:47.126412+00:00 AFTER DocumentRange\n2026-11-13T21:10:47.126427+00:00 BEFORE DocumentRange.GetText\n2026-11-13T21:10:47.126506+00:00 AFTER DocumentRange.GetText 'UIA from PowerShell ü'\n2026-11-13T21:10:47.126523+00:00 PASS\n"
+      }
+    },
+    {
+      "request": {
+        "x": 48,
+        "action": "click",
+        "kind": "request",
+        "id": 2,
+        "y": 248.875,
+        "button": "left",
+        "t": "2026-11-13T21:10:47.1659844Z"
+      },
+      "reply": {
+        "done": true
+      }
+    },
+    {
+      "request": {
+        "t": "2026-11-13T21:10:47.7295169Z",
+        "kind": "request",
+        "id": 3,
+        "action": "ime-pinyin",
+        "text": "nihao"
+      },
+      "reply": {
+        "layout_before": "0x409",
+        "layout_during": "0x804",
+        "layout_after": "0x409"
+      }
+    }
+  ],
+  "ready_s": 0.61,
+  "window_at_ready": {
+    "hwnd": 852706,
+    "title": "UI4ME PS qualification 5336",
+    "class": "Window Class",
+    "pid": 6264,
+    "rect": [
+      208,
+      208,
+      916,
+      679
+    ],
+    "frame": [
+      215,
+      208,
+      902,
+      672
+    ],
+    "client": [
+      216,
+      239,
+      900,
+      640
+    ],
+    "cx": 216,
+    "cy": 239,
+    "cw": 900,
+    "ch": 640,
+    "visible": true,
+    "iconic": false,
+    "zoomed": false,
+    "enabled": true,
+    "foreground": false,
+    "owner": 0,
+    "style": 382664704,
+    "exstyle": 262416,
+    "dpi": 96
+  },
+  "taskbar_windows": {
+    "tree": [
+      {
+        "pid": 5336,
+        "name": "powershell.exe",
+        "ppid": 6264
+      },
+      {
+        "pid": 1444,
+        "name": "conhost.exe",
+        "ppid": 5336
+      }
+    ],
+    "visible_toplevel": [
+      {
+        "title": "UI4ME PS qualification 5336",
+        "cls": "Window Class",
+        "pid": 6264,
+        "owner": 0,
+        "exstyle": 262416
+      },
+      {
+        "title": "",
+        "cls": "Winit Thread Event Target",
+        "pid": 6264,
+        "owner": 0,
+        "exstyle": 134742176
+      }
+    ]
+  },
+  "final": {
+    "host_exit": 0,
+    "bitmaps_after": [],
+    "host_log": "{\"timestamp\":\"2026-11-13T21:10:45.613285Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"host started\",\"headless\":false,\"standalone\":false,\"containment\":\"Windows Job Object (backend assigned during creation)\"},\"target\":\"ui4me_host::host\"}\n{\"timestamp\":\"2026-11-13T21:10:45.959813Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"first frame presented\",\"window\":\"w1\",\"since_host_start_ms\":346},\"target\":\"ui4me_host::host::native\"}\n{\"timestamp\":\"2026-11-13T21:10:51.875633Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"backend output\",\"source\":\"backend\",\"stream\":\"stdout\",\"text\":\"0\"},\"target\":\"ui4me_host::logging\"}\n{\"timestamp\":\"2026-11-13T21:10:51.984590Z\",\"level\":\"INFO\",\"fields\":{\"message\":\"host stopped\",\"exit_code\":0},\"target\":\"ui4me_host::host\"}\n",
+    "windows_left": []
+  }
+}

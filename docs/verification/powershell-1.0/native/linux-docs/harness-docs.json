@@ -1,0 +1,90 @@
+{
+  "mode": "docs",
+  "host": "$SCRATCH/stage/UI4ME.Core/runtimes/linux-x64/ui4me_core/_bin/ui4me-host",
+  "manifest": "powershell/tests/native/app-docs.toml",
+  "observations": [
+    {
+      "request": {
+        "action": "click",
+        "kind": "request",
+        "y": 20,
+        "x": 235.5,
+        "button": "left",
+        "id": 1,
+        "t": "2026-11-13T21:09:05.3473806Z"
+      }
+    },
+    {
+      "request": {
+        "action": "click",
+        "kind": "request",
+        "y": 98,
+        "x": 30.5,
+        "button": "left",
+        "id": 2,
+        "t": "2026-11-13T21:09:09.3190000Z"
+      }
+    },
+    {
+      "request": {
+        "action": "click",
+        "kind": "request",
+        "y": 176,
+        "x": 20,
+        "button": "left",
+        "id": 3,
+        "t": "2026-11-13T21:09:11.3200361Z"
+      }
+    },
+    {
+      "request": {
+        "action": "click",
+        "kind": "request",
+        "y": 176,
+        "x": 20,
+        "button": "left",
+        "id": 4,
+        "t": "2026-11-13T21:09:13.3489629Z"
+      }
+    },
+    {
+      "request": {
+        "action": "click",
+        "kind": "request",
+        "y": 276,
+        "x": 238.5,
+        "button": "left",
+        "id": 5,
+        "t": "2026-11-13T21:09:15.3960640Z"
+      }
+    }
+  ],
+  "ready_s": 1.052,
+  "window_at_ready": {
+    "caption": "UI4ME PS docs 504660",
+    "pid": 504656,
+    "res": "org.ui4me.PowerShellDocExamples",
+    "desktopFile": "org.ui4me.PowerShellDocExamples",
+    "x": 603,
+    "y": 203,
+    "w": 842,
+    "h": 629,
+    "cx": 604,
+    "cy": 231,
+    "cw": 840,
+    "ch": 600,
+    "active": true,
+    "minimized": false,
+    "maximized": 0,
+    "fullScreen": false,
+    "noBorder": false,
+    "transient": false,
+    "modal": false,
+    "keepAbove": false,
+    "transientFor": null
+  },
+  "host_exit": 0,
+  "total_s": 14.225,
+  "bitmap_files_after_exit": [],
+  "windows_after_exit": []
+}

@@ -55,3 +55,16 @@ Use the appropriate absolute Windows path after `--project` in PowerShell. The s
 The agent should use the built-in `ui4me-new` scaffold or follow the skill examples. Verify that the application is started with `ui4me-host run --app ...`, not `python app.py` directly.
 
 [Skill source](../../skills/ui4me-python/SKILL.md) · [Reference API](../reference/python-api.md).
+
+## PowerShell skill
+
+PowerShell developers use the separate `ui4me-powershell` skill bundled in the `UI4ME.Core`
+module. It installs into the same six agents without Python:
+
+```powershell
+Install-UI4MESkill -Agents all -Scope user
+Install-UI4MESkill -Agents claude,codex -Scope project -ProjectPath .
+Install-UI4MESkill -Action status
+```
+
+Both skills can be installed side by side. [PowerShell skill source](../../skills/ui4me-powershell/SKILL.md) · [PowerShell guide](powershell.md).

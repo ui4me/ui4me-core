@@ -1,0 +1,15 @@
+[app]
+id = "org.ui4me.PowerShellDocExamples"
+name = "UI4ME PowerShell doc examples"
+version = "1.0.0"
+
+[backend]
+program = "pwsh"
+args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "{app_dir}/DocExamples.ps1"]
+cwd = "{app_dir}"
+
+[host]
+startup_timeout_ms = 60000
+shutdown_timeout_ms = 10000
+max_windows = 8
+instance = "multiple"
