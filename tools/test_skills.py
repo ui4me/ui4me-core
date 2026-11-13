@@ -84,6 +84,16 @@ class SkillInstallerTests(unittest.TestCase):
             self.assertEqual(skills.main(['uninstall','--agents','claude']), 0)
         self.assertFalse((self.root / '.claude/skills/ui4me-python').exists())
 
+    def test_cli_output_survives_a_legacy_console_code_page(self):
+        import io
+        project = self.root / 'Projekt ✓'
+        project.mkdir()
+        out = io.TextIOWrapper(io.BytesIO(), encoding='cp1252')
+        with patch.object(sys, 'stdout', out):
+            rc = skills.main(['install', '--scope', 'project', '--project', str(project), '--agents', 'claude'])
+        self.assertEqual(rc, 0)
+        self.assertTrue((project / '.claude' / 'skills' / skills.SKILL_NAME / 'SKILL.md').is_file())
+
 
 if __name__ == '__main__':
     unittest.main()

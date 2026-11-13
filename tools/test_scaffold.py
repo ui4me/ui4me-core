@@ -57,6 +57,18 @@ class ScaffoldTests(unittest.TestCase):
         self.assertEqual(scaffold.shell_argument(r'C:\Apps\demo\app.toml', windows=True), r'C:\Apps\demo\app.toml')
         self.assertEqual(scaffold.shell_argument(r"C:\My Apps\it's\app.toml", windows=True), r"'C:\My Apps\it''s\app.toml'")
 
+    def test_cli_output_survives_a_legacy_console_code_page(self):
+        import io
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            out=io.TextIOWrapper(io.BytesIO(), encoding='cp1252')
+            with mock.patch.object(sys, 'stdout', out):
+                rc=scaffold.main([str(Path(d)/'Café ✓'), '--python', 'python'])
+            self.assertEqual(rc, 0)
+            out.flush()
+            self.assertIn(b'\\u2713', out.buffer.getvalue())
+            self.assertTrue((Path(d)/'Café ✓'/'app.toml').is_file())
+
     def test_empty_directory_allowed_and_nonempty_refused(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)

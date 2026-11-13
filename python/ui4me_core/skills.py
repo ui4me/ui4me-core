@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 from typing import Iterable
 
@@ -160,6 +161,16 @@ def locations(names: Iterable[str], scope: str, *, project: Path | None = None, 
     return {name: base / mapping[name] / SKILL_NAME for name in names}
 
 
+def _safe_console() -> None:
+    """Never fail after doing the work just because the console code page
+    (e.g. cp1252 on a redirected Windows stdout) cannot show a path."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors='backslashreplace')
+        except (AttributeError, ValueError):
+            pass
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=('install', 'status', 'uninstall'))
@@ -169,6 +180,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--force', action='store_true', help='Explicitly replace/remove a modified or unmanaged skill')
     parser.add_argument('--dry-run', action='store_true', help='Print intended operations without modifying the filesystem')
     args = parser.parse_args(argv)
+    _safe_console()
     if args.scope == 'project' and args.project is None:
         parser.error('--scope project requires --project PATH')
     if args.scope == 'user' and args.project is not None:

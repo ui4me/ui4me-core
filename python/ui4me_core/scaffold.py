@@ -138,6 +138,16 @@ def create_project(destination: Path, *, name: str | None = None, python: Path |
     return created
 
 
+def _safe_console() -> None:
+    """Never fail after doing the work just because the console code page
+    (e.g. cp1252 on a redirected Windows stdout) cannot show a path."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors='backslashreplace')
+        except (AttributeError, ValueError):
+            pass
+
+
 def shell_argument(path: Path | str, *, windows: bool = sys.platform == 'win32') -> str:
     """Quote a path for copy/paste into PowerShell (Windows) or a POSIX shell."""
     text = str(path)
@@ -154,6 +164,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--name', help='Display name (defaults to directory name)')
     parser.add_argument('--python', default=sys.executable, help='Interpreter used as the managed backend, normally your active virtual environment')
     args=parser.parse_args(argv)
+    _safe_console()
     try:
         paths=create_project(args.directory, name=args.name, python=args.python)
     except (OSError, ValueError) as error:

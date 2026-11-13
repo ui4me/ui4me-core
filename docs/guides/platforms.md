@@ -23,6 +23,7 @@ These are the configurations tested for the first stable release. They are not c
 - The pinned AccessKit UI Automation adapter does not implement all table/grid pattern interfaces. NVDA and a native COM TextPattern client were exercised during qualification.
 - Microsoft managed `System.Windows.Automation` has a known client-side failure when reading selected ranges against both UI4ME and unrelated native controls on the tested server. Do not treat that third-party crash as a provider hang; use a native IUIAutomation client for TextPattern checks.
 - The Open-With chooser may be external to UI4ME; cancellation of that chooser is not observable. Some Aero Snap operations may override requested size constraints by a few pixels.
+- The `ui4me-host` console command installed by pip is a small wrapper that waits for the native host. Closing the console or pressing Ctrl+C stops both, but if a process manager force-terminates only the wrapper the host keeps running. For services, schedulers or launchers, start `...\Lib\site-packages\ui4me_core\_bin\ui4me-host.exe` directly (and pass that path as `--host` to `tools/create_launcher.py`). On Linux the wrapper hands off to the host with `exec`, so signals reach it.
 - Physical monitors, Windows client editions and Windows high-contrast changes were not fully exercised for this release.
 
 ## Software boundaries
