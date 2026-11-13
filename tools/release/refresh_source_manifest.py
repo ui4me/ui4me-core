@@ -45,7 +45,9 @@ def git_visible_files(root: Path) -> set[str] | None:
 
 def included_source_files(root: Path = ROOT):
     visible = git_visible_files(root)
-    for path in sorted(root.rglob('*')):
+    # Sort by case-sensitive path components: WindowsPath ordering ignores
+    # case, which would make the manifest order depend on the platform.
+    for path in sorted(root.rglob('*'), key=lambda p: p.relative_to(root).parts):
         if not path.is_file() and not path.is_symlink():
             continue
         rel = path.relative_to(root)

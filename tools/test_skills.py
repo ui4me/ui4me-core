@@ -72,7 +72,9 @@ class SkillInstallerTests(unittest.TestCase):
         self.assertEqual(home['codex'], self.root / '.agents/skills/ui4me-python')
         self.assertEqual(home['opencode'], self.root / '.config/opencode/skills/ui4me-python')
         project = skills.locations(('claude','codex'), 'project', project=self.root)
-        self.assertEqual(project['codex'], self.root / '.agents/skills/ui4me-python')
+        # Project scope resolves the directory (on Windows this expands 8.3
+        # short names such as RUNNER~1), so compare against the resolved root.
+        self.assertEqual(project['codex'], self.root.resolve() / '.agents/skills/ui4me-python')
         with self.assertRaises(ValueError):
             skills.agent_names('unknown')
 
