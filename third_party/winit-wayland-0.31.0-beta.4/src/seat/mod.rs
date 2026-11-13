@@ -161,16 +161,6 @@ impl SeatHandler for WinitState {
                     )
                     .expect("failed to create pointer with present capability.");
 
-                seat_state.data_device = self
-                    .data_device_manager_state
-                    .as_ref()
-                    .map(|device| device.get_data_device(queue_handle, &seat));
-
-                seat_state.primary_selection_device = self
-                    .primary_selection_manager_state
-                    .as_ref()
-                    .map(|manager| manager.get_selection_device(queue_handle, &seat));
-
                 seat_state.relative_pointer = self.relative_pointer.as_ref().map(|manager| {
                     manager.get_relative_pointer(
                         themed_pointer.pointer(),
@@ -203,6 +193,25 @@ impl SeatHandler for WinitState {
                 seat_state.pointer = Some(themed_pointer);
             },
             _ => (),
+        }
+
+        // UI4ME patch: a keyboard-only seat must still own clipboard and
+        // primary-selection devices. Upstream created them only together with
+        // the pointer, so `set_clipboard` failed with "no seat has received
+        // input" on systems without a mouse, even after real key input.
+        if matches!(capability, SeatCapability::Keyboard | SeatCapability::Pointer) {
+            if seat_state.data_device.is_none() {
+                seat_state.data_device = self
+                    .data_device_manager_state
+                    .as_ref()
+                    .map(|device| device.get_data_device(queue_handle, &seat));
+            }
+            if seat_state.primary_selection_device.is_none() {
+                seat_state.primary_selection_device = self
+                    .primary_selection_manager_state
+                    .as_ref()
+                    .map(|manager| manager.get_selection_device(queue_handle, &seat));
+            }
         }
 
         if let Some(text_input_state) =
@@ -263,8 +272,11 @@ impl SeatHandler for WinitState {
                     pointer_gesture_hold.destroy();
                 }
 
-                seat_state.data_device = None;
-                seat_state.primary_selection_device = None;
+                // UI4ME patch: keep selection devices while a keyboard remains.
+                if seat_state.keyboard_state.is_none() {
+                    seat_state.data_device = None;
+                    seat_state.primary_selection_device = None;
+                }
 
                 if let Some(pointer) = seat_state.pointer.take() {
                     let pointer_data = pointer.pointer().winit_data();
@@ -284,6 +296,12 @@ impl SeatHandler for WinitState {
             },
             SeatCapability::Keyboard => {
                 seat_state.keyboard_state = None;
+                // UI4ME patch: selection devices outlive the keyboard only
+                // while a pointer still provides input serials.
+                if seat_state.pointer.is_none() {
+                    seat_state.data_device = None;
+                    seat_state.primary_selection_device = None;
+                }
                 self.on_keyboard_destroy(&seat.id());
             },
             _ => (),

@@ -25,6 +25,18 @@ has no public API to add MIME types.
 Drop this patch when an upstream release offers the canonical type; keep the
 version pin otherwise identical. The package is licensed Apache-2.0 (LICENSE).
 
+Second change (Core 1.0 Linux qualification, 2026-11-13), in `src/seat/mod.rs`:
+upstream created the `wl_data_device` and primary-selection device only when the
+seat gained *pointer* capability and destroyed them when the pointer went away.
+On a keyboard-only Plasma Wayland seat (no mouse attached) every clipboard write
+therefore failed with "Tried to set the clipboard, but no seat has received
+input", even immediately after a real key press, because `set_clipboard` needs
+both a data device and the latest input serial. The patched seat handler creates
+both selection devices when either keyboard or pointer capability appears and
+drops them only once neither remains. Reproduced and verified with the installed
+release host's native clipboard round trip (fails before, passes after) on a
+seat with only a keyboard; pointer-equipped seats keep the same devices.
+
 ## softbuffer 0.4.8
 
 `softbuffer-0.4.8/` is the exact crates.io package pinned by `Cargo.lock`
