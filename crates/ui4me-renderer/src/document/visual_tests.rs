@@ -409,3 +409,56 @@ fn select_chevron_paints_outside_the_content_clip() {
         );
     }
 }
+
+/// Core 1.0 (found natively on a dark KDE desktop): a page that does not declare `color-scheme` is
+/// not aware of colour schemes and keeps the light user-agent colours, as the reference browser
+/// does, while `prefers-color-scheme` reports the desktop preference. Previously the observed dark
+/// preference switched its default controls to light text, invisible on the page's own light
+/// backgrounds. `light dark` (here via `<meta name=color-scheme>`) opts into the dark scheme.
+#[test]
+fn unaware_page_keeps_light_controls_on_a_dark_desktop_and_opt_in_follows() {
+    let page = |meta: &str| {
+        format!(
+            "<!doctype html><head>{meta}<style>@media (prefers-color-scheme: dark){{#m{{color:rgb(1,2,3)}}}}</style></head>\
+             <body style='margin:0'><input id=i value=text><p id=m>m</p></body>"
+        )
+    };
+    let style = |d: &mut Document, id: &str, p: &str| {
+        d.computed_style(Some(id), None, &[p.into()]).unwrap()["properties"][p]["value"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    };
+    let mut d = Document::parse(&page("")).unwrap();
+    d.set_system_color_scheme(Some(true)).unwrap();
+    let px = d.render(200, 100, 1.0).unwrap();
+    assert_eq!(
+        style(&mut d, "m", "color"),
+        "rgb(1, 2, 3)",
+        "media feature follows the desktop"
+    );
+    assert_eq!(
+        style(&mut d, "i", "color"),
+        "rgb(0, 0, 0)",
+        "unaware field text stays dark"
+    );
+    assert_eq!(
+        px[199 + 90 * 200] & 0xffffff,
+        0xffffff,
+        "unaware canvas stays white"
+    );
+
+    let mut d = Document::parse(&page("<meta name=color-scheme content='light dark'>")).unwrap();
+    d.set_system_color_scheme(Some(true)).unwrap();
+    let px = d.render(200, 100, 1.0).unwrap();
+    assert_eq!(
+        style(&mut d, "i", "color"),
+        "rgb(255, 255, 255)",
+        "opted-in field text is light"
+    );
+    assert_ne!(
+        px[199 + 90 * 200] & 0xffffff,
+        0xffffff,
+        "opted-in canvas is dark"
+    );
+}

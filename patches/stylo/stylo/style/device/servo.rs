@@ -382,8 +382,14 @@ impl Device {
             return supports_dark_mode;
         }
 
-        // If either both or none are supported, then use the preferred color scheme
-        // to determine whether the user wants dark mode.
+        // ui4me patch P-006-20: `color-scheme: normal` (neither supported) means the element is
+        // not aware of colour schemes and renders with the user agent's default scheme, which is
+        // light in the reference browser whatever the preferred scheme; only `light dark` follows
+        // the preference. The `prefers-color-scheme` media feature still reports the preference.
+        if !supports_dark_mode {
+            return false;
+        }
+        // Both are supported: use the preferred color scheme.
         return self.color_scheme() == PrefersColorScheme::Dark;
     }
 

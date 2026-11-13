@@ -7,10 +7,14 @@ dependencies are fixed by the root `Cargo.lock`.
 
 | Tree | Upstream base | Carried changes | License |
 | --- | --- | --- | --- |
-| `stylo/stylo` | `servo/stylo` revision `37c1ed3b707c8f333304de2107c13b68fbc1057c` | `P-006-1` through `P-006-10`, then `P-006-12` through `P-006-19` (no fabricated number 11) | MPL-2.0 for Stylo; component declarations retain their own terms |
+| `stylo/stylo` | `servo/stylo` revision `37c1ed3b707c8f333304de2107c13b68fbc1057c` | `P-006-1` through `P-006-10`, then `P-006-12` through `P-006-20` (no fabricated number 11) | MPL-2.0 for Stylo; component declarations retain their own terms |
 | `taffy/taffy` | `DioxusLabs/taffy` revision `fca167cf659b8bf48019d0dea90624109a78103f` | `P-008-1` through `P-008-6` | MIT, full upstream `LICENSE` retained |
 
-The migrated source and patch files are unchanged by host integration. The
+The migrated source and patch files are unchanged by host integration, except
+`P-006-20`, added during Core 1.0 desktop qualification (2026-11-13): an element
+whose used `color-scheme` is `normal` renders with the light user-agent scheme,
+as the reference browser does, so a page that never opted into dark colours no
+longer gets light text in default form controls on a dark desktop. The
 verification scripts accept a pristine checkout through `UI4ME_UPSTREAM_SOURCE`;
 otherwise they search the normal Cargo Git checkout cache. Because direct path
 dependencies no longer fetch that cache, a missing pristine checkout is an

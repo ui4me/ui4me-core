@@ -31,11 +31,11 @@ trap 'rm -rf "$work"' EXIT
 cp -r "$src" "$work/stylo"
 rm -rf "$work/stylo/.cargo-ok" "$work/stylo/.github"
 rm -rf "$work"/stylo/.g*
-for p in P-006-1 P-006-2 P-006-3 P-006-4 P-006-5 P-006-6 P-006-7 P-006-8 P-006-9 P-006-10 P-006-12 P-006-13 P-006-14 P-006-15 P-006-16 P-006-17 P-006-18 P-006-19; do
+for p in P-006-1 P-006-2 P-006-3 P-006-4 P-006-5 P-006-6 P-006-7 P-006-8 P-006-9 P-006-10 P-006-12 P-006-13 P-006-14 P-006-15 P-006-16 P-006-17 P-006-18 P-006-19 P-006-20; do
   (cd "$work/stylo" && patch -s -p1 -i "$here/$p.patch") || { echo "verify.sh: $p.patch does not apply to $SHA" >&2; exit 1; }
 done
 if diff -r "$work/stylo" "$here/stylo" >"$work/diff.txt"; then
-  echo "verify.sh: OK - patches/stylo/stylo == servo/stylo@$SHA + P-006-1 + P-006-2 + P-006-3 + P-006-4 + P-006-5 + P-006-6 + P-006-7 + P-006-8 + P-006-9 + P-006-10 + P-006-12 + P-006-13 + P-006-14 + P-006-15 + P-006-16 + P-006-17 + P-006-18 + P-006-19"
+  echo "verify.sh: OK - patches/stylo/stylo == servo/stylo@$SHA + P-006-1 + P-006-2 + P-006-3 + P-006-4 + P-006-5 + P-006-6 + P-006-7 + P-006-8 + P-006-9 + P-006-10 + P-006-12 + P-006-13 + P-006-14 + P-006-15 + P-006-16 + P-006-17 + P-006-18 + P-006-19 + P-006-20"
 else
   head -40 "$work/diff.txt" >&2
   echo "verify.sh: DRIFT between the vendored tree and base+patches" >&2

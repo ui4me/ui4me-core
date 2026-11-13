@@ -159,15 +159,17 @@ impl StyleSnapshot {
         }
     }
 
-    /// The environment's `prefers-color-scheme` is dark (the preference the `normal` and
-    /// `light dark` values of `color-scheme` follow).
+    /// The environment's `prefers-color-scheme` is dark (the preference the media feature and the
+    /// `light dark` value of `color-scheme` follow).
     pub fn prefers_dark(&self) -> bool {
         self.prefers_dark
     }
 
     /// Whether the element's used colour scheme is dark (CSS Color Adjust 1: `dark` alone is dark,
-    /// `light` alone is light, `normal` or both follow the environment); `None` when the element is
-    /// not styled. The root element's used scheme decides the canvas default (010 FR-023).
+    /// `light` alone is light, both follow the environment, and `normal` - not aware of colour
+    /// schemes - uses the user agent's light default, as the reference browser does; the same rule
+    /// as the system colours, Stylo patch P-006-20); `None` when the element is not styled. The root
+    /// element's used scheme decides the canvas default (010 FR-023).
     pub fn used_color_scheme_dark(&self, node: NodeId) -> Option<bool> {
         let s = self.styles.get(&node)?;
         use style::values::specified::color::ColorSchemeFlags as F;
@@ -176,7 +178,7 @@ impl StyleSnapshot {
         Some(if dark != light {
             dark
         } else {
-            self.prefers_dark
+            dark && self.prefers_dark
         })
     }
 

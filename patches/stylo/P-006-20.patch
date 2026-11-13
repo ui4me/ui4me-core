@@ -1,0 +1,23 @@
+# P-006-20: `color-scheme: normal` uses the light user-agent scheme; only `light dark` follows the preferred scheme (ui4me Core 1.0 Linux qualification, 2026-11-13)
+# Applies to: servo/stylo @ 37c1ed3b707c8f333304de2107c13b68fbc1057c after P-006-1 through P-006-19 (root of the checkout, `patch -p1`)
+# Licence: MPL-2.0 (modification to an MPL-2.0 file; the modified source is published with the repository, see engine/NOTICE)
+
+--- a/style/device/servo.rs
++++ b/style/device/servo.rs
+@@ -382,8 +382,14 @@
+             return supports_dark_mode;
+         }
+ 
+-        // If either both or none are supported, then use the preferred color scheme
+-        // to determine whether the user wants dark mode.
++        // ui4me patch P-006-20: `color-scheme: normal` (neither supported) means the element is
++        // not aware of colour schemes and renders with the user agent's default scheme, which is
++        // light in the reference browser whatever the preferred scheme; only `light dark` follows
++        // the preference. The `prefers-color-scheme` media feature still reports the preference.
++        if !supports_dark_mode {
++            return false;
++        }
++        // Both are supported: use the preferred color scheme.
+         return self.color_scheme() == PrefersColorScheme::Dark;
+     }
+ 
