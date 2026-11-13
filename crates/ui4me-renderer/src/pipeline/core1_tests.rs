@@ -308,3 +308,57 @@ fn embedded_png_color_glyph_is_rendered_in_color() {
         "the sbix PNG glyph must paint red, not the fallback black outline"
     );
 }
+
+/// Core 1.0 C09 (found natively on KDE): every replacement of a displayed `ui4me-res:` bundle left
+/// the previous decoded raster alive in the document's picture table (+256 KiB per replacement for a
+/// 256x256 image, visible in the cache's retired bytes and the host PSS), and a removed image kept
+/// its pixels after a purge. Replacement churn must settle, and remove + purge must free them.
+#[test]
+fn replaced_bundles_and_removed_images_do_not_retain_decoded_rasters() {
+    // A 200x100 PNG fixture: 80,000 decoded bytes. Each registration is a new revision.
+    let png: std::sync::Arc<[u8]> = include_bytes!(
+        "../../../ui4me-assets/tests/fixtures/resources-images/natural-sizes/codecs/png-200x100.png"
+    )
+    .as_slice()
+    .into();
+    let mut d = Document::parse_hosted(
+        "<!doctype html><body style='margin:0'><img id=i src='ui4me-res://b/a.png'></body>",
+        None,
+        400,
+        200,
+    )
+    .unwrap();
+    let bytes = |d: &Document| {
+        d.resource_stats().unwrap()["cache"]["bytes"]
+            .as_u64()
+            .unwrap()
+    };
+    let mut after = Vec::new();
+    for _ in 0..12 {
+        d.register_resource_bundle(
+            "b",
+            vec![ui4me_assets::bundles::BundleEntryInput {
+                path: "a.png".into(),
+                data: png.clone(),
+                mime: None,
+            }],
+        )
+        .unwrap();
+        settle(&mut d);
+        after.push(bytes(&d));
+    }
+    let one = 200 * 100 * 4;
+    assert!(
+        after.iter().skip(2).all(|b| *b <= 2 * one),
+        "decoded bytes must not grow with replacements: {after:?}"
+    );
+    d.remove_element("i").unwrap();
+    settle(&mut d);
+    d.purge_unused_resources(None).unwrap();
+    settle(&mut d);
+    assert_eq!(
+        bytes(&d),
+        0,
+        "a removed, purged image keeps no decoded pixels"
+    );
+}

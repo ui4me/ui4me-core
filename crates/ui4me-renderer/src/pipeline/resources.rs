@@ -294,10 +294,19 @@ impl PipelineResources {
         let from_doc = doc.base_uri();
         let href = (from_doc != doc.url()).then_some(from_doc.as_str());
         let base = uri::document_base_url(&self.document_url, href);
+        // Lock order as in `lookup_at`: manager, then state.
+        let mgr = self.manager();
         let mut s = lock(&self.state);
         s.base = base.clone();
         s.scale = scale;
         s.viewport = viewport;
+        // Forget the pictures of requests 007 has retired (a removed element, a replaced source).
+        // `images` and `sized` hold strong pixel references: without this, every replaced
+        // `ui4me-res:` bundle or removed image kept its decoded raster for the document's life.
+        s.images.retain(|r, _| mgr.request_id_known(r.request));
+        s.sized.retain(|(r, _), _| mgr.request_id_known(r.request));
+        s.img_refs.retain(|_, r| mgr.request_id_known(r.request));
+        s.css_refs.retain(|_, r| mgr.request_id_known(r.request));
         base
     }
 
@@ -451,6 +460,12 @@ impl PipelineResources {
             ratio,
             vector,
         });
+        // A new revision of the same request (a changed source or a replaced bundle) supersedes
+        // the old picture; keep only the current one.
+        s.images
+            .retain(|k, _| k.request != r.request || k.revision == r.revision);
+        s.sized
+            .retain(|(k, _), _| k.request != r.request || k.revision == r.revision);
         s.images.insert(
             r,
             Cached {
