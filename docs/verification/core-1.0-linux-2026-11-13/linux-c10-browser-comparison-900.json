@@ -1,0 +1,59 @@
+{
+ "host": "~/.cargo/bin/ui4me-host",
+ "host_sha256": "fc422be508059785022d3937d277e51d14e80be4f3731a47fdfff6828bdecc33",
+ "cases": [
+  {
+   "fixture": "fluid.html",
+   "render_exit": 0,
+   "mean_abs_error": 0.199,
+   "fraction_over_24": 0.0034,
+   "ui4me_boxes": {
+    "red": [
+     8,
+     8,
+     778,
+     26,
+     7920
+    ],
+    "blue": [
+     118,
+     8,
+     668,
+     26,
+     5940
+    ],
+    "green": [
+     8,
+     34,
+     413,
+     74,
+     12751
+    ]
+   },
+   "chromium_boxes": {
+    "red": [
+     8,
+     8,
+     778,
+     26,
+     7920
+    ],
+    "blue": [
+     118,
+     8,
+     668,
+     26,
+     5940
+    ],
+    "green": [
+     8,
+     34,
+     413,
+     74,
+     12781
+    ]
+   }
+  }
+ ],
+ "chromium": "158.0.8127.18"
+}

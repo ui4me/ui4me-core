@@ -1,0 +1,259 @@
+{
+ "host": "~/.cargo/bin/ui4me-host",
+ "host_sha256": "fc422be508059785022d3937d277e51d14e80be4f3731a47fdfff6828bdecc33",
+ "cases": [
+  {
+   "fixture": "balanced-wrap.html",
+   "render_exit": 0,
+   "mean_abs_error": 0.0,
+   "fraction_over_24": 0.0,
+   "ui4me_boxes": {
+    "red": [
+     10,
+     10,
+     190,
+     100,
+     4800
+    ],
+    "blue": [
+     10,
+     10,
+     130,
+     100,
+     4800
+    ],
+    "green": null
+   },
+   "chromium_boxes": {
+    "red": [
+     10,
+     10,
+     190,
+     100,
+     4800
+    ],
+    "blue": [
+     10,
+     10,
+     130,
+     100,
+     4800
+    ],
+    "green": null
+   }
+  },
+  {
+   "fixture": "bitmap-glyph.html",
+   "render_exit": 0,
+   "mean_abs_error": 0.0,
+   "fraction_over_24": 0.0,
+   "ui4me_boxes": {
+    "red": [
+     0,
+     8,
+     128,
+     72,
+     8192
+    ],
+    "blue": null,
+    "green": null
+   },
+   "chromium_boxes": {
+    "red": [
+     0,
+     8,
+     128,
+     72,
+     8192
+    ],
+    "blue": null,
+    "green": null
+   }
+  },
+  {
+   "fixture": "break-word.html",
+   "render_exit": 0,
+   "mean_abs_error": 0.204,
+   "fraction_over_24": 0.006,
+   "ui4me_boxes": {
+    "red": [
+     10,
+     10,
+     130,
+     70,
+     5551
+    ],
+    "blue": [
+     10,
+     80,
+     310,
+     120,
+     10101
+    ],
+    "green": [
+     10,
+     130,
+     130,
+     170,
+     3864
+    ]
+   },
+   "chromium_boxes": {
+    "red": [
+     10,
+     10,
+     130,
+     70,
+     5597
+    ],
+    "blue": [
+     10,
+     80,
+     310,
+     120,
+     10109
+    ],
+    "green": [
+     10,
+     130,
+     130,
+     170,
+     3883
+    ]
+   }
+  },
+  {
+   "fixture": "flex-intrinsic.html",
+   "render_exit": 0,
+   "mean_abs_error": 0.033,
+   "fraction_over_24": 0.0013,
+   "ui4me_boxes": {
+    "red": [
+     10,
+     10,
+     47,
+     40,
+     809
+    ],
+    "blue": [
+     10,
+     50,
+     88,
+     80,
+     1920
+    ],
+    "green": [
+     10,
+     90,
+     310,
+     120,
+     8586
+    ]
+   },
+   "chromium_boxes": {
+    "red": [
+     10,
+     10,
+     47,
+     40,
+     822
+    ],
+    "blue": [
+     10,
+     50,
+     88,
+     80,
+     1936
+    ],
+    "green": [
+     10,
+     90,
+     310,
+     120,
+     8598
+    ]
+   }
+  },
+  {
+   "fixture": "font-feature.html",
+   "render_exit": 0,
+   "mean_abs_error": 0.38,
+   "fraction_over_24": 0.0055,
+   "ui4me_boxes": {
+    "red": null,
+    "blue": null,
+    "green": null
+   },
+   "chromium_boxes": {
+    "red": null,
+    "blue": null,
+    "green": null
+   }
+  },
+  {
+   "fixture": "inset-radii.html",
+   "render_exit": 0,
+   "mean_abs_error": 0.192,
+   "fraction_over_24": 0.0007,
+   "ui4me_boxes": {
+    "red": null,
+    "blue": null,
+    "green": null
+   },
+   "chromium_boxes": {
+    "red": null,
+    "blue": null,
+    "green": null
+   }
+  },
+  {
+   "fixture": "resize-grip.html",
+   "render_exit": 0,
+   "mean_abs_error": 0.993,
+   "fraction_over_24": 0.0086,
+   "ui4me_boxes": {
+    "red": null,
+    "blue": null,
+    "green": null
+   },
+   "chromium_boxes": {
+    "red": null,
+    "blue": null,
+    "green": null
+   }
+  },
+  {
+   "fixture": "resize-logical.html",
+   "render_exit": 0,
+   "mean_abs_error": 0.441,
+   "fraction_over_24": 0.0028,
+   "ui4me_boxes": {
+    "red": null,
+    "blue": null,
+    "green": null
+   },
+   "chromium_boxes": {
+    "red": null,
+    "blue": null,
+    "green": null
+   }
+  },
+  {
+   "fixture": "select-sizing.html",
+   "render_exit": 0,
+   "mean_abs_error": 2.466,
+   "fraction_over_24": 0.014,
+   "ui4me_boxes": {
+    "red": null,
+    "blue": null,
+    "green": null
+   },
+   "chromium_boxes": {
+    "red": null,
+    "blue": null,
+    "green": null
+   }
+  }
+ ],
+ "chromium": "158.0.8127.18"
+}

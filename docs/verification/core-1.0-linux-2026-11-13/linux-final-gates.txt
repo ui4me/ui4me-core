@@ -1,0 +1,21 @@
+UI4ME Core 1.0.0-rc.1 — Linux final automated gates (2026-11-13)
+Source: commit d94ecfc, source_sha256 856a0fb2dc6b6e56... (ledgers); Debian 13 x86_64, rustc 1.99.1, Python 3.13.5
+
+python3 tools/verify.py --jobs 6 --keep-going
+  fmt: PASS
+  check: PASS
+  test: PASS
+  python: PASS
+  headless: PASS
+  renderer: PASS
+  faults: PASS
+  Rust workspace: 1085 passed, 0 failed, 11 ignored (pre-existing measurement/fuzz harnesses), 0 filtered
+  Python: OK (skipped=2) — skips: Windows named pipe; Pillow oracle (run separately in the QA venv for R12/C10)
+  Real-IPC renderer + completion fixture: 23/23 checks PASS (AF_UNIX listener and process tests ran unfiltered)
+  Fault fixtures: veto-close, veto-quit, freeze-close, freeze-quit, crash-after-ready, log-flood (unread host output), managed-tree: PASS
+
+cargo clippy --locked --workspace --all-targets -j 4 -- -D warnings: exit 0
+patches/stylo/verify.sh: OK (P-006-1..10, 12..20)
+
+Installed release host: ~/.cargo/bin/ui4me-host 1.0.0-rc.1, 40460784 bytes, sha256 fc422be508059785022d3937d277e51d14e80be4f3731a47fdfff6828bdecc33
+Automated native subsets with that binary (ledgers): host PASS, renderer PASS, completion PASS

@@ -1,0 +1,10 @@
+Kickoff launch: host 2361202 exe=~/.cargo/bin/ui4me-host sha=7f2404f925923901 backend 2361206  
+unfocused static idle 60 s: pid2361202=0.237% pid2361206=0.446%
+focused window, no text field focused, 20 s: pid2361202=0.226% pid2361206=0.441%
+focused Name field (caret blinking) 20 s: pid2361202=1.410% pid2361206=0.432%
+typing responsiveness: keys delivered; value=A useful desktop toolabcd
+C-lab static (unfocused) 20 s host: 0.226%
+animation enabled (sheet 1) 20 s host: 35.555%
+animation removed, 20 s host: 36.237%
+motion-guarded animation with app reduced-motion override, 20 s host: 0.225%
+same with override back to system (KDE reports no preference) 20 s host: 38.875%

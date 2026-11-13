@@ -1,20 +1,46 @@
-# UI4ME Core 1.0.0-rc.1 — delivery status
+# UI4ME Core 1.0.0-rc.1 — status
 
-**Complete source candidate; native release qualification remains pending.**
-The completion implementation is supplied for Linux and Windows, together with
-the Python application API, regression tests, reference application, capability
-decisions and autonomous local finishing procedure. This archive does not claim
-that the new source has already passed KDE or Windows desktop tests.
+**Linux/KDE Plasma Wayland checkpoint qualified; Windows Server 2022 not yet run.**
+On 2026-11-13 the candidate passed the full automated verifier, Clippy and all
+N01–N15, R01–R12 and C01–C12 native scenarios on Debian 13 / KDE Plasma 6.3
+(native Wayland) with the installed release host
+(`fc422be508059785022d3937d277e51d14e80be4f3731a47fdfff6828bdecc33`, source
+commit `d94ecfc`). Seven product defects found by those scenarios are fixed in
+this tree. Evidence, measurements and open findings:
+[core-1.0-linux-2026-11-13](verification/core-1.0-linux-2026-11-13/README.md).
 
-Use [LOCAL_FINISH_PROMPT.md](../LOCAL_FINISH_PROMPT.md): qualify Python/Linux KDE
-on native Wayland, commit and push; qualify Windows Server 2022 in the normal
-test user's RDP session, commit and push; then stabilize and qualify the final
-common source and push the final result. Preserve the existing Git history.
+**Windows qualification is pending** (stage 2 of `LOCAL_FINISH_PROMPT.md`). The
+0.2 Windows UI Automation selection stall remains an open blocker, and every
+shared-code fix made here still needs Windows verification. The version stays
+`1.0.0-rc.1`; no final release gate has been passed.
 
-The supplied 0.2 source is the baseline. Its reported commit is `63e50dc`; the
-input archive contains no Git metadata, so this package does not manufacture
-ancestry. The previous report is [BASELINE_0.2_STATUS.md](BASELINE_0.2_STATUS.md).
-Historical results qualify only their original source and environments.
+### Linux checkpoint summary
+
+| Gate | Result |
+| --- | --- |
+| `tools/verify.py` (fmt, check, test, python, headless, renderer IPC, faults) | PASS; Rust 1,085 passed / 0 failed / 11 pre-existing ignored, nothing filtered |
+| Clippy, all targets, `-D warnings` | PASS |
+| Native ledgers (installed host) | host 15/15, renderer 12/12, completion 12/12 PASS, each with its automated subset |
+| Browser oracle | R12 4/4 PASS; C10 focused fixtures match Chromium geometry |
+| Measurements | ready median 569 ms, idle host 0.22 % CPU, 59.6 MB host+backend PSS; DOM churn flat |
+
+Defects fixed during this checkpoint: keyboard-only Wayland clipboard
+(winit-wayland seat patch), dropdown options/value missing from AT-SPI, node
+references aliasing across replaced documents, dark UA control colors on pages
+without `color-scheme` (Stylo P-006-20), decoded rasters retained after bundle
+replacement or image removal, animations surviving removal of their stylesheet,
+and AT-SPI table/tree/live/relationship metadata (accesskit_atspi_common patch).
+
+Open findings, reported rather than closed: a residual ~17–19 KiB host PSS
+growth per replacement of a *displayed* resource-bundle image (unattributed);
+and the C04 wording about preedits on focus change versus the retained,
+browser-like behavior of keeping the composed text in its own field. Both are
+detailed in the checkpoint README.
+
+The supplied 0.2 source is the baseline (reported commit `63e50dc`, verified as
+the repository ancestor). The previous report is
+[BASELINE_0.2_STATUS.md](BASELINE_0.2_STATUS.md). Historical results qualify
+only their original source and environments.
 
 ## Implementation delivered
 
@@ -47,7 +73,7 @@ application/UI library. Excluded items are not a promised later batch.
 - A static default reference page, three native acceptance ledgers, independent
   Windows UI Automation probes and bounded diagnostic process cleanup.
 
-## Checks completed during preparation
+## Checks completed during cloud preparation (historical)
 
 Exact commands, counts, logs and scope are in the
 [preparation report](verification/core-1.0-preparation/README.md) and its
@@ -106,10 +132,11 @@ Do not waive this gate because NVDA works, disable text patterns or turn a
 timeout into an empty successful selection. A harness-caused failure can be
 closed only with corrected compliant-client and control-comparison evidence.
 
-## Native work still required
+## Native work still required (Windows)
 
-For each target, run the full verifier and Clippy, install the release build,
-and complete N01–N15, R01–R12 and C01–C12 with source/binary-bound evidence.
+Linux is complete for this source (see above). For Windows, run the full
+verifier and Clippy, install the release build, and complete N01–N15, R01–R12
+and C01–C12 with source/binary-bound evidence, including the R05 UIA matrix.
 The [acceptance procedures](CORE_1.0_ACCEPTANCE.md) cover lifecycle, services,
 real IME, Orca/NVDA, independent UIA, document interactions, installed launch and
 resource/performance measurements. Runtime availability is separate from
@@ -129,9 +156,10 @@ then rebuild/reinstall and verify that version too.
 - The baseline KDE folder picker was not attached despite the parent request.
   External reveal APIs cannot currently forward a parent. Service acceptance
   does not prove that another application's window appeared.
-- The baseline retained about 19 KiB per closed document window with AT-SPI
-  enabled, attributed there to zbus. This candidate has not been measured on
-  that desktop; compare the trend and investigate new growth locally.
+- With AT-SPI enabled, about 18–21 KiB is retained per closed document window
+  on KDE (measured 2026-11-13; 0.2: ~19 KiB), attributed to zbus object-path
+  retention. accesskit_unix 0.24.1 provides no AT-SPI Table/TableCell
+  interfaces; table indices are published as object attributes.
 - Rendering remains CPU based. Animated content costs work even though the
   default reference is static. Do not relabel 0.2 performance as new measurements.
 - Static SVG and the declared HTML/CSS profile are supported. This is not a
