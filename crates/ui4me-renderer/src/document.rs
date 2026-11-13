@@ -1897,10 +1897,10 @@ impl DispatchHost for Document {
         };
         let mut value = json!({"type":event_type,"element":element_name,"path":route,
             "_target":[raw.index,raw.generation.get()],"_element":[eraw.index,eraw.generation.get()]});
-        value["node"] = json!(public_dom::node_ref(node));
+        value["node"] = json!(public_dom::node_ref(self.id(), node));
         value["detail"] = json!(event.init.detail);
         if let Some(related) = event.init.related_target {
-            value["related_node"] = json!(public_dom::node_ref(related));
+            value["related_node"] = json!(public_dom::node_ref(self.id(), related));
             value["related_element"] = json!(d.get_attribute(related, "id").ok().flatten());
         }
         if let Some(control) = d.control_state(node).ok().flatten() {
@@ -2283,7 +2283,7 @@ impl DispatchHost for Document {
             .ok()
             .map(|u| u.to_string());
         if self.events.len() < MAX_EVENTS {
-            self.events.push(json!({"type":"link_activated","element":element,"href":href,"url":resolved,"node":crate::document::public_dom::node_ref(link)}));
+            self.events.push(json!({"type":"link_activated","element":element,"href":href,"url":resolved,"node":crate::document::public_dom::node_ref(self.id(), link)}));
         }
     }
     fn ime_reset(&mut self, _id: DocumentId) {

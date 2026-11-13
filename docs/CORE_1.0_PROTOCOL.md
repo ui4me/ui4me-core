@@ -75,8 +75,9 @@ All operations below remain inside:
 ```
 
 `T` below means exactly one of `element` (HTML id) or `node` (opaque node
-reference). Node references contain generation identity and can name anonymous
-nodes. Unless the row explicitly allows no target, omitting both is invalid.
+reference). Node references contain their document's identity and the node
+generation and can name anonymous nodes; a reference minted by a replaced or
+other document is stale (code 4) and never names a node of the current one. Unless the row explicitly allows no target, omitting both is invalid.
 
 | `op` | Fields | Result |
 | --- | --- | --- |

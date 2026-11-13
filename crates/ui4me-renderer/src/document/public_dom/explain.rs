@@ -114,11 +114,14 @@ impl Document {
         let property = name.trim().to_ascii_lowercase();
         let base = |status: &str, reason: String| json!({"property": property, "element": element, "status": status, "reason": reason});
         // Profile and name lookup first: an excluded property never applies anywhere.
-        let entry =
-            match self.computed_style(None, Some(&node_ref(n)), std::slice::from_ref(&property)) {
-                Ok(v) => v["properties"][property.as_str()].clone(),
-                Err(e) => return base("unknown_property", e.message),
-            };
+        let entry = match self.computed_style(
+            None,
+            Some(&node_ref(self.id(), n)),
+            std::slice::from_ref(&property),
+        ) {
+            Ok(v) => v["properties"][property.as_str()].clone(),
+            Err(e) => return base("unknown_property", e.message),
+        };
         match entry["status"].as_str() {
             Some("unsupported") => {
                 let feature = entry["feature"].as_str().unwrap_or("").to_owned();

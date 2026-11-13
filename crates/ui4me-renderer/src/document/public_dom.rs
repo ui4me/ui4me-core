@@ -2,9 +2,11 @@
 //! stylesheet attachment with parse diagnostics (F0602) and generation-safe node references for
 //! traversal of unidentified elements, text and template contents (F0604).
 //!
-//! A node reference is the string `node:<index>:<generation>`; it names one DOM node for as long
-//! as that node exists in the document (connected, or inside a connected `template`'s contents).
-//! A reference to a removed node is a stale-handle error (code 4), never another node.
+//! A node reference is the string `node:<document>:<index>:<generation>`; it names one DOM node of
+//! one document for as long as that node exists in it (connected, or inside a connected
+//! `template`'s contents). A reference to a removed node, or one minted by another (for example
+//! a replaced) document, is a stale-handle error (code 4), never another node: a fresh document
+//! restarts node generations, so the document identity is what keeps its references apart.
 
 use super::*;
 use ui4me_document::node::NodeKind;
@@ -33,19 +35,35 @@ fn stale(message: impl Into<String>) -> Error {
     }
 }
 
-/// The public reference of a node.
-pub fn node_ref(n: NodeId) -> String {
+/// The public reference of node `n` of document `doc`.
+pub fn node_ref(doc: DocumentId, n: NodeId) -> String {
     let r = n.raw();
-    format!("node:{}:{}", r.index, r.generation.get())
+    format!(
+        "node:{}:{}:{}",
+        doc.raw().generation.get(),
+        r.index,
+        r.generation.get()
+    )
 }
 
-fn parse_ref(reference: &str) -> Result<NodeId> {
+fn parse_ref(doc: DocumentId, reference: &str) -> Result<NodeId> {
     let bad = || arg(format!("Invalid node reference: {reference}"));
     let rest = reference.strip_prefix("node:").ok_or_else(bad)?;
-    let (index, generation) = rest.split_once(':').ok_or_else(bad)?;
+    let mut parts = rest.split(':');
+    let (Some(owner), Some(index), Some(generation), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return Err(bad());
+    };
+    let owner: u32 = owner.parse().map_err(|_| bad())?;
     let index: u32 = index.parse().map_err(|_| bad())?;
     let generation: u32 = generation.parse().map_err(|_| bad())?;
     let generation = NonZeroU32::new(generation).ok_or_else(bad)?;
+    if owner != doc.raw().generation.get() {
+        return Err(stale(format!(
+            "Stale node reference: {reference} belongs to another document"
+        )));
+    }
     Ok(NodeId::from_raw(RawId { index, generation }))
 }
 
@@ -61,7 +79,7 @@ fn kind_name(k: NodeKind) -> &'static str {
 }
 
 pub(super) fn model_live_ref(d: &Model, reference: &str) -> Result<NodeId> {
-    let n = parse_ref(reference)?;
+    let n = parse_ref(d.id(), reference)?;
     if !d.arena().contains(n) {
         return Err(stale(format!("Stale node reference: {reference}")));
     }
@@ -230,7 +248,7 @@ impl Document {
                 json!({
                     "kind": kind,
                     "sheet": sheet,
-                    "node": element.map(node_ref),
+                    "node": element.map(|e| node_ref(self.id(), e)),
                     "element": element.and_then(|n| d.get_attribute(n, "id").ok().flatten().map(str::to_owned)),
                     "href": s.href,
                     "media": s.media,
@@ -242,7 +260,7 @@ impl Document {
 
     /// The reference of `element` (or of the document).
     pub fn node_of(&self, element: Option<&str>) -> Result<String> {
-        Ok(node_ref(self.target_of(element, None)?))
+        Ok(node_ref(self.id(), self.target_of(element, None)?))
     }
 
     /// One node: type, name, id, attributes, text, parent, siblings and child count.
@@ -251,16 +269,22 @@ impl Document {
         let d = self.pipeline.document();
         let kind = d.node_kind(n)?;
         let mut v = json!({
-            "node": node_ref(n),
+            "node": node_ref(self.id(), n),
             "type": kind_name(kind),
-            "parent": d.parent(n)?.map(node_ref),
+            "parent": d.parent(n)?.map(|p| node_ref(self.id(), p)),
             "child_count": d.children(n)?.len(),
         });
         if let Some(p) = d.parent(n)? {
             let kids = d.children(p)?;
             let i = kids.iter().position(|&k| k == n);
-            v["previous"] = json!(i.and_then(|i| i.checked_sub(1)).map(|j| node_ref(kids[j])));
-            v["next"] = json!(i.and_then(|i| kids.get(i + 1)).map(|&k| node_ref(k)));
+            v["previous"] = json!(
+                i.and_then(|i| i.checked_sub(1))
+                    .map(|j| node_ref(self.id(), kids[j]))
+            );
+            v["next"] = json!(
+                i.and_then(|i| kids.get(i + 1))
+                    .map(|&k| node_ref(self.id(), k))
+            );
         }
         match kind {
             NodeKind::Element => {
@@ -273,7 +297,7 @@ impl Document {
                     .collect();
                 v["attributes"] = Value::Object(attrs);
                 if let Some(c) = d.template_contents(n)? {
-                    v["content"] = json!(node_ref(c));
+                    v["content"] = json!(node_ref(self.id(), c));
                 }
             }
             NodeKind::Text | NodeKind::Comment => {
@@ -302,7 +326,7 @@ impl Document {
             .map(|&k| {
                 let kind = d.node_kind(k).map(kind_name).unwrap_or("other");
                 json!({
-                    "node": node_ref(k),
+                    "node": node_ref(self.id(), k),
                     "type": kind,
                     "name": d.local_name(k).ok(),
                     "id": d.get_attribute(k, "id").ok().flatten(),
@@ -352,7 +376,7 @@ impl Document {
         Ok(json!({
             "element": owner.and_then(|o| d.get_attribute(o, "id").ok().flatten().map(str::to_owned)),
             "offset": offset,
-            "block": node_ref(root),
+            "block": node_ref(self.id(), root),
         }))
     }
 

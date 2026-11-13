@@ -202,7 +202,7 @@ impl Document {
     }
 
     fn node_identity(&self, n: NodeId) -> Value {
-        json!({"node":public_dom::node_ref(n),"element":self.pipeline.document().get_attribute(n,"id").ok().flatten().filter(|id| !id.is_empty())})
+        json!({"node":public_dom::node_ref(self.id(), n),"element":self.pipeline.document().get_attribute(n,"id").ok().flatten().filter(|id| !id.is_empty())})
     }
 
     /// Coordinates are viewport CSS pixels, with native hit-test ordering and pointer-events rules.
@@ -344,7 +344,7 @@ impl Document {
             .document()
             .control_value(n)
             .unwrap_or_default();
-        json!({"start":s.start,"end":s.end,"direction":match s.direction { SelectionDirection::Forward=>"forward",SelectionDirection::Backward=>"backward",SelectionDirection::None=>"none" },"length":text.encode_utf16().count(),"node":public_dom::node_ref(n)})
+        json!({"start":s.start,"end":s.end,"direction":match s.direction { SelectionDirection::Forward=>"forward",SelectionDirection::Backward=>"backward",SelectionDirection::None=>"none" },"length":text.encode_utf16().count(),"node":public_dom::node_ref(self.id(), n)})
     }
 
     pub fn control_selection(&self, element: Option<&str>, node: Option<&str>) -> Result<Value> {

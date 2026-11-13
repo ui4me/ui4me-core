@@ -584,3 +584,41 @@ fn direct_surface_render_matches_allocating_render_and_rejects_bad_destinations(
     assert!(d.render_into(u32::MAX, u32::MAX, 1.0, &mut short).is_err());
     assert_eq!(short, vec![0x123456; 5]);
 }
+
+/// Core 1.0 C03 (found on KDE through real IPC): a replacement document parsed from the same HTML
+/// restarts node generations, so an index/generation reference minted by the replaced document
+/// named the corresponding node of the new one and modified it. References carry their document.
+#[test]
+fn node_reference_from_a_replaced_document_is_stale_in_its_replacement() {
+    let html = "<ul><li>alpha</li><li>beta</li></ul>";
+    let mut old = doc(html);
+    let reference = old.query_nodes("li", 0, 10).unwrap()["nodes"][0]["node"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut replacement = doc(html);
+    let fresh = replacement.query_nodes("li", 0, 10).unwrap()["nodes"][0]["node"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_ne!(reference, fresh, "documents must mint distinct references");
+    let error = replacement
+        .apply_node_batch(&[NodeOp::SetText {
+            node: reference.clone(),
+            text: "old-document handle".into(),
+        }])
+        .unwrap_err();
+    assert_eq!(error.code, 4, "{}", error.message);
+    assert_eq!(
+        replacement.get_html(None, Some(&fresh), false).unwrap(),
+        "alpha"
+    );
+    assert_eq!(replacement.get_node(&reference).unwrap_err().code, 4);
+    // The same reference still names its node in its own document.
+    assert_eq!(
+        old.get_html(None, Some(&reference), false).unwrap(),
+        "alpha"
+    );
+    // The pre-1.0 two-part form is no longer a valid reference.
+    assert_eq!(replacement.get_node("node:1:1").unwrap_err().code, 1);
+}
