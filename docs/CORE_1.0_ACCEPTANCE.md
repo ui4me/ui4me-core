@@ -3,7 +3,8 @@
 This is the acceptance contract for the completion candidate described in
 [CORE_1.0_SPEC.md](CORE_1.0_SPEC.md). The supplied implementation is not a native
 qualification result. Historical 0.1 and 0.2 reports stay historical; in
-particular, the 0.2 Windows R05 failure is not closed by installing this source.
+particular, the 0.2 Windows R05 failure is not closed by installing this source (it was
+investigated and closed in the 1.0 Windows qualification; see [STATUS](STATUS.md)).
 
 The supported qualification targets are Debian/KDE Plasma on native Wayland
 and Windows Server 2022 Desktop Experience in the dedicated normal-user RDP

@@ -66,6 +66,12 @@ def desktop_entry(app_id, name, host, app, icon=None):
     return "\n".join(lines) + "\n"
 
 
+def read_manifest(path):
+    """Parse an app manifest. Windows editors and PowerShell 5.1 often write UTF-8
+    with a byte-order mark; the host accepts it, so the launcher tool does too."""
+    return tomllib.loads(Path(path).read_text(encoding="utf-8-sig"))
+
+
 def run_windows_helper(payload):
     helper = ROOT / "tools/windows/register_launcher.ps1"
     with tempfile.TemporaryDirectory(prefix="ui4me-launcher-") as folder:
@@ -126,7 +132,7 @@ def main():
     try:
         if args.action == "install":
             app = args.app.expanduser().resolve(strict=True)
-            config = tomllib.loads(app.read_text(encoding="utf-8"))
+            config = read_manifest(app)
             app_id = validate_id(config["app"]["id"])
             name = config["app"].get("name", app_id)
             if not isinstance(name, str) or not name.strip() or any(c in name for c in "\x00\n\r"):

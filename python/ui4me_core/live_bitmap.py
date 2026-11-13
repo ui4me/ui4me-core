@@ -8,6 +8,7 @@ frame queue is built in Python. Image style/layout is preserved across frames.
 from __future__ import annotations
 
 import mmap
+import os
 from pathlib import Path
 import threading
 from typing import TYPE_CHECKING
@@ -46,7 +47,14 @@ class LiveBitmap:
             raise RuntimeError("Host returned invalid bitmap geometry")
         path = Path(response["path"])
         try:
-            self._file = path.open("r+b", buffering=0)
+            if os.name == "nt":
+                # Delete-on-close with delete sharing: the host can unlink the
+                # transport after the first present, and the file disappears
+                # once both processes close it even if both are killed.
+                fd = os.open(path, os.O_RDWR | os.O_BINARY | os.O_TEMPORARY | os.O_NOINHERIT)
+                self._file = os.fdopen(fd, "r+b", buffering=0)
+            else:
+                self._file = path.open("r+b", buffering=0)
             try:
                 self._map = mmap.mmap(self._file.fileno(), self.slot_bytes * self.slots,
                                       access=mmap.ACCESS_WRITE)

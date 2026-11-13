@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UI4ME C-lab</title>
+<style>
+  body { font-family: sans-serif; font-size: 14px; margin: 0; background: #f4f5f7; color: #111; }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; }
+  section { background: #fff; border: 1px solid #ccd; border-radius: 6px; padding: 6px 8px; }
+  h2 { font-size: 13px; margin: 0 0 4px; color: #345; }
+  input, select, button, textarea { font-size: 13px; }
+  .zone { border: 2px dashed #889; padding: 6px; margin: 4px 0; min-height: 22px; }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  #scroller { height: 70px; overflow: auto; border: 1px solid #aab; }
+  #far { margin-top: 400px; background: #ffe; }
+  .anon li { margin: 1px 0; }
+  table { border-collapse: collapse; } td, th { border: 1px solid #ccd; padding: 1px 4px; }
+  #res-img { width: 48px; height: 48px; border: 1px solid #aaa; }
+  [inert] { opacity: .5; }
+</style>
+</head>
+<body>
+<main>
+<section id="s-c03"><h2>C03 anonymous nodes</h2>
+  <ul class="anon"><li>alpha</li><li>beta</li><li>gamma</li></ul>
+  <div class="row"><button id="nested-rpc" type="button">Nested RPC</button><span id="nested-out">-</span></div>
+  <div class="row" id="self-remove-host"><button id="self-remove" type="button">Remove myself</button></div>
+  <div class="row"><button id="block-python" type="button">Block Python 8s</button></div>
+</section>
+<section id="s-c04"><h2>C04 text editing</h2>
+  <div class="row"><label>Text <input id="t1" type="text" value="éa😀bc&#x0065;&#x0301;d"></label></div>
+  <div class="row"><label>Second <input id="t2" type="text" value=""></label></div>
+  <div class="row"><label>Secret <input id="pw" type="password" value=""></label>
+  <label>RO <input id="ro" type="text" readonly value="read only"></label></div>
+  <div class="row"><label>Cancel <input id="cancel-field" type="text" value="locked"></label>
+  <label>Mail <input id="mail" type="email" inputmode="email" value=""></label></div>
+  <textarea id="ta" rows="2" cols="30">line one
+line two</textarea>
+</section>
+<section id="s-c05"><h2>C05 forms</h2>
+  <form id="form-a">
+    <div class="row"><input name="tag" value="one"><input name="tag" value="two"><input name="skip" value="x" disabled>
+    <input name="req" id="req" required value="filled"></div>
+    <div class="row"><select name="pick" id="pick"><option>Apple</option><option selected>Banana</option></select>
+    <input type="checkbox" name="cb" id="cb" value="on"><label for="cb">cb</label></div>
+    <div class="row"><label>One <input id="file1" type="file" name="f1"></label></div>
+    <div class="row"><label>Many <input id="file2" type="file" name="f2" multiple></label></div>
+    <div class="row"><button id="sub1" name="act" value="save" type="submit">Save</button>
+    <button id="sub2" name="act" value="send" type="submit">Send</button><button id="rst" type="reset">Reset</button></div>
+  </form>
+  <input form="form-a" name="tag" value="outside">
+</section>
+<section id="s-c06"><h2>C06 drops</h2>
+  <div id="dz-files" class="zone" data-ui4me-drop="files">files
+    <div id="dz-none" class="zone" data-ui4me-drop="none">none (inside files)</div></div>
+  <div id="dz-text" class="zone" data-ui4me-drop="text">text only</div>
+  <div id="dz-both" class="zone" data-ui4me-drop="files text">files text
+    <div id="dz-inner-text" class="zone" data-ui4me-drop="text">inner text</div></div>
+  <div class="row"><fieldset id="dz-disabled-fs" disabled style="margin:0;padding:2px"><div id="dz-disabled" class="zone" data-ui4me-drop="files text">disabled</div></fieldset>
+  <div id="dz-inert" class="zone" inert data-ui4me-drop="files text">inert</div>
+  <div id="dz-plain" class="zone">no opt-in</div></div>
+</section>
+<section id="s-c07"><h2>C07 events</h2>
+  <div id="ev-outer" class="zone">outer <span id="ev-inner" class="zone" style="display:inline-block">inner</span></div>
+  <div class="row"><div id="ctx-cancel" class="zone">context cancelled</div><button id="dbl" type="button">Double</button></div>
+</section>
+<section id="s-c08"><h2>C08 accessibility</h2>
+  <span id="gridcap">Inventory</span><table role="grid" id="grid" aria-labelledby="gridcap" aria-describedby="gridnote"><thead><tr><th>Item</th><th>Qty</th></tr></thead>
+  <tbody><tr><td>Bolt</td><td>12</td></tr><tr><td>Nut</td><td>30</td></tr></tbody></table>
+  <ul role="tree" id="tree" aria-label="Folders"><li role="treeitem" aria-level="1" aria-expanded="true" aria-selected="true">Root
+    <ul role="group"><li role="treeitem" aria-level="2" aria-selected="false">Child A</li><li role="treeitem" aria-level="2" aria-selected="false">Child B</li></ul></li></ul>
+  <div id="live" role="status" aria-live="polite" aria-atomic="true" aria-busy="false">Idle</div>
+  <p id="gridnote">Stock levels per item</p><label for="combo">Fruit</label> <select id="combo"><option>Apple</option><option selected>Banana</option><option>Cherry</option></select>
+  <div id="scroller"><p>Scroll region top.</p><p id="far">Far away paragraph for ScrollIntoView.</p></div>
+</section>
+<section id="s-c09"><h2>C09 resources</h2>
+  <div class="row"><img id="res-img" src="ui4me-res://bundle/a.png" alt="bundle image"><span id="res-note">bundle image</span></div>
+</section>
+</main>
+</body>
+</html>

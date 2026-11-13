@@ -1,0 +1,29 @@
+{
+  "check": "C04",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T16:30:09.003115+00:00",
+  "build_identity": {
+    "host": "C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe",
+    "host_sha256": "bc704f662345611188b650cc9db1fa696c4934943ccc153100a74c0ba2836f6d",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "a089b4f5338f49417f56e95a7bef7f5cb6c8f3db7c0afba938628fac7d271d5d",
+    "base_commit": "33e1317",
+    "os": "Windows-2022Server-10.0.20348-SP0",
+    "release": "2022Server",
+    "version": "10.0.20348",
+    "session": 2,
+    "user": "ui4me_test",
+    "desktop": "Windows interactive RDP session (xfreerdp3 client), 1600x1000, 96 DPI unless stated"
+  },
+  "actions": [
+    "UTF-16 selection/replace/undo/redo; split surrogate; keyboard grapheme navigation; read-only/cancelled fields; Microsoft Pinyin in text/email/textarea/password/readonly and after programmatic focus; focus change mid-composition (target outside the candidate window); Escape"
+  ],
+  "expected": "UTF-16 editing and real IME without splitting graphemes",
+  "observed": "Split-surrogate ops rejected; emoji replaced atomically; caret offsets 1,2,4,5,6,8,9; read-only and beforeinput-cancelled fields unchanged; Pinyin commits in all editable kinds, none in read-only; interrupted composition stays in t2, next composition goes to the newly focused field",
+  "limitations": [],
+  "evidence_files_sha256": {
+    "c_suite.txt": "09f18f9e3b1843a7fde0bcf4d40ca4c40112e8f17efbc0d79910aefab1d29530",
+    "F:\\ui4me\\lab\\out\\final\\C04-preedit-t2.png": "00dc7925d302155b3e925f2fb2837b46178eb453d29336e2bd2b6197de25dc03",
+    "F:\\ui4me\\lab\\out\\final\\C04-after-ime.png": "383ca6d3cc7b6b2057b513bf99cf740c8ec85c39186f22eb4d5805592dfea6d7"
+  }
+}

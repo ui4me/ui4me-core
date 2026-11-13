@@ -1,0 +1,29 @@
+{
+  "check": "R02",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T16:29:59.477274+00:00",
+  "build_identity": {
+    "host": "C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe",
+    "host_sha256": "bc704f662345611188b650cc9db1fa696c4934943ccc153100a74c0ba2836f6d",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "a089b4f5338f49417f56e95a7bef7f5cb6c8f3db7c0afba938628fac7d271d5d",
+    "base_commit": "33e1317",
+    "os": "Windows-2022Server-10.0.20348-SP0",
+    "release": "2022Server",
+    "version": "10.0.20348",
+    "session": 2,
+    "user": "ui4me_test",
+    "desktop": "Windows interactive RDP session (xfreerdp3 client), 1600x1000, 96 DPI unless stated"
+  },
+  "actions": [
+    "Name '<tag> & value', checkbox, radio Work, estimate +2, slider click/+2, priority High, Add row, palette toggle"
+  ],
+  "expected": "Controls and Python callbacks; live DOM batches",
+  "observed": "All values observed via UIA; row 03 '<tag> & value' High No added in one transaction; status updated",
+  "limitations": [],
+  "evidence_files_sha256": {
+    "ref_suite.txt": "8ed2ab62f7466433e22c4a5c81713cb79739f2916770bfa75e86dabca6aa5728",
+    "F:\\ui4me\\lab\\out\\final\\R02-row-added.png": "e1a224f462e34aeb3b28d0987be42a2cec42010eae9011989cb0630c429fdf1e",
+    "F:\\ui4me\\lab\\out\\final\\R02-palette-toggled.png": "6cb774548131511273c61b3f3327162e3e62ceaf2438bd7738ff453628fe32ee"
+  }
+}

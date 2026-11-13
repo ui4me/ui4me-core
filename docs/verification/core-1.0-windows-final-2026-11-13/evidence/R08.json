@@ -1,0 +1,30 @@
+{
+  "check": "R08",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T16:30:03.804887+00:00",
+  "build_identity": {
+    "host": "C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe",
+    "host_sha256": "bc704f662345611188b650cc9db1fa696c4934943ccc153100a74c0ba2836f6d",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "a089b4f5338f49417f56e95a7bef7f5cb6c8f3db7c0afba938628fac7d271d5d",
+    "base_commit": "33e1317",
+    "os": "Windows-2022Server-10.0.20348-SP0",
+    "release": "2022Server",
+    "version": "10.0.20348",
+    "session": 2,
+    "user": "ui4me_test",
+    "desktop": "Windows interactive RDP session (xfreerdp3 client), 1600x1000, 96 DPI unless stated"
+  },
+  "actions": [
+    "Choose a file -> Escape; again -> paste Unicode path + Enter; About dialog + Escape; Quick help popover + Escape; picker open then parent WM_CLOSE"
+  ],
+  "expected": "Parented cancellable picker, HTML dialog/popover",
+  "observed": "Picker owned by the app window (owner disabled); cancel and Unicode selection reported in status; dialog focus close-dialog, Escape returns focus; popover dismissed; parent close with picker open closes both and exits",
+  "limitations": [],
+  "evidence_files_sha256": {
+    "ref_suite.txt": "8ed2ab62f7466433e22c4a5c81713cb79739f2916770bfa75e86dabca6aa5728",
+    "F:\\ui4me\\lab\\out\\final\\R08-file-dialog.png": "d10489ae0e641407f09158d20bb40bf49b2231249fbed2838f1b266acfd5728e",
+    "F:\\ui4me\\lab\\out\\final\\R08-html-dialog.png": "64500cec4f9952801a5500f48bede75fb01d56a35b70ed5ea91f81a4b34eabb4",
+    "F:\\ui4me\\lab\\out\\final\\R08-popover.png": "adf8dd25e78879706d7482d1abe940e111198897469322549789e2ee64ab9fb1"
+  }
+}

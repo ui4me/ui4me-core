@@ -59,6 +59,10 @@ class SourceIdentityTests(unittest.TestCase):
                     (root / folder).mkdir(parents=True)
                     (root / folder / "result").write_text("new evidence", encoding="utf-8")
                 self.assertEqual(native_acceptance.source_identity(), original)
+                # Local agent instructions are absent from other checkouts.
+                for name in ("AGENTS.md", "CLAUDE.md", "LOCAL_FINISH_PROMPT.md"):
+                    (root / name).write_text("local", encoding="utf-8")
+                self.assertEqual(native_acceptance.source_identity(), original)
                 (root / "source.rs").write_text("changed executable source", encoding="utf-8")
                 changed = native_acceptance.source_identity()
                 self.assertNotEqual(changed, original)

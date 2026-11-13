@@ -1,0 +1,29 @@
+{
+  "check": "C08",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T16:30:11.261353+00:00",
+  "build_identity": {
+    "host": "C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe",
+    "host_sha256": "bc704f662345611188b650cc9db1fa696c4934943ccc153100a74c0ba2836f6d",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "a089b4f5338f49417f56e95a7bef7f5cb6c8f3db7c0afba938628fac7d271d5d",
+    "base_commit": "33e1317",
+    "os": "Windows-2022Server-10.0.20348-SP0",
+    "release": "2022Server",
+    "version": "10.0.20348",
+    "session": 2,
+    "user": "ui4me_test",
+    "desktop": "Windows interactive RDP session (xfreerdp3 client), 1600x1000, 96 DPI unless stated"
+  },
+  "actions": [
+    "UIA grid/tree/live region/relations, aria-busy, ScrollItem on paragraph and static-text leaf, text-range ScrollIntoView in a textarea, combobox SelectionItem, stale element after replacement"
+  ],
+  "expected": "Accessibility table/tree, live updates, assistive scroll",
+  "observed": "Grid exposed as DataGrid; tree items with level/position/expanded; live region raises LiveRegionChanged; aria-busy in AriaProperties; ScrollIntoView on paragraph AND static-text leaf scroll the scroller to 376 (renderer fix); text-range ScrollIntoView reveals the textarea; combobox SelectionItem selects Cherry; stale element -> UIA_E_ELEMENTNOTAVAILABLE",
+  "limitations": [
+    "AccessKit's UIA adapter has no Grid/Table patterns (upstream TODO) and exposes described-by as FullDescription rather than a relation"
+  ],
+  "evidence_files_sha256": {
+    "c_suite.txt": "09f18f9e3b1843a7fde0bcf4d40ca4c40112e8f17efbc0d79910aefab1d29530"
+  }
+}

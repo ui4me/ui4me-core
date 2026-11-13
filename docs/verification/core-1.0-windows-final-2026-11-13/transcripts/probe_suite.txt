@@ -1,0 +1,35 @@
+## N03 / N07
+resize [900, 300, 600, 420] client 584 381
+maximize [-8, -8, 1616, 976] max True min False
+restore [900, 300, 600, 420] max False min False
+minimize [-32000, -32000, 160, 28] max False min True
+restore [900, 300, 600, 420] max False min False
+caption close of second window -> ['UI4ME host — Python reference'] | backend ['Close accepted w2']
+UIA tree [[0, 'Window', 'UI4ME host — Python reference', None], [1, 'TitleBar', None, 'UI4ME host — Python reference'], [2, 'MenuBar', 'System', None], [3, 'MenuItem', 'System', None], [2, 'Button', 'Minimize', None], [2, 'Button', 'Maximize', None], [2, 'Button', 'Close', None], [1, 'Edit', 'Editable input', 'Python is connected. Type here to test native text input. F2 clipboard; F3 open; F4 save; F5 folder; F6 worker delay; F7 cancel dialog. F8 opens the explicitly configured external target, if supplied. Close either window to exercise an asynchronous close decision.'], [1, 'Button', 'Copy', None], [1, 'Button', 'Paste', None], [1, 'Button', 'Open file', None], [1, 'Button', 'Quit', None], [1, 'Text', 'org.ui4me.HostReference • windows • native desktop', None]]
+Tab order ['Copy', 'Paste', 'Open file', 'Quit', 'Editable input', 'Copy']
+SetFocus(Paste) Paste
+Select first 6 chars via TextPattern + Invoke(Copy): {'selected': 'Python', 'selection': ['Python'], 'clipboard': 'Python'}
+## N04 clipboard
+probe -> other app clipboard: equal True len 264
+other app -> probe 'Unicode from another app: Příliš žluťoučký kůň — 日本語 — 😀'
+2.2 MB paste: unchanged True 56 | log []
+exit 0
+## N05 dialogs
+F3 [('Open files', '#32770', 590948, True)] owner hwnd main 590948 enabled {'Python reference': False, 'Unicode': True}
+Escape [] ["dialog.open_files {'cancelled': True, 'paths': []}"] {'Python reference': True, 'Unicode': True}
+select Unicode file [] ["dialog.open_files {'cancelled': False, 'paths': ['F:\\\\ui4me\\\\lab\\\\files\\\\žluťoučký 日本.txt']}"]
+F4 [('Save file', '#32770', 590948, True)]
+save [] ["dialog.save_file {'cancelled': False, 'paths': ['F:\\\\ui4me\\\\lab\\\\files\\\\saved by probe ✓.txt']}"]
+F5 [('Choose folder', '#32770', 590948, True)]
+Escape [] ["dialog.choose_folder {'cancelled': True, 'paths': []}"]
+F3 again [('Open files', '#32770', 590948, True)] {'Python reference': False, 'Unicode': True}
+F7 from second window [] ['dialog.open_files client cancellation requested']
+F4 in main, then Ctrl+Q from the second window [('Save file', '#32770', 590948, True)] {'Python reference': False, 'Unicode': True}
+quit with save dialog open: 0 after 0.95 s dialogs [] ['dialog.save_file host response: -32006: Application is shutting down']
+F3 then parent close [('Open files', '#32770', 722020, True)]
+after parent WM_CLOSE [] ['dialog.open_files host response: -32004: Dialog parent is closing'] ['UI4ME — Unicode ✓']
+exit 0
+## N13 drag and drop
+drops ['window.event {"data": {"paths": ["F:\\\\ui4me\\\\lab\\\\dnd\\\\žluťoučký 日本.txt"]}, "type": "dropped_files", "window_id": "w1"}', 'window.event {"data": {"text": "drag this text: Příliš žluťoučký"}, "type": "dropped_text", "window_id": "w1"}']
+exit 0
+DONE

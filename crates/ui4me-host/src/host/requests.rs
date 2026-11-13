@@ -919,7 +919,7 @@ fn validate_external_target(target: &str) -> Result<(), RpcError> {
     }
     let path = std::path::Path::new(target);
     if path.is_absolute() {
-        return Ok(());
+        return refuse_executable_file(path);
     }
     let uri = url::Url::parse(target)
         .map_err(|_| RpcError::invalid_params("Use an absolute path or supported URI"))?;
@@ -928,6 +928,25 @@ fn validate_external_target(target: &str) -> Result<(), RpcError> {
             "Only http, https, mailto, file and absolute local paths are enabled",
         ));
     }
+    if uri.scheme() == "file" {
+        if let Ok(path) = uri.to_file_path() {
+            return refuse_executable_file(&path);
+        }
+    }
+    Ok(())
+}
+
+/// External opening hands data to its associated application. The Windows shell
+/// would instead *run* an executable file type (an `.exe`, script or shortcut), so
+/// such local targets are refused rather than launched.
+fn refuse_executable_file(path: &std::path::Path) -> Result<(), RpcError> {
+    #[cfg(target_os = "windows")]
+    if crate::platform::executable_file_type(path) {
+        return Err(RpcError::denied(
+            "Executable file types are not opened externally",
+        ));
+    }
+    let _ = path;
     Ok(())
 }
 
@@ -940,6 +959,40 @@ mod tests {
         assert!(validate_external_target("javascript:alert(1)").is_err());
         assert!(validate_external_target("relative/file").is_err());
         assert!(validate_external_target("https://example.com/\nrun").is_err());
+    }
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_external_open_refuses_executable_file_types() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in [
+            "tool.exe",
+            "script.bat",
+            "script.cmd",
+            "shortcut.lnk",
+            "code.js",
+        ] {
+            let path = dir.path().join(name);
+            std::fs::write(&path, b"x").unwrap();
+            let target = path.to_str().unwrap();
+            assert!(validate_external_target(target).is_err(), "{name}");
+            let uri = url::Url::from_file_path(&path).unwrap();
+            assert!(
+                validate_external_target(uri.as_str()).is_err(),
+                "file URI {name}"
+            );
+        }
+        for name in ["notes.txt", "picture.png", "page.html"] {
+            let path = dir.path().join(name);
+            std::fs::write(&path, b"x").unwrap();
+            assert!(
+                validate_external_target(path.to_str().unwrap()).is_ok(),
+                "{name}"
+            );
+        }
+        // A directory opens in the file manager even if its name looks executable.
+        let folder = dir.path().join("folder.exe");
+        std::fs::create_dir(&folder).unwrap();
+        assert!(validate_external_target(folder.to_str().unwrap()).is_ok());
     }
     #[test]
     fn window_input_is_validated_before_native_calls() {

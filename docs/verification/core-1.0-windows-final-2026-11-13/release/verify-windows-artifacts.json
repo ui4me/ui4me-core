@@ -1,0 +1,28 @@
+{
+  "version": "1.0.0",
+  "artifacts": [
+    {
+      "filename": "ui4me_core-1.0.0.tar.gz",
+      "sha256": "70d70bd0975d9f53d134e78a92f6a2cb00e4f08dbd9322d87e1511234a7de92f",
+      "bytes": 10292712,
+      "files": 1794,
+      "result": "PASS"
+    },
+    {
+      "filename": "ui4me_core-1.0.0-py3-none-win_amd64.whl",
+      "sha256": "0557024f5ce85cfe145b84a1afe8e89602100cb9fc22b8da4b4fef91fd33b7a6",
+      "bytes": 13292457,
+      "host_bytes": 30219776,
+      "host_sha256": "7b6e1d6f1e97195a80f34cb4b9c5010c5eceac7e204e9afa0151e33bd4ba1c7c",
+      "pe": {
+        "machine": "x86_64",
+        "subsystem": 3
+      },
+      "tags": [
+        "py3-none-win_amd64"
+      ],
+      "result": "PASS"
+    }
+  ],
+  "status": "PASS"
+}

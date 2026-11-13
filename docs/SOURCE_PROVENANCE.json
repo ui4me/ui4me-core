@@ -1,53 +1,97 @@
 {
-  "product": "UI4ME Core",
-  "version": "1.0.0",
-  "target": "Debian 13 / KDE Plasma 6.3 native Wayland",
-  "origin": "User-supplied Linux-validated RC1 archive; archive contains no .git metadata",
-  "reported_baseline_git_commit": "ca348d9",
-  "input_archive_name": "ui4me-core-main(2).zip",
-  "input_archive_sha256": "584980ef93e965a3d4cbcbf1281eafdc705023c9c6dc8df47ecc2b499e3bd5a4",
-  "cloud_modified_status": "SUPERSEDED: final source qualified locally on Linux; see docs/STATUS.md",
-  "wheel_strategy": "Rust executable embedded in py3-none Linux platform wheel; repaired manylinux artifacts built on local/CI host",
-  "wheel_artifacts_built_here": true,
-  "python_checks": "55 total, 54 passed, 1 skipped (Windows-only)",
-  "linux_claude_prompt": "LOCAL_FINISH_PROMPT.md",
-  "Windows": "deferred without native execution",
-  "build_artifacts": "not included; no Rust toolchain/downloader in this environment",
-  "reports": [
-    "docs/RC2_LINUX_FINAL.md",
-    "docs/RC2_IMPLEMENTATION_NOTES.md",
-    "docs/verification/final-source-preparation/report.json"
-  ],
-  "final_linux_release": {
-    "date": "2026-11-13",
-    "decision": "READY (Linux KDE Wayland); not published",
-    "ledger_source_sha256": "02bf81e422eb060d53abd5e9235fb85f5a23d1ed806d696294e77056ab939aac",
-    "host": {
-      "path": "~/.cargo/bin/ui4me-host",
-      "version": "1.0.0",
-      "bytes": 41039744,
-      "sha256": "c70346ba412e8348cb6cbbd9fd322128df9bec12accff10d4b26c26fd6dd3146"
-    },
-    "sdist": {
-      "file": "ui4me_core-1.0.0.tar.gz",
-      "bytes": 6919087,
-      "sha256": "0654251dc76c3a0f15e911de851534ef26390ce3714bbdd9146725ed0e0d50cd"
-    },
-    "wheel_manylinux": {
-      "file": "ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl",
-      "bytes": 16316258,
-      "sha256": "94789932dbbff719b310b4aa78efd7c2a17b3be98b2ec4fcf1d474e570f6b402",
-      "built": "cibuildwheel from the sdist in quay.io/pypa/manylinux_2_34_x86_64, auditwheel repair"
-    },
-    "wheel_local": {
-      "file": "ui4me_core-1.0.0-py3-none-linux_x86_64.whl",
-      "bytes": 16314988,
-      "sha256": "80edb21c7d371655468ff5653620be4b36ded8d0887dce77d52f31f67b2625fe",
-      "note": "local platform wheel, not for PyPI"
-    },
-    "base_commit": "ca348d9",
-    "toolchain": "rust 1.99.1",
-    "evidence": "docs/verification/core-1.0-linux-final-2026-11-13/",
-    "source_manifest": "docs/SOURCE_FILES.sha256"
-  }
+ "product": "UI4ME Core",
+ "version": "1.0.0",
+ "target": "Debian 13 / KDE Plasma 6.3 native Wayland; Windows Server 2022 x64 desktop (RDP)",
+ "origin": "User-supplied Linux-validated RC1 archive; archive contains no .git metadata",
+ "reported_baseline_git_commit": "ca348d9",
+ "input_archive_name": "ui4me-core-main(2).zip",
+ "input_archive_sha256": "584980ef93e965a3d4cbcbf1281eafdc705023c9c6dc8df47ecc2b499e3bd5a4",
+ "cloud_modified_status": "SUPERSEDED: final source qualified locally on Linux; see docs/STATUS.md",
+ "wheel_strategy": "Rust executable embedded in py3-none Linux platform wheel; repaired manylinux artifacts built on local/CI host",
+ "wheel_artifacts_built_here": true,
+ "python_checks": "55 total, 54 passed, 1 skipped (Windows-only)",
+ "linux_claude_prompt": "LOCAL_FINISH_PROMPT.md",
+ "Windows": "qualified 2026-11-13 (native N/R/C ledgers PASS); see final_windows_release",
+ "build_artifacts": "not included; no Rust toolchain/downloader in this environment",
+ "reports": [
+  "docs/RC2_LINUX_FINAL.md",
+  "docs/RC2_IMPLEMENTATION_NOTES.md",
+  "docs/verification/final-source-preparation/report.json",
+  "docs/STATUS.md"
+ ],
+ "final_linux_release": {
+  "date": "2026-11-13",
+  "decision": "READY (Linux KDE Wayland); not published",
+  "ledger_source_sha256": "02bf81e422eb060d53abd5e9235fb85f5a23d1ed806d696294e77056ab939aac",
+  "host": {
+   "path": "~/.cargo/bin/ui4me-host",
+   "version": "1.0.0",
+   "bytes": 41039744,
+   "sha256": "c70346ba412e8348cb6cbbd9fd322128df9bec12accff10d4b26c26fd6dd3146"
+  },
+  "sdist": {
+   "file": "ui4me_core-1.0.0.tar.gz",
+   "bytes": 6919087,
+   "sha256": "0654251dc76c3a0f15e911de851534ef26390ce3714bbdd9146725ed0e0d50cd"
+  },
+  "wheel_manylinux": {
+   "file": "ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl",
+   "bytes": 16316258,
+   "sha256": "94789932dbbff719b310b4aa78efd7c2a17b3be98b2ec4fcf1d474e570f6b402",
+   "built": "cibuildwheel from the sdist in quay.io/pypa/manylinux_2_34_x86_64, auditwheel repair"
+  },
+  "wheel_local": {
+   "file": "ui4me_core-1.0.0-py3-none-linux_x86_64.whl",
+   "bytes": 16314988,
+   "sha256": "80edb21c7d371655468ff5653620be4b36ded8d0887dce77d52f31f67b2625fe",
+   "note": "local platform wheel, not for PyPI"
+  },
+  "base_commit": "ca348d9",
+  "toolchain": "rust 1.99.1",
+  "evidence": "docs/verification/core-1.0-linux-final-2026-11-13/",
+  "source_manifest": "docs/SOURCE_FILES.sha256"
+ },
+ "final_windows_release": {
+  "date": "2026-11-13",
+  "decision": "READY (Windows x64 and Linux KDE Wayland from one source); not published",
+  "base_commit": "33e1317",
+  "ledger_source_sha256": "a089b4f5338f49417f56e95a7bef7f5cb6c8f3db7c0afba938628fac7d271d5d",
+  "windows_host": {
+   "path": "%USERPROFILE%\\.cargo\\bin\\ui4me-host.exe",
+   "version": "1.0.0",
+   "bytes": 30219776,
+   "sha256": "bc704f662345611188b650cc9db1fa696c4934943ccc153100a74c0ba2836f6d"
+  },
+  "linux_host_final_source": {
+   "path": "~/.cargo/bin/ui4me-host",
+   "bytes": 41038888,
+   "sha256": "14094b7d95489cf9e28d37aef3608b095f303f7da0739399e6ee980dc42f524b"
+  },
+  "sdist": {
+   "file": "ui4me_core-1.0.0.tar.gz",
+   "bytes": 10292712,
+   "sha256": "70d70bd0975d9f53d134e78a92f6a2cb00e4f08dbd9322d87e1511234a7de92f"
+  },
+  "windows_wheel": {
+   "file": "ui4me_core-1.0.0-py3-none-win_amd64.whl",
+   "bytes": 13292457,
+   "sha256": "0557024f5ce85cfe145b84a1afe8e89602100cb9fc22b8da4b4fef91fd33b7a6",
+   "embedded_host_sha256": "7b6e1d6f1e97195a80f34cb4b9c5010c5eceac7e204e9afa0151e33bd4ba1c7c"
+  },
+  "manylinux_wheel": {
+   "file": "ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl",
+   "bytes": 16316299,
+   "sha256": "2688e72dafa8d2a6c3262f6c5ad87b829d29498f949e93dd6dfe71a09ddcb53f"
+  },
+  "local_linux_wheel": {
+   "file": "ui4me_core-1.0.0-py3-none-linux_x86_64.whl",
+   "bytes": 16314662,
+   "sha256": "de9b2c18378c5cfc0e1ee2800644379b5766277dfac097d59bb5a8c84ea75a58",
+   "publishable": false
+  },
+  "evidence": "docs/verification/core-1.0-windows-final-2026-11-13/README.md",
+  "vendored_patches_changed": [
+   "third_party/winit-win32-0.31.0-beta.4 (lazy drag data, W4)"
+  ]
+ }
 }

@@ -930,6 +930,21 @@ impl Document {
             scale: cfg.scale,
         }))
     }
+    /// A static-text accessibility object is a DOM text node, which cannot be scrolled
+    /// itself: scroll its parent element instead.
+    fn scroll_element_of(&self, el: NodeId) -> NodeId {
+        let document = self.pipeline.document();
+        if document
+            .arena()
+            .get(el)
+            .is_some_and(|n| n.as_element().is_some())
+        {
+            el
+        } else {
+            document.parent(el).ok().flatten().unwrap_or(el)
+        }
+    }
+
     /// Execute an assistive-technology request as the equivalent trusted user input.
     pub fn accessibility_request(&mut self, request: &crate::a11y::A11yRequest) -> Result<()> {
         self.invalidate_clipboard_context();
@@ -988,23 +1003,7 @@ impl Document {
                 assistive::step(self, id, el, -1)?;
             }
             K::ScrollIntoView => {
-                // A static-text leaf is a DOM text node: scroll its element.
-                let target = if self
-                    .pipeline
-                    .document()
-                    .arena()
-                    .get(el)
-                    .is_some_and(|n| n.as_element().is_some())
-                {
-                    el
-                } else {
-                    self.pipeline
-                        .document()
-                        .parent(el)
-                        .ok()
-                        .flatten()
-                        .unwrap_or(el)
-                };
+                let target = self.scroll_element_of(el);
                 self.scroll_node_into_view(target, "nearest", "nearest", "instant")?
             }
             K::ScrollIntoViewWithHint {
@@ -1012,7 +1011,9 @@ impl Document {
                 block,
                 inline,
             } => {
-                self.scroll_node_into_view(el, block, inline, "instant")?;
+                // Adapters send every ScrollIntoView here (AT-SPI always with a hint).
+                let target = self.scroll_element_of(el);
+                self.scroll_node_into_view(target, block, inline, "instant")?;
                 let tree = self.accessibility_tree()?;
                 if let Some(run) = tree.get(*target_id).filter(|n| n.run.is_some())
                     && let Some(bounds) = run.bounds

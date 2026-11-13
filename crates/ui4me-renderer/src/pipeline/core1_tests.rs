@@ -214,7 +214,11 @@ fn face_feature_default_is_applied_and_element_setting_overrides_it() {
         Some(&fonts), 400, 200,
     ).unwrap();
     let defaults_off = settle(&mut d);
-    let glyph_count = |d: &mut Document| {
+    // The shaped glyph IDs are the contract. Pixels are not: with unrounded
+    // (Windows) advances Noto Sans's `ffi` ligature is designed to be
+    // pixel-identical to its components; only rounded per-glyph advances
+    // (Linux at scale 1) make the two renderings differ.
+    let glyph_ids = |d: &mut Document| {
         d.pipeline_mut_for_testing()
             .committed()
             .unwrap()
@@ -223,12 +227,13 @@ fn face_feature_default_is_applied_and_element_setting_overrides_it() {
             .items
             .iter()
             .filter_map(|item| match &item.op {
-                DrawOp::DrawGlyphRun(run) => Some(run.glyphs.len()),
+                DrawOp::DrawGlyphRun(run) => Some(run.glyphs.iter().map(|g| g.id)),
                 _ => None,
             })
-            .sum::<usize>()
+            .flatten()
+            .collect::<Vec<_>>()
     };
-    let without_ligature = glyph_count(&mut d);
+    let without_ligature = glyph_ids(&mut d);
     d.set_attribute("t", "style", Some("font-feature-settings:'liga' 0"))
         .unwrap();
     assert_eq!(
@@ -236,13 +241,20 @@ fn face_feature_default_is_applied_and_element_setting_overrides_it() {
         settle(&mut d),
         "face default and same element setting must agree"
     );
+    assert_eq!(without_ligature, glyph_ids(&mut d));
     d.set_attribute("t", "style", Some("font-feature-settings:'liga' 1"))
         .unwrap();
-    let property_on = settle(&mut d);
-    assert_ne!(defaults_off, property_on);
+    settle(&mut d);
+    let with_ligature = glyph_ids(&mut d);
     assert!(
-        glyph_count(&mut d) < without_ligature,
-        "explicit property re-enables ligatures"
+        with_ligature.len() < without_ligature.len(),
+        "explicit property re-enables ligatures: {without_ligature:?} -> {with_ligature:?}"
+    );
+    assert!(
+        with_ligature
+            .iter()
+            .any(|id| !without_ligature.contains(id)),
+        "a ligature glyph replaces its components"
     );
     assert!(
         !d.diagnostics()

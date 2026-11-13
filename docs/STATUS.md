@@ -1,11 +1,167 @@
-# UI4ME Core 1.0.0 — Linux release status
+# UI4ME Core 1.0.0 — release status (Linux and Windows)
 
-**Release decision (2026-11-13): READY for Linux (Debian 13 / KDE Plasma 6.3 / native Wayland).**
-All Linux release gates passed on the final, unchanged source. Nothing has been published:
-PyPI upload and a GitHub Release remain a separate, manual decision. Windows sources are in
-the tree; Windows qualification has not started and is the next stage.
+**Release decision (2026-11-13): READY for Linux (Debian 13 / KDE Plasma 6.3 / native Wayland)
+and READY for Windows (Windows Server 2022 Desktop Experience x64, interactive RDP session).**
+All gates passed on the final, unchanged source. Nothing has been published: PyPI upload and a
+GitHub Release remain a separate, manual decision. macOS is out of scope.
 
-## Final identities
+## Final identities (one source, both platforms)
+
+| Item | Value |
+| --- | --- |
+| Product version | `1.0.0` (Cargo workspace, Python metadata, examples, generated manifests) |
+| Base commit | `33e1317` (Linux release) + the Windows-stage changes below |
+| Ledger source identity (`tools/native_acceptance.py`, identical on both OSes) | `a089b4f5338f49417f56e95a7bef7f5cb6c8f3db7c0afba938628fac7d271d5d` |
+| Source distribution (shared) | `ui4me_core-1.0.0.tar.gz`, 10,292,712 bytes, SHA-256 `70d70bd0975d9f53d134e78a92f6a2cb00e4f08dbd9322d87e1511234a7de92f` |
+| Windows wheel (public candidate) | `ui4me_core-1.0.0-py3-none-win_amd64.whl`, 13,292,457 bytes, SHA-256 `0557024f5ce85cfe145b84a1afe8e89602100cb9fc22b8da4b4fef91fd33b7a6` (embedded host `7b6e1d6f…`, built from the sdist) |
+| Linux wheel (public candidate) | `ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl`, 16,316,299 bytes, SHA-256 `2688e72dafa8d2a6c3262f6c5ad87b829d29498f949e93dd6dfe71a09ddcb53f` |
+| Linux local wheel (not for PyPI) | `ui4me_core-1.0.0-py3-none-linux_x86_64.whl`, 16,314,662 bytes, SHA-256 `de9b2c18378c5cfc0e1ee2800644379b5766277dfac097d59bb5a8c84ea75a58` |
+| Windows installed host (native evidence) | `%USERPROFILE%\.cargo\bin\ui4me-host.exe` 1.0.0, 30,219,776 bytes, SHA-256 `bc704f662345611188b650cc9db1fa696c4934943ccc153100a74c0ba2836f6d` (re-`cargo install` of the final tree reproduced it) |
+| Linux installed host (final-source regression) | `~/.cargo/bin/ui4me-host` 1.0.0, 41,038,888 bytes, SHA-256 `14094b7d95489cf9e28d37aef3608b095f303f7da0739399e6ee980dc42f524b` |
+| Toolchain / lockfile | Rust 1.99.1 (pinned); `Cargo.lock` unchanged since `33e1317` |
+| Windows platform | Windows Server 2022 Standard Evaluation 10.0.20348, VM `omegaui`, normal user `ui4me_test` (not an administrator) in RDP session 2 (xfreerdp3, 1600x1000, 96 DPI; 144 DPI and 1280x800 exercised); real RDP keyboard/mouse; Microsoft Pinyin (zh-CN, temporary); NVDA 2026.3.1; CPython 3.13.17 system, 3.10.22/3.12.16 for wheels |
+
+Linux and Windows artifacts come from the same tree: `tools/release/build_linux.sh` built the sdist and
+the local wheel, `cibuildwheel` (manylinux_2_34) and the Windows build front end each built their
+wheel **from that sdist** (`python -m build --wheel ui4me_core-1.0.0.tar.gz`, fresh target directory).
+
+## Windows gates (final source)
+
+* `tools/verify.py` on Windows (fmt, check, test, python, headless, renderer, faults incl. forced
+  host kill): **all PASS**. Rust: **1,007 passed, 0 failed, 9 ignored** (`--no-fail-fast`; the
+  Linux-only tests are cfg-gated). Python: 60 run, OK (2 platform skips).
+* `cargo clippy --locked --workspace --all-targets -- -D warnings` on Windows: clean.
+* Native ledgers on the installed release host, each `qualification: PASS` including its automated
+  subset: host **N01–N15**, renderer **R01–R12**, completion **C01–C12** — 39/39, recorded in the
+  interactive session ([evidence](verification/core-1.0-windows-final-2026-11-13/README.md)).
+* RC2 features on the final binary: frameless title-bar drag, double-click maximize/restore, title
+  buttons and an input in the title bar excluded from dragging, all 8 native resize directions,
+  left/right/middle semantics (right/middle drags never move the window); live bitmaps ≥1,000
+  frames at 64x64, 320x200 and 1024x768 with newest-frame pixels on screen, error/budget semantics
+  identical to Linux, overload dropping via `try_present`, flat memory/handles, **no transport files
+  left in `%TEMP%`**, document replacement and backend kill; 1,000 displayed PNG replacements
+  (0 bytes/replacement), intrinsic sizes, same-URL fonts, close veto for ×, `WM_CLOSE` and Alt+F4.
+* **UI Automation TextPattern (former 0.2 blocker): resolved.** Acquiring TextPattern,
+  DocumentRange, GetSelection, Select and reading the selection all complete in milliseconds
+  through the native IUIAutomation client in MTA and STA. The "stall" reproduces only with the
+  managed `System.Windows.Automation` client, which raises `AccessViolationException` in
+  `UiaCoreApi.RawTextRange_GetText` on any `GetSelection` range — identically for UI4ME/AccessKit,
+  WordPad's RichEdit and Chrome — in both apartments; the original 0.2 repro now ends with
+  0xC0000005 at that call instead of hanging. NVDA's real keyboard journey and UIA actions
+  (SetValue, Select, Toggle, RangeValue, Invoke, ExpandCollapse, SelectionItem, ScrollItem) pass.
+  An AccessKit change (SAFEARRAY element pointers) was prototyped, shown not to be causal, and
+  not shipped.
+* Distribution: `twine check` PASS; `tools/release/verify_windows_artifact.py` PASS (PE32+ x86-64
+  console-subsystem host that releases its console on GUI launch, single tag
+  `py3-none-win_amd64`, platlib root, license texts generated for `x86_64-pc-windows-msvc`, no
+  local/VCS/cache/credential files). Clean installs as the normal user with Rust removed from
+  PATH (`pip install --no-index --only-binary :all:`) into venvs with CPython **3.10.22, 3.12.16
+  and 3.13.17**: `pip check` clean, import, `ui4me-host --version`, `doctor`, smoke test. An
+  independent consumer app outside the repository (own directory, manifest naming the venv's
+  `python.exe`) ran on the wheel's host (120 live frames, exit 0) and from its own Start Menu
+  shortcut: Explorer → wheel host → venv Python, no console window, taskbar button with the app
+  name and icon.
+
+## Linux regression on the final source
+
+The Windows stage changed shared code (renderer accessibility scrolling, Python live-bitmap
+client, tools, packaging metadata). On the final source:
+
+* `tools/verify.py`: all PASS; Rust **1,094 passed, 0 failed, 11 ignored** (1,093 + the new
+  scroll regression test); Python 60 OK; Clippy `-D warnings` clean; `cargo deny`: no
+  vulnerabilities (the same four *unmaintained* notices as before).
+* sdist and both Linux wheels rebuilt from this source; `twine check`, `verify_linux_artifact.py`
+  and `auditwheel show` (manylinux_2_34_x86_64) PASS; clean installs with CPython 3.10.22, 3.12.16
+  and 3.13.5 without Rust.
+* Native KDE Wayland checks of the changed behavior with the final installed host: AT-SPI
+  `scroll_to` on a static-text leaf now scrolls (formerly a documented limitation) with the
+  selection untouched; the independent consumer on the rebuilt manylinux wheel presented 120 live
+  frames and exited 0 with no transport file left.
+* The Linux N/R/C ledgers recorded at `33e1317` (source `02bf81e4…`) are not re-recorded: the
+  changes since are covered by the gates above, and the remaining edits are Windows-only code
+  paths or tooling.
+
+## Windows measurements (installed release host)
+
+CPU from `QueryProcessCycleTime` (exact cycles; `GetProcessTimes`, used by
+`tools/measure_resources.py`, samples 15.6 ms ticks and under-counts bursty paint work).
+
+| Measure | Windows | Linux (context) |
+| --- | --- | --- |
+| Startup to app ready (5 runs, median) | renderer 130 ms (reduce 132 ms); probe 105 ms | 534 ms / 127 ms (incl. systemd re-entry) |
+| First frame after host start (median) | 93–94 ms | ~41 ms |
+| Idle CPU | 0.08 % host (cycles); 0.00 % by GetProcessTimes | 0.25 % |
+| Host + backend memory after idle | 39.7–40.1 MiB private (renderer), 29.4 MiB (probe) | 59.9 MiB PSS |
+| Window open/close | probe flat; renderer 29–38 MiB oscillation, ≤1.8 KiB/cycle trend over 1,200 cycles | 24–26 KiB/cycle (AT-SPI on) |
+| DOM churn (400 cycles) | flat (≤0.01 KiB/cycle) | flat |
+| Displayed bundle PNG replacement (1,000) | 0 bytes/replacement, one decoded raster | ~0.39 KiB/replacement |
+| Resize-to-present (≈240 sizes) | p50 2.2 ms, p95 3.5 ms, max 7.5 ms static; max ≤ 13.7 ms with animation / 60 fps bitmap | p50 2.6, p95 6.3, max 18.7 ms |
+| Infinite CSS animation | 16.4 % of a core, 0.11 % after removal | ~33 % |
+| Live bitmap 60 fps 320x200 | 14.3 % | ~16 % |
+| Live bitmap unthrottled (ack p50) | 64x64 2.1 ms (456 fps), 320x200 2.4 ms, 1024x768 6.7 ms (146 fps); memory/handles flat | 0.064 / 0.92 ms |
+| Click → Python callback (via RDP + agent) | 38–39 ms idle, 38–40 ms under unthrottled 1024x768 load | 27–31 ms |
+
+Windows repaints each presented frame immediately (there is no compositor frame-callback
+throttling as on Wayland), so an unthrottled producer is bounded by full-window raster time;
+acknowledgement, newest-frame and memory semantics are unchanged.
+
+## Defects found and fixed in the Windows stage
+
+| # | Defect | Fix / test |
+| --- | --- | --- |
+| W1 | Renderer test asserted that a ligature changes pixels; with Windows' unrounded advances Noto Sans's `ffi` ligature is pixel-identical (`face_feature_default…` failed only on Windows) | Assert the shaped glyph IDs (the contract) |
+| W2 | Generated reference/probe manifests said `version = "1.0.0-rc.1"` (Linux installs too) | Version read from the workspace; `tools/test_run_example.py` |
+| W3 | Every adapter ScrollIntoView reached the hinted arm, which scrolled the raw DOM text node: static-text leaves never scrolled (UIA and AT-SPI; the earlier F18 fix was unreachable) | Hinted and hint-less arms scroll the text node's element; `adapter_scroll_into_view_on_static_text_scrolls_its_element` through `decode_request` (fails before, passes after) |
+| W4 | winit-win32 read all drag payloads in `DragEnter`: delayed-rendering sources blocked the GUI thread during hover, large payloads were copied without a drop, and the late `Drop` hit-tested after the page changed (async target replacement retargeted) | Vendored patch: probe formats with `QueryGetData`, retain the `IDataObject`, read the requested format during `Drop` (`third_party/README.md`); native source log shows `GetData` only at release |
+| W5 | `desktop.open_external` with an absolute path or `file:` URL to an `.exe`/script/shortcut **launched** it through `ShellExecuteEx` | Refuse shell-executable types (`AssocIsDangerous`) with `-32003`; Windows unit test; C11 native |
+| W6 | Live-bitmap transport files leaked in `%TEMP%` (one per bitmap): the Python client's handle lacked delete sharing, so the host's unlink-after-present failed and its `TempPath` was consumed | Client opens the transport `O_TEMPORARY` (delete-on-close + delete sharing, also covers killed processes); host keeps the path for removal at close if an unlink fails; two Windows host tests + Python test |
+| W7 | The wheel build refused Windows; license collection was Linux-only | `setup.py` builds `ui4me-host.exe` into a `py3-none-win_amd64` wheel (honours `CARGO_TARGET_DIR`); `collect_licenses.py --target windows`; `tools/release/verify_windows_artifact.py`, `build_windows.ps1`, non-publishing `release-windows.yml`, Windows CI leg |
+| W8 | `tools/create_launcher.py` rejected UTF-8-with-BOM manifests (PowerShell 5.1 / Notepad) that the host accepts | Read `utf-8-sig`; `tools/test_create_launcher.py` |
+| W9 | Ledger source identity included the git-ignored local agent files, so identical trees hashed differently per checkout | Excluded; identity test extended |
+
+Diagnostics added: `tools/windows/uia_com_probe.py` (native COM client) and `--client com` /
+`select-read` in `uia_probe_matrix.py`.
+
+## Windows limitations (not claimed fixed)
+
+* The managed `System.Windows.Automation` client cannot read text from a `GetSelection` range on
+  this system for any provider (client defect, see above); use IUIAutomation (Narrator/NVDA do).
+* AccessKit's UIA adapter has no Grid/Table/GridItem patterns (upstream TODO) and exposes
+  `aria-describedby` as FullDescription, not a relation; tables are DataGrid/DataItem trees.
+* The Open-With chooser for unassociated types is a separate shell process: its cancellation is
+  not reported (`accepted:true, presented:null`) and parent close or quit do not close it.
+* With OLE, delayed-render drop data is read synchronously inside `Drop`; the GUI waits for the
+  source (no retargeting occurs).
+* Windows vertical Aero Snap (dragging an edge onto the screen edge) can size a window 7 px above
+  its maximum height; edge/corner drags clamp exactly.
+* Microsoft Pinyin consumes Tab while composing (IME behavior). The v0.1 probe's host-local
+  editor drops an uncommitted composition on a mouse focus change; the HTML renderer keeps it.
+* Right/middle presses do not move focus (shared renderer rule).
+* High-contrast theme switching and physical monitors/multi-monitor DPI were not exercised;
+  scaling was tested through RDP desktop scale. Windows client editions and ARM64 are untested.
+* Wheel-from-sdist builds must use a fresh Cargo target directory (see
+  [BUILDING_WINDOWS](release/BUILDING_WINDOWS.md)).
+
+## Can the owner publish?
+
+Yes, if they choose to: upload exactly `ui4me_core-1.0.0.tar.gz`,
+`ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl` and
+`ui4me_core-1.0.0-py3-none-win_amd64.whl` with the hashes above (or rebuild through
+`.github/workflows/release-linux.yml` / `release-windows.yml` and compare). Do not upload the local
+`linux_x86_64` wheel. No credentials are stored in the repository and no step publishes
+automatically.
+
+Evidence: [Windows](verification/core-1.0-windows-final-2026-11-13/README.md),
+[Linux](verification/core-1.0-linux-final-2026-11-13/README.md).
+Historical baselines: [BASELINE_RC1_LINUX_STATUS.md](BASELINE_RC1_LINUX_STATUS.md),
+[BASELINE_0.2_STATUS.md](BASELINE_0.2_STATUS.md).
+
+## Linux qualification (stage 1, 2026-11-13, commit 33e1317)
+
+The Linux release was qualified first; its native ledgers and evidence remain valid for the
+Linux contract (see "Linux regression on the final source" above for what changed since).
+
+### Linux stage identities (commit 33e1317, superseded artifacts)
 
 | Item | Value |
 | --- | --- |
@@ -23,7 +179,7 @@ Artifacts were built with `tools/release/build_linux.sh` (sdist, then the wheel 
 the sdist) and the checked-in manylinux workflow reproduced locally with `cibuildwheel` in
 `quay.io/pypa/manylinux_2_34_x86_64`, again from the sdist, followed by `auditwheel repair`.
 
-## Gates (final source)
+### Gates (Linux stage source `02bf81e4…`)
 
 * `tools/verify.py` — fmt, check, test, python, headless, renderer, faults: **all PASS**.
   Rust: **1,093 passed, 0 failed**, 11 pre-existing ignored harnesses, nothing filtered
@@ -55,7 +211,7 @@ the sdist) and the checked-in manylinux workflow reproduced locally with `cibuil
   carries `ui4me_core/_bin/THIRD_PARTY_LICENSES.txt` (generated from `cargo metadata`) and the
   project, font (OFL) and MPL texts in its dist-info.
 
-## Measurements (installed release host)
+### Linux measurements (installed release host, stage 1)
 
 | Measure | Result |
 | --- | --- |
@@ -71,7 +227,7 @@ the sdist) and the checked-in manylinux workflow reproduced locally with `cibuil
 | Live bitmap throughput (ack p50) | 64x64: 0.064 ms (~11,000 fps); 1024x768: 0.92 ms (~660 fps); memory flat, threads/fds constant |
 | Click→Python callback | 27–28 ms idle, 26–31 ms while an unthrottled 1024x768 producer runs |
 
-## Defects found and fixed in this stage
+### Defects found and fixed in the Linux stage
 
 Each has a regression test where it can be tested without a desktop.
 
@@ -99,12 +255,10 @@ Each has a regression test where it can be tested without a desktop.
 Debug-level frame timing (`RUST_LOG=ui4me_host=debug`: frame ms, resize→present ms) was added
 for measurement; it is off by default.
 
-## Remaining limitations (not claimed fixed)
+### Linux limitations (not claimed fixed)
 
-* AT-SPI `Component.scroll_to` on a static-text leaf object still does not scroll: AT-SPI always
-  sends a scroll hint (`ScrollIntoViewWithHint`), whose arm in `Document::accessibility_request`
-  still targets the text node. Element and field text-run scrolling work. Pre-existing since
-  RC1; follow-up.
+* ~~AT-SPI `Component.scroll_to` on a static-text leaf does not scroll~~ — fixed in the Windows
+  stage (W3); verified natively on KDE with the final source.
 * At output scale ≠ 1 AT-SPI extents are physical pixels (AccessKit adapter behaviour).
 * `aria-labelledby` to a non-exposed `<span>` yields the name but no labelled-by relation;
   accesskit_unix 0.24.1 has no AT-SPI Table/TableCell interfaces (indices are attributes).
@@ -119,13 +273,10 @@ for measurement; it is off by default.
   windows in this session's input-method configuration (compositor close and the HTML close
   button were verified instead).
 
-## Can the owner publish?
+### Linux stage artifacts (superseded)
 
-Yes, for Linux, if they choose to: upload exactly `ui4me_core-1.0.0.tar.gz` and
-`ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl` with the hashes above (or rebuild them
-through `.github/workflows/release-linux.yml` and compare). Do not upload the local
-`linux_x86_64` wheel. No credentials are stored in the repository and no step publishes
-automatically.
+The `33e1317` sdist/wheels listed above are superseded by the final artifacts in "Final
+identities"; publish only those.
 
 Evidence index: [verification/core-1.0-linux-final-2026-11-13/](verification/core-1.0-linux-final-2026-11-13/README.md).
 Historical baseline: [BASELINE_RC1_LINUX_STATUS.md](BASELINE_RC1_LINUX_STATUS.md).

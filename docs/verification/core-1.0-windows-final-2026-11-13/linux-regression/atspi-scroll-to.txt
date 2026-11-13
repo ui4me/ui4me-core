@@ -1,0 +1,4 @@
+host 14094b7d95489cf9e28d37aef3608b095f303f7da0739399e6ee980dc42f524b
+AT-SPI scroll_to(paragraph) True scroller y 382.0 selection unchanged True
+AT-SPI scroll_to(static-text leaf) True scroller y 382.0 selection unchanged True
+host exit 0

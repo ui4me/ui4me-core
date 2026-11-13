@@ -1,0 +1,10 @@
+  [lab started: ['window opened', 'policies set'] ]
+{"tag": "static idle (unfocused)", "host_cpu_pct_cycles": 0.08, "frames": 0, "private_kib": 46932}
+{"tag": "resize: static", "frames": 252, "distinct_sizes": 241, "resize_to_present_ms": {"p50": 2.15, "p95": 3.52, "max": 7.53}, "frame_ms": {"p50": 2.04, "p95": 3.4}, "host_cpu_pct_cycles": 9.0}
+{"tag": "CSS animation running", "host_cpu_pct_cycles": 16.44, "frames": 608, "private_kib": 50840}
+{"tag": "resize: CSS animation", "frames": 469, "distinct_sizes": 241, "resize_to_present_ms": {"p50": 2.27, "p95": 3.51, "max": 13.67}, "frame_ms": {"p50": 1.85, "p95": 3.1}, "host_cpu_pct_cycles": 14.6}
+{"tag": "after animation removed", "host_cpu_pct_cycles": 0.11, "frames": 0, "private_kib": 50780}
+{"tag": "60 fps 320x200 bitmap", "host_cpu_pct_cycles": 14.33, "frames": 602, "private_kib": 51788}
+{"tag": "resize: 60 fps bitmap", "frames": 857, "distinct_sizes": 241, "resize_to_present_ms": {"p50": 2.25, "p95": 3.51, "max": 4.29}, "frame_ms": {"p50": 1.62, "p95": 2.69}, "host_cpu_pct_cycles": 20.9}
+{"tag": "after bitmap closed", "host_cpu_pct_cycles": 0.11, "frames": 0, "private_kib": 52684}
+DONE

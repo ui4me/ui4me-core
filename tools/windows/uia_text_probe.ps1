@@ -5,7 +5,7 @@ param(
     [string]$AutomationId = '',
     [string]$ControlName = '',
     [switch]$FirstEdit,
-    [ValidateSet('pattern','document-text','select','selection','selection-text')]
+    [ValidateSet('pattern','document-text','select','selection','selection-text','select-read')]
     [string]$Mode = 'selection',
     [ValidateSet('MTA','STA')][string]$Apartment = 'MTA',
     [switch]$Focus,

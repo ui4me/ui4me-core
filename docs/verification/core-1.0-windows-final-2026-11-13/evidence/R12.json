@@ -1,0 +1,28 @@
+{
+  "check": "R12",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T16:30:06.723593+00:00",
+  "build_identity": {
+    "host": "C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe",
+    "host_sha256": "bc704f662345611188b650cc9db1fa696c4934943ccc153100a74c0ba2836f6d",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "a089b4f5338f49417f56e95a7bef7f5cb6c8f3db7c0afba938628fac7d271d5d",
+    "base_commit": "33e1317",
+    "os": "Windows-2022Server-10.0.20348-SP0",
+    "release": "2022Server",
+    "version": "10.0.20348",
+    "session": 2,
+    "user": "ui4me_test",
+    "desktop": "Windows interactive RDP session (xfreerdp3 client), 1600x1000, 96 DPI unless stated"
+  },
+  "actions": [
+    "tools/browser_reference.py --host <installed> with Playwright Chromium 158.0.8127.18 (qa venv)"
+  ],
+  "expected": "Pinned browser-reference fixtures",
+  "observed": "B01 box model, B02 flex/grid, B03 local font, B04 static SVG: PASS",
+  "limitations": [],
+  "evidence_files_sha256": {
+    "final_misc.txt": "bb4a8660c8d562867720a6e0f274d3cff0ae0bd020d4876d424046e7faecc9bc",
+    "F:\\ui4me\\lab\\out\\final\\browser\\report.json": "6e2f1964b4db5fb05368e8e8272ddfdb6dddbca9bdfd7a4f3992d0054b3a3489"
+  }
+}

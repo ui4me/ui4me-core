@@ -1,17 +1,18 @@
 # UI4ME Core 1.0.0 — Native HTML/CSS desktop applications
 
 Python programs control normal local HTML/CSS desktop windows through a separate
-Rust-owned native host. **Release 1.0.0 is qualified for Linux: Debian 13, KDE
-Plasma 6.3, native Wayland**, as an installed release binary and as a Python
-wheel. The qualification record, measurements and remaining limits are in
-[docs/STATUS.md](docs/STATUS.md). Windows sources remain in the tree; Windows
-qualification is a later, separate stage. Nothing is published automatically.
+Rust-owned native host. **Release 1.0.0 is qualified for Linux (Debian 13, KDE
+Plasma 6.3, native Wayland) and Windows (Windows Server 2022 desktop, x64, in an
+interactive RDP session)**, as installed release binaries and as Python wheels.
+The qualification record, measurements and remaining limits are in
+[docs/STATUS.md](docs/STATUS.md). Nothing is published automatically.
 
-## Install the Python package (Linux x86_64)
+## Install the Python package
 
-The wheel contains the pure-Python client (`ui4me_core`) and the compiled
-`ui4me-host` executable; installing it needs no Rust toolchain. It is tagged
-`py3-none-manylinux_2_34_x86_64` (glibc 2.34+) and works with any Python 3.10+.
+The wheels contain the pure-Python client (`ui4me_core`) and the compiled
+`ui4me-host` executable; installing one needs no Rust toolchain. They have no
+CPython extension module, so one wheel serves every Python 3.10+ on its platform:
+`py3-none-manylinux_2_34_x86_64` (glibc 2.34+) and `py3-none-win_amd64`.
 
 ```sh
 python3 -m venv ~/.venvs/ui4me && ~/.venvs/ui4me/bin/pip install ui4me_core-1.0.0-*.whl
@@ -19,12 +20,19 @@ python3 -m venv ~/.venvs/ui4me && ~/.venvs/ui4me/bin/pip install ui4me_core-1.0.
 ~/.venvs/ui4me/bin/ui4me-host doctor
 ```
 
+```powershell
+py -m venv $env:LOCALAPPDATA\ui4me-venv
+& $env:LOCALAPPDATA\ui4me-venv\Scripts\pip install ui4me_core-1.0.0-py3-none-win_amd64.whl
+& $env:LOCALAPPDATA\ui4me-venv\Scripts\ui4me-host --version
+```
+
 ```python
 from ui4me_core import Application
 ```
 
-Build the sdist, a local wheel and a repaired manylinux wheel as described in
-[docs/release/BUILDING_LINUX.md](docs/release/BUILDING_LINUX.md).
+Build the artifacts as described in
+[docs/release/BUILDING_LINUX.md](docs/release/BUILDING_LINUX.md) and
+[docs/release/BUILDING_WINDOWS.md](docs/release/BUILDING_WINDOWS.md).
 
 ## Live pixels and custom title bars
 
@@ -54,9 +62,18 @@ Omit `--install-system` if prerequisites are installed. Run as the logged-in
 user with that desktop's D-Bus and portal services. Linux supervision uses a
 systemd user service. There is no automatic X11 fallback.
 
-### Windows (deferred)
+### Windows (x64)
 
-The Windows sources and adapter contracts remain in the tree. No Windows development, build or native qualification is part of the final Linux stage. Windows begins only after the Linux release is locked.
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\bootstrap_windows.ps1
+python tools\run_renderer.py
+```
+
+Run as the logged-on desktop user (an interactive or RDP session). The host
+supervises the backend in a Windows Job Object, authenticates it over a private
+named pipe, integrates with UI Automation, the Text Services Framework/IMM input
+methods, OLE drag-and-drop and the Shell, and registers per-user Start Menu
+shortcuts through `tools/create_launcher.py`. No administrative rights are needed.
 
 ### Install a standalone app
 
@@ -67,6 +84,9 @@ python3 tools/install.py --example-dir ~/.local/share/ui4me-core1-reference
 python3 tools/create_launcher.py install --app ~/.local/share/ui4me-core1-reference/app.toml
 ui4me-host run --app ~/.local/share/ui4me-core1-reference/app.toml
 ```
+
+On Windows use, for example, `--example-dir %LOCALAPPDATA%\ui4me-renderer-reference`
+and `--host %USERPROFILE%\.cargo\bin\ui4me-host.exe` for the launcher.
 
 The installer builds the release host and copies the complete HTML/CSS/Python
 example. This package is complete source, not prebuilt platform binaries or an
@@ -123,16 +143,17 @@ including excluded extensions and application-layer responsibilities. They are
 not an endless future-version plan.
 
 Linux and Windows share a contract with honest availability. The current
-Wayland backend cannot implement window visibility/focus requests as requested,
-so unsupported operations return errors and unknown observations stay null.
-Attention depends on compositor support. Windows field-purpose IME hints are
-unavailable through the pinned backend. High contrast is observable without a
-complete forced-colors CSS palette.
+Wayland backend cannot implement window visibility/focus/position requests, so
+those operations return errors there and unknown observations stay null; Windows
+implements them. Attention depends on the window manager. Windows field-purpose
+IME hints are unavailable through the pinned backend. High contrast is observable
+without a complete forced-colors CSS palette. On Windows, external opening hands
+data to its associated application and refuses executable file types.
 
 Printing/PDF, browser networking/JavaScript, full SVG text/cascade, animated
 images, rich editing, native menus/tray/global shortcuts, media and a component
-framework are outside this core. macOS, X11 and physical-hardware qualification
-are outside the current tested environments.
+framework are outside this core. macOS, X11, Windows client editions/ARM64 and
+physical-hardware qualification are outside the current tested environments.
 
 ## Verification
 

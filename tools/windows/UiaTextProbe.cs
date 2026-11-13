@@ -80,7 +80,7 @@ public static class UiaTextProbe
                             Mark(log, "BEFORE DocumentRange.GetText");
                             string text = range.GetText(256);
                             Mark(log, "AFTER DocumentRange.GetText UTF16=" + text.Length);
-                        } else if (mode == "select") {
+                        } else if (mode == "select" || mode == "select-read") {
                             Mark(log, "BEFORE Clone");
                             range = range.Clone();
                             Mark(log, "AFTER Clone");
@@ -90,7 +90,18 @@ public static class UiaTextProbe
                             Mark(log, "BEFORE Select");
                             range.Select();
                             Mark(log, "AFTER Select");
-                            // Selection reading is deliberately another process/mode.
+                            if (mode == "select-read") {
+                                // The original stalled journey: select, then read the
+                                // selection back in the same client.
+                                Mark(log, "BEFORE GetSelection");
+                                var selected = pattern.GetSelection();
+                                Mark(log, "AFTER GetSelection count=" + selected.Length);
+                                for (int i = 0; i < selected.Length; i++) {
+                                    Mark(log, "BEFORE selection[" + i + "].GetText");
+                                    string text = selected[i].GetText(256);
+                                    Mark(log, "AFTER selection[" + i + "].GetText UTF16=" + text.Length);
+                                }
+                            }
                         } else throw new ArgumentException("Unknown mode: " + mode);
                     }
                     Mark(log, "PASS");

@@ -100,6 +100,23 @@ copies what it needs, releases the mutex, and only then calls into IMM.
 Drop this patch when an upstream release no longer holds the window state across
 IMM calls. Licensed Apache-2.0 (LICENSE).
 
+Second change (Core 1.0 Windows qualification, 2026-11-13), in
+`src/data_transfer.rs` and `fetch_data_transfer` in `src/event_loop.rs`: upstream
+`DragEnter` read every supported payload (text, file list, PNG) from the source's
+`IDataObject` as soon as the pointer entered the window. A delayed-rendering
+source (one that produces data in `GetData`, as Windows allows) therefore blocked
+the GUI thread for its whole render time while the pointer merely hovered, large
+payloads were copied even when never dropped, and the stalled OLE loop delivered
+`Drop` late — after the application had already replaced the element under the
+pointer, so the drop was hit-tested against the new page (an asynchronous target
+replacement retargeted the drop). Reproduced with a WinForms source whose
+`GetData` sleeps 3 s: its log showed `GetData` during hover, ~1 s before the
+button was released. The patched `DragEnter` only probes the offered formats with
+`QueryGetData` and retains the `IDataObject`; the requested format is read when
+the application fetches it, inside `Drop` (where OLE guarantees the source is
+valid), without holding the drag-state borrow across that cross-process call. The
+clipboard path is unchanged. Drop this patch when upstream reads drag data lazily.
+
 ## Version 0.2 merge of renderer accessibility behavior
 
 The 0.2 tree preserves the qualified `adapter.rs` teardown patch above and also

@@ -1,0 +1,19 @@
+{
+  "python": "3.13.5 (main, Aug 10 2026, 12:06:59) [GCC 14.2.0]",
+  "executable": "/tmp/claude-1000/-home-toor-projects-ui4me-core/b23d2329-f1d7-4e28-b71e-8f99cfee78ed/scratchpad/lwheel-3.13/bin/python",
+  "ui4me_core": "/tmp/claude-1000/-home-toor-projects-ui4me-core/b23d2329-f1d7-4e28-b71e-8f99cfee78ed/scratchpad/lwheel-3.13/lib/python3.13/site-packages/ui4me_core/__init__.py",
+  "host": "/tmp/claude-1000/-home-toor-projects-ui4me-core/b23d2329-f1d7-4e28-b71e-8f99cfee78ed/scratchpad/lwheel-3.13/lib/python3.13/site-packages/ui4me_core/_bin/ui4me-host",
+  "ppid": 364948,
+  "frames_presented": 120,
+  "window_state": {
+    "decorations": true,
+    "focused": true,
+    "fullscreen": false,
+    "maximized": false,
+    "minimized": null,
+    "position": null,
+    "resizable": true,
+    "theme": null,
+    "visible": null
+  }
+}

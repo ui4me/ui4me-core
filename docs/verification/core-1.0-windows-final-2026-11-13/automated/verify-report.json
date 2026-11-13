@@ -1,0 +1,307 @@
+{
+  "schema": 1,
+  "time_utc": "2026-11-13T16:17:50.013384+00:00",
+  "platform": "Windows-2022Server-10.0.20348-SP0",
+  "machine": "AMD64",
+  "python": "3.13.17 (tags/v3.13.17:64e080d, Oct 21 2026, 14:08:53) [MSC v.1944 64 bit (AMD64)]",
+  "stages": [
+    {
+      "stage": "fmt",
+      "status": "PASS",
+      "commands": [
+        {
+          "argv": [
+            "cargo",
+            "fmt",
+            "-p",
+            "ui4me-host",
+            "-p",
+            "ui4me-renderer",
+            "-p",
+            "ui4me-document",
+            "-p",
+            "ui4me-assets",
+            "-p",
+            "ui4me-engine-types",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0,
+          "log": "fmt-0.log"
+        }
+      ],
+      "seconds": 1.773
+    },
+    {
+      "stage": "check",
+      "status": "PASS",
+      "commands": [
+        {
+          "argv": [
+            "cargo",
+            "check",
+            "--locked",
+            "--workspace",
+            "--all-targets"
+          ],
+          "exit_code": 0,
+          "log": "check-0.log"
+        }
+      ],
+      "seconds": 0.335
+    },
+    {
+      "stage": "test",
+      "status": "PASS",
+      "commands": [
+        {
+          "argv": [
+            "cargo",
+            "test",
+            "--locked",
+            "--workspace"
+          ],
+          "exit_code": 0,
+          "log": "test-0.log"
+        }
+      ],
+      "seconds": 91.251
+    },
+    {
+      "stage": "python",
+      "status": "PASS",
+      "commands": [
+        {
+          "argv": [
+            "C:\\Program Files\\Python313\\python.exe",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tools",
+            "-p",
+            "test_*.py",
+            "-v"
+          ],
+          "exit_code": 0,
+          "log": "python-0.log"
+        }
+      ],
+      "seconds": 2.703
+    },
+    {
+      "stage": "headless",
+      "status": "PASS",
+      "commands": [
+        {
+          "argv": [
+            "cargo",
+            "build",
+            "--locked",
+            "-p",
+            "ui4me-host"
+          ],
+          "exit_code": 0,
+          "log": "headless-0.log"
+        },
+        {
+          "argv": [
+            "C:\\Program Files\\Python313\\python.exe",
+            "tools/run_example.py",
+            "--headless",
+            "--timeout",
+            "40",
+            "--app-id",
+            "org.ui4me.HostHeadlessVerification",
+            "--evidence",
+            "F:\\ui4me\\verification\\core-1.0-windows-final\\automated\\verify\\backend-headless.json"
+          ],
+          "exit_code": 0,
+          "log": "headless-1.log"
+        }
+      ],
+      "seconds": 3.103
+    },
+    {
+      "stage": "renderer",
+      "status": "PASS",
+      "commands": [
+        {
+          "argv": [
+            "cargo",
+            "build",
+            "--locked",
+            "-p",
+            "ui4me-host"
+          ],
+          "exit_code": 0,
+          "log": "renderer-0.log"
+        },
+        {
+          "argv": [
+            "C:\\Program Files\\Python313\\python.exe",
+            "tools/run_renderer.py",
+            "--headless",
+            "--timeout",
+            "90",
+            "--app-id",
+            "org.ui4me.RendererHeadlessVerification",
+            "--evidence",
+            "F:\\ui4me\\verification\\core-1.0-windows-final\\automated\\verify\\renderer-headless.json"
+          ],
+          "exit_code": 0,
+          "log": "renderer-1.log"
+        }
+      ],
+      "seconds": 1.361
+    },
+    {
+      "stage": "faults",
+      "status": "PASS",
+      "commands": [
+        {
+          "argv": [
+            "cargo",
+            "build",
+            "--locked",
+            "-p",
+            "ui4me-host"
+          ],
+          "exit_code": 0,
+          "log": "faults-0.log"
+        },
+        {
+          "argv": [
+            "C:\\Program Files\\Python313\\python.exe",
+            "tools/run_faults.py",
+            "veto-close",
+            "--headless",
+            "--duration",
+            "1",
+            "--timeout",
+            "45",
+            "--output",
+            "F:\\ui4me\\verification\\core-1.0-windows-final\\automated\\verify\\faults\\8f17a54bfa\\veto-close"
+          ],
+          "exit_code": 0,
+          "log": "faults-1.log"
+        },
+        {
+          "argv": [
+            "C:\\Program Files\\Python313\\python.exe",
+            "tools/run_faults.py",
+            "veto-quit",
+            "--headless",
+            "--duration",
+            "1",
+            "--timeout",
+            "45",
+            "--output",
+            "F:\\ui4me\\verification\\core-1.0-windows-final\\automated\\verify\\faults\\8f17a54bfa\\veto-quit"
+          ],
+          "exit_code": 0,
+          "log": "faults-2.log"
+        },
+        {
+          "argv": [
+            "C:\\Program Files\\Python313\\python.exe",
+            "tools/run_faults.py",
+            "freeze-close",
+            "--headless",
+            "--duration",
+            "1",
+            "--timeout",
+            "45",
+            "--output",
+            "F:\\ui4me\\verification\\core-1.0-windows-final\\automated\\verify\\faults\\8f17a54bfa\\freeze-close"
+          ],
+          "exit_code": 0,
+          "log": "faults-3.log"
+        },
+        {
+          "argv": [
+            "C:\\Program Files\\Python313\\python.exe",
+            "tools/run_faults.py",
+            "freeze-quit",
+            "--headless",
+            "--duration",
+            "1",
+            "--timeout",
+            "45",
+            "--output",
+            "F:\\ui4me\\verification\\core-1.0-windows-final\\automated\\verify\\faults\\8f17a54bfa\\freeze-quit"
+          ],
+          "exit_code": 0,
+          "log": "faults-4.log"
+        },
+        {
+          "argv": [
+            "C:\\Program Files\\Python313\\python.exe",
+            "tools/run_faults.py",
+            "crash-after-ready",
+            "--headless",
+            "--duration",
+            "1",
+            "--timeout",
+            "45",
+            "--output",
+            "F:\\ui4me\\verification\\core-1.0-windows-final\\automated\\verify\\faults\\8f17a54bfa\\crash-after-ready"
+          ],
+          "exit_code": 0,
+          "log": "faults-5.log"
+        },
+        {
+          "argv": [
+            "C:\\Program Files\\Python313\\python.exe",
+            "tools/run_faults.py",
+            "log-flood",
+            "--headless",
+            "--duration",
+            "1",
+            "--timeout",
+            "45",
+            "--output",
+            "F:\\ui4me\\verification\\core-1.0-windows-final\\automated\\verify\\faults\\8f17a54bfa\\log-flood",
+            "--unread-host-output"
+          ],
+          "exit_code": 0,
+          "log": "faults-6.log"
+        },
+        {
+          "argv": [
+            "C:\\Program Files\\Python313\\python.exe",
+            "tools/run_faults.py",
+            "managed-tree",
+            "--headless",
+            "--duration",
+            "1",
+            "--timeout",
+            "45",
+            "--output",
+            "F:\\ui4me\\verification\\core-1.0-windows-final\\automated\\verify\\faults\\8f17a54bfa\\managed-tree"
+          ],
+          "exit_code": 0,
+          "log": "faults-7.log"
+        },
+        {
+          "argv": [
+            "C:\\Program Files\\Python313\\python.exe",
+            "tools/run_faults.py",
+            "managed-tree",
+            "--headless",
+            "--kill-host",
+            "--timeout",
+            "30",
+            "--output",
+            "F:\\ui4me\\verification\\core-1.0-windows-final\\automated\\verify\\faults\\8f17a54bfa\\forced-host-kill"
+          ],
+          "exit_code": 0,
+          "log": "faults-8.log"
+        }
+      ],
+      "seconds": 15.078
+    }
+  ],
+  "native_desktop_qualified": false,
+  "note": "Review native acceptance evidence separately; build/headless success is not desktop qualification."
+}

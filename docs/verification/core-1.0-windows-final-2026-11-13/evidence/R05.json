@@ -1,0 +1,32 @@
+{
+  "check": "R05",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T16:30:01.851512+00:00",
+  "build_identity": {
+    "host": "C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe",
+    "host_sha256": "bc704f662345611188b650cc9db1fa696c4934943ccc153100a74c0ba2836f6d",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "a089b4f5338f49417f56e95a7bef7f5cb6c8f3db7c0afba938628fac7d271d5d",
+    "base_commit": "33e1317",
+    "os": "Windows-2022Server-10.0.20348-SP0",
+    "release": "2022Server",
+    "version": "10.0.20348",
+    "session": 2,
+    "user": "ui4me_test",
+    "desktop": "Windows interactive RDP session (xfreerdp3 client), 1600x1000, 96 DPI unless stated"
+  },
+  "actions": [
+    "UIA patterns (Value.SetValue, TextPattern select/GetSelection, Toggle, RangeValue, ExpandCollapse+SelectionItem, Invoke, LiveSetting, ScrollItem) with event listeners; NVDA 2026.3.1 keyboard journey; TextPattern matrix"
+  ],
+  "expected": "Accessibility semantics, actions and a real screen-reader journey",
+  "observed": "All patterns act as user input; LiveRegionChanged 'Added Set via UIA...'; NVDA speaks 'Name edit required A useful desktop tool', 'Priority combo box collapsed' 'Normal 1 of 3' -> 'High 2 of 3', 'Notes edit', spin/slider values, 'not checked', live status after Add row. TextPattern issue resolved: managed System.Windows.Automation client faults on selection GetText for UI4ME, WordPad and Chrome alike; native COM client passes all operations",
+  "limitations": [],
+  "evidence_files_sha256": {
+    "ref_suite.txt": "8ed2ab62f7466433e22c4a5c81713cb79739f2916770bfa75e86dabca6aa5728",
+    "nvda_suite.txt": "2fdd024cc7436e341b1ac0aa57f6c4351c5ba1514c08e6d2fd0e4a576edeca72",
+    "uia_final.txt": "b07544eb34795f48407b2db5264d3b32840d378fdb38e3dfc1cfd64d8bbbfbc6",
+    "uia_chrome.txt": "f8d9976a82ea2545a3abaac6999c09c9b371ac18158250af8a14e9d60679f58c",
+    "F:\\ui4me\\lab\\out\\final\\R05-nvda.png": "cd3265e2f88c831cee94eb2c767b7a9859974e553f50f9893d6959ab3a70e60a",
+    "F:\\ui4me\\lab\\out\\final\\R05-nvda.log": "ae78924fb36854176552c95f9764e89aad820a182bae4aec80b3c343a3cc27aa"
+  }
+}

@@ -1,5 +1,6 @@
 """Bounded bitmap transport and Python lifecycle tests (no native desktop needed)."""
 from __future__ import annotations
+import os
 import sys
 import tempfile
 import threading
@@ -61,7 +62,13 @@ class LiveBitmapTests(unittest.TestCase):
         second=bytes(reversed(range(48)))
         self.assertEqual(bitmap.present(first)['sequence'],1)
         self.assertEqual(bitmap.try_present(second)['sequence'],2)
-        with open(self.rpc.path,'rb') as f:
+        # The producer holds the transport delete-on-close on Windows, so a second
+        # reader must share deletion (as the host's handle does).
+        if os.name == 'nt':
+            reader = os.fdopen(os.open(self.rpc.path, os.O_RDONLY | os.O_BINARY | os.O_TEMPORARY), 'rb')
+        else:
+            reader = open(self.rpc.path, 'rb')
+        with reader as f:
             self.assertEqual(f.read(48),second)
             self.assertEqual(f.read(48),first)
         self.assertEqual([x[0] for x in self.rpc.calls[-3:]],['bitmap.create','bitmap.present','bitmap.present'])

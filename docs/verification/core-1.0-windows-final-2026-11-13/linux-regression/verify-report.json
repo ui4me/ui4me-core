@@ -1,0 +1,292 @@
+{
+  "schema": 1,
+  "time_utc": "2026-11-13T16:18:44.594631+00:00",
+  "platform": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+  "machine": "x86_64",
+  "python": "3.13.5 (main, Aug 10 2026, 12:06:59) [GCC 14.2.0]",
+  "stages": [
+    {
+      "stage": "fmt",
+      "status": "PASS",
+      "commands": [
+        {
+          "argv": [
+            "cargo",
+            "fmt",
+            "-p",
+            "ui4me-host",
+            "-p",
+            "ui4me-renderer",
+            "-p",
+            "ui4me-document",
+            "-p",
+            "ui4me-assets",
+            "-p",
+            "ui4me-engine-types",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0,
+          "log": "fmt-0.log"
+        }
+      ],
+      "seconds": 1.351
+    },
+    {
+      "stage": "check",
+      "status": "PASS",
+      "commands": [
+        {
+          "argv": [
+            "cargo",
+            "check",
+            "--locked",
+            "--workspace",
+            "--all-targets"
+          ],
+          "exit_code": 0,
+          "log": "check-0.log"
+        }
+      ],
+      "seconds": 0.285
+    },
+    {
+      "stage": "test",
+      "status": "PASS",
+      "commands": [
+        {
+          "argv": [
+            "cargo",
+            "test",
+            "--locked",
+            "--workspace"
+          ],
+          "exit_code": 0,
+          "log": "test-0.log"
+        }
+      ],
+      "seconds": 148.548
+    },
+    {
+      "stage": "python",
+      "status": "PASS",
+      "commands": [
+        {
+          "argv": [
+            "/usr/bin/python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "tools",
+            "-p",
+            "test_*.py",
+            "-v"
+          ],
+          "exit_code": 0,
+          "log": "python-0.log"
+        }
+      ],
+      "seconds": 2.322
+    },
+    {
+      "stage": "headless",
+      "status": "PASS",
+      "commands": [
+        {
+          "argv": [
+            "cargo",
+            "build",
+            "--locked",
+            "-p",
+            "ui4me-host"
+          ],
+          "exit_code": 0,
+          "log": "headless-0.log"
+        },
+        {
+          "argv": [
+            "/usr/bin/python3",
+            "tools/run_example.py",
+            "--headless",
+            "--timeout",
+            "40",
+            "--app-id",
+            "org.ui4me.HostHeadlessVerification",
+            "--evidence",
+            "/home/toor/projects/ui4me-core/verification/core-1.0-windows/linux-regression/verify/backend-headless.json"
+          ],
+          "exit_code": 0,
+          "log": "headless-1.log"
+        }
+      ],
+      "seconds": 0.874
+    },
+    {
+      "stage": "renderer",
+      "status": "PASS",
+      "commands": [
+        {
+          "argv": [
+            "cargo",
+            "build",
+            "--locked",
+            "-p",
+            "ui4me-host"
+          ],
+          "exit_code": 0,
+          "log": "renderer-0.log"
+        },
+        {
+          "argv": [
+            "/usr/bin/python3",
+            "tools/run_renderer.py",
+            "--headless",
+            "--timeout",
+            "90",
+            "--app-id",
+            "org.ui4me.RendererHeadlessVerification",
+            "--evidence",
+            "/home/toor/projects/ui4me-core/verification/core-1.0-windows/linux-regression/verify/renderer-headless.json"
+          ],
+          "exit_code": 0,
+          "log": "renderer-1.log"
+        }
+      ],
+      "seconds": 2.265
+    },
+    {
+      "stage": "faults",
+      "status": "PASS",
+      "commands": [
+        {
+          "argv": [
+            "cargo",
+            "build",
+            "--locked",
+            "-p",
+            "ui4me-host"
+          ],
+          "exit_code": 0,
+          "log": "faults-0.log"
+        },
+        {
+          "argv": [
+            "/usr/bin/python3",
+            "tools/run_faults.py",
+            "veto-close",
+            "--headless",
+            "--duration",
+            "1",
+            "--timeout",
+            "45",
+            "--output",
+            "/home/toor/projects/ui4me-core/verification/core-1.0-windows/linux-regression/verify/faults/49f5dd5ecd/veto-close"
+          ],
+          "exit_code": 0,
+          "log": "faults-1.log"
+        },
+        {
+          "argv": [
+            "/usr/bin/python3",
+            "tools/run_faults.py",
+            "veto-quit",
+            "--headless",
+            "--duration",
+            "1",
+            "--timeout",
+            "45",
+            "--output",
+            "/home/toor/projects/ui4me-core/verification/core-1.0-windows/linux-regression/verify/faults/49f5dd5ecd/veto-quit"
+          ],
+          "exit_code": 0,
+          "log": "faults-2.log"
+        },
+        {
+          "argv": [
+            "/usr/bin/python3",
+            "tools/run_faults.py",
+            "freeze-close",
+            "--headless",
+            "--duration",
+            "1",
+            "--timeout",
+            "45",
+            "--output",
+            "/home/toor/projects/ui4me-core/verification/core-1.0-windows/linux-regression/verify/faults/49f5dd5ecd/freeze-close"
+          ],
+          "exit_code": 0,
+          "log": "faults-3.log"
+        },
+        {
+          "argv": [
+            "/usr/bin/python3",
+            "tools/run_faults.py",
+            "freeze-quit",
+            "--headless",
+            "--duration",
+            "1",
+            "--timeout",
+            "45",
+            "--output",
+            "/home/toor/projects/ui4me-core/verification/core-1.0-windows/linux-regression/verify/faults/49f5dd5ecd/freeze-quit"
+          ],
+          "exit_code": 0,
+          "log": "faults-4.log"
+        },
+        {
+          "argv": [
+            "/usr/bin/python3",
+            "tools/run_faults.py",
+            "crash-after-ready",
+            "--headless",
+            "--duration",
+            "1",
+            "--timeout",
+            "45",
+            "--output",
+            "/home/toor/projects/ui4me-core/verification/core-1.0-windows/linux-regression/verify/faults/49f5dd5ecd/crash-after-ready"
+          ],
+          "exit_code": 0,
+          "log": "faults-5.log"
+        },
+        {
+          "argv": [
+            "/usr/bin/python3",
+            "tools/run_faults.py",
+            "log-flood",
+            "--headless",
+            "--duration",
+            "1",
+            "--timeout",
+            "45",
+            "--output",
+            "/home/toor/projects/ui4me-core/verification/core-1.0-windows/linux-regression/verify/faults/49f5dd5ecd/log-flood",
+            "--unread-host-output"
+          ],
+          "exit_code": 0,
+          "log": "faults-6.log"
+        },
+        {
+          "argv": [
+            "/usr/bin/python3",
+            "tools/run_faults.py",
+            "managed-tree",
+            "--headless",
+            "--duration",
+            "1",
+            "--timeout",
+            "45",
+            "--output",
+            "/home/toor/projects/ui4me-core/verification/core-1.0-windows/linux-regression/verify/faults/49f5dd5ecd/managed-tree"
+          ],
+          "exit_code": 0,
+          "log": "faults-7.log"
+        }
+      ],
+      "seconds": 11.632
+    }
+  ],
+  "native_desktop_qualified": false,
+  "note": "Review native acceptance evidence separately; build/headless success is not desktop qualification."
+}

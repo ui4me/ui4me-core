@@ -20,8 +20,9 @@ ROOT = Path(__file__).resolve().parent
 class BuildWithHost(build_py):
     def run(self):
         super().run()
-        if sys.platform != "linux":
-            raise RuntimeError("The v1.0 wheel build supports Linux only; Windows will be qualified separately.")
+        if sys.platform not in ("linux", "win32"):
+            raise RuntimeError("The v1.0 wheel build supports Linux and Windows only.")
+        exe = "ui4me-host.exe" if sys.platform == "win32" else "ui4me-host"
         custom = os.environ.get("UI4ME_HOST_BINARY")
         if custom:
             host = Path(custom).expanduser().resolve()
@@ -32,8 +33,9 @@ class BuildWithHost(build_py):
             env = os.environ.copy()
             env.setdefault("CARGO_BUILD_JOBS", "2")
             subprocess.run(command, cwd=ROOT, env=env, check=True)
-            host = ROOT / "target" / "release" / "ui4me-host"
-        dest = Path(self.build_lib) / "ui4me_core" / "_bin" / "ui4me-host"
+            target = Path(env.get("CARGO_TARGET_DIR") or ROOT / "target")
+            host = (target if target.is_absolute() else ROOT / target) / "release" / exe
+        dest = Path(self.build_lib) / "ui4me_core" / "_bin" / exe
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(host, dest)
         dest.chmod(0o755)
@@ -48,8 +50,8 @@ class BuildWithHost(build_py):
 class PlatformWheel(bdist_wheel):
     def finalize_options(self):
         super().finalize_options()
-        # The Python code is ABI-independent, but the wheel contains an ELF
-        # executable and absolutely must not have a platform-neutral tag.
+        # The Python code is ABI-independent, but the wheel contains a native
+        # (ELF or PE) executable and absolutely must not have a platform-neutral tag.
         self.root_is_pure = False
 
     def get_tag(self):

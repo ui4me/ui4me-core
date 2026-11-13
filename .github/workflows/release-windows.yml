@@ -1,0 +1,35 @@
+name: Build Windows source and wheel (not published)
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v1.0.0']
+permissions:
+  contents: read
+jobs:
+  windows-distributions:
+    runs-on: windows-2022
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned Rust toolchain
+        shell: bash
+        run: rustup show active-toolchain
+      - name: Build sdist, then the win_amd64 wheel from that sdist, and validate both
+        # Non-publishing: build, twine check and structural validation only.
+        run: pwsh -NoProfile -File tools/release/build_windows.ps1 -Python python -OutDir wheelhouse
+      - name: Smoke test the wheel without a Rust build
+        shell: pwsh
+        run: |
+          python -m venv smoke
+          smoke\Scripts\python -m pip install --no-index --only-binary :all: (Get-ChildItem wheelhouse -Filter '*win_amd64.whl').FullName
+          smoke\Scripts\python tools/release/smoke_installed_wheel.py
+      - name: Upload artifacts for explicit manual publishing
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui4me-core-windows-1.0.0
+          path: wheelhouse/*
+          if-no-files-found: error

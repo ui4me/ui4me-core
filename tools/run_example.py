@@ -12,6 +12,14 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def product_version():
+    """The workspace version, so generated reference manifests never drift from it."""
+    import re
+    text = (ROOT / "Cargo.toml").read_text(encoding="utf-8")
+    section = text.split("[workspace.package]", 1)[1]
+    return re.search(r'^version\s*=\s*"([^"]+)"', section, re.M).group(1)
+
+
 def locate_host(explicit=None, release=False):
     if explicit:
         path = Path(explicit).expanduser().resolve()
@@ -30,7 +38,8 @@ def locate_host(explicit=None, release=False):
 
 
 def manifest(backend_args, app_id="org.ui4me.HostReference", backend_path=None, icon_path=None,
-             app_name="UI4ME Host Reference", app_version="1.0.0-rc.1", startup_timeout_ms=15000):
+             app_name="UI4ME Host Reference", app_version=None, startup_timeout_ms=15000):
+    app_version = app_version or product_version()
     backend_path = Path(backend_path) if backend_path else ROOT / "examples/python/demo.py"
     icon_path = icon_path if icon_path is not None else str(ROOT / "crates/ui4me-host/assets/ui4me.png")
     def q(value):

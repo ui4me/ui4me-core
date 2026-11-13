@@ -1,0 +1,29 @@
+{
+  "check": "C03",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T16:30:08.424958+00:00",
+  "build_identity": {
+    "host": "C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe",
+    "host_sha256": "bc704f662345611188b650cc9db1fa696c4934943ccc153100a74c0ba2836f6d",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "a089b4f5338f49417f56e95a7bef7f5cb6c8f3db7c0afba938628fac7d271d5d",
+    "base_commit": "33e1317",
+    "os": "Windows-2022Server-10.0.20348-SP0",
+    "release": "2022Server",
+    "version": "10.0.20348",
+    "session": 2,
+    "user": "ui4me_test",
+    "desktop": "Windows interactive RDP session (xfreerdp3 client), 1600x1000, 96 DPI unless stated"
+  },
+  "actions": [
+    "query_nodes, node_batch incl. valid+stale rollback, remove + replacement, stale handle reuse, nested RPC and self-removing callback, document replacement with old ids"
+  ],
+  "expected": "Anonymous mutations, rollback, retirement, callback generations",
+  "observed": "Batch with a stale node rolls back; removed handles -32004; nested RPC and self-removal callbacks work; old document/node ids rejected after replacement",
+  "limitations": [],
+  "evidence_files_sha256": {
+    "c_suite.txt": "09f18f9e3b1843a7fde0bcf4d40ca4c40112e8f17efbc0d79910aefab1d29530",
+    "F:\\ui4me\\lab\\out\\final\\C03-after-mutation.png": "e11036db52d737ebe5e96aa3a8cca9bc7c6eaf192f42659ad01305cb6e6032c7",
+    "F:\\ui4me\\lab\\out\\final\\C03-after-removal.png": "1f0f50d88c1b6288dcf9594802ebd5f825025a54165fe6d29700f00fae94271e"
+  }
+}

@@ -83,6 +83,9 @@ def interactive_context():
     return usable_socket, detail
 
 
+LOCAL_ONLY = {"AGENTS.md", "CLAUDE.md", "LOCAL_FINISH_PROMPT.md"}
+
+
 def source_identity():
     """Stable identity of executable inputs; exclude reports and build outputs."""
     digest = hashlib.sha256()
@@ -96,6 +99,10 @@ def source_identity():
                       and not (Path(directory) == ROOT and name == "docs")]
         for name in files:
             path = Path(directory) / name
+            # Local, git-ignored agent instructions are not build inputs; they never
+            # ship and are absent from other checkouts of the same source.
+            if Path(directory) == ROOT and name in LOCAL_ONLY:
+                continue
             if path.suffix not in {".pyc", ".log"}:
                 paths.append(path)
     # Order by the relative POSIX path: Windows paths compare case-insensitively,

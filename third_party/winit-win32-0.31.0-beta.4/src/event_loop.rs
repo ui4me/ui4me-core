@@ -531,15 +531,32 @@ impl RootActiveEventLoop for ActiveEventLoop {
         id: DataTransferId,
         type_: &dyn TransferType,
     ) -> Result<AsyncRequestSerial, TransferError> {
-        let (data, window_id) = match self.0.data_transfer().drag_state(id) {
-            Some(state) => (state.data.clone(), state.window_id),
+        let hint = type_.hint().ok_or(TransferError::Failed)?;
+        let drag = self
+            .0
+            .data_transfer()
+            .drag_state(id)
+            .map(|state| (state.data.clone(), state.source.clone(), state.window_id));
+        let (data, window_id) = match drag {
+            // UI4ME patch: read a drag payload only now (inside `Drop`, while the source is
+            // valid), without holding the drag-state borrow across the cross-process call.
+            Some((data, Some(source), window_id)) => {
+                match data.resolve(hint).filter(|resolved| data.is_unread(*resolved)) {
+                    Some(resolved) => {
+                        let read = crate::data_transfer::DataObject::read_from(&source, resolved)
+                            .map_err(|_| TransferError::Failed)?;
+                        (Arc::new(read), window_id)
+                    },
+                    None => (data, window_id),
+                }
+            },
+            Some((data, None, window_id)) => (data, window_id),
             None => {
                 let data = self.0.data_transfer().clipboard_data(id)?;
                 let window_id = self.0.clipboard_window().ok_or(TransferError::Failed)?;
                 (data, window_id)
             },
         };
-        let hint = type_.hint().ok_or(TransferError::Failed)?;
         let typed_data = WinTypedData::new(data, hint)
             .map(|value| Arc::new(value) as Arc<dyn TypedData>)
             .ok_or(TransferError::Failed)?;

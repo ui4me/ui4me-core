@@ -64,9 +64,114 @@ use crate::util;
 #[derive(Debug, Default)]
 pub(crate) struct DataObject {
     data: HashMap<TypeHint, SendData>,
+    /// UI4ME patch: formats a drag source offers that have not been read yet (see
+    /// `probe_idataobject`).
+    lazy: Vec<TypeHint>,
+}
+
+/// UI4ME patch: a drag source's `IDataObject`, retained from `DragEnter` until the drag state is
+/// removed, so the payload is read only when the application fetches it during `Drop`.
+#[derive(Debug)]
+pub(crate) struct OleDataObject(NonNull<IDataObject>);
+
+impl OleDataObject {
+    unsafe fn retain(data_obj: *const IDataObject) -> Option<Self> {
+        let ptr = NonNull::new(data_obj as *mut IDataObject)?;
+        let add_ref = unsafe { (*(*ptr.as_ptr()).cast::<IDataObjectVtbl>()).parent.AddRef };
+        unsafe { add_ref(ptr.as_ptr() as *mut IUnknown) };
+        Some(Self(ptr))
+    }
+
+    fn as_ptr(&self) -> *const IDataObject {
+        self.0.as_ptr()
+    }
+}
+
+impl Clone for OleDataObject {
+    fn clone(&self) -> Self {
+        unsafe { Self::retain(self.as_ptr()) }.expect("non-null")
+    }
+}
+
+impl Drop for OleDataObject {
+    fn drop(&mut self) {
+        let release = unsafe { (*(*self.0.as_ptr()).cast::<IDataObjectVtbl>()).parent.Release };
+        unsafe { release(self.0.as_ptr() as *mut IUnknown) };
+    }
 }
 
 impl DataObject {
+    /// UI4ME patch: record which supported formats a drag source offers, using `QueryGetData`
+    /// only. Reading the payload here (upstream reads text, files and PNG on every `DragEnter`)
+    /// made a delayed-rendering source block the GUI thread while the pointer merely entered the
+    /// window, and copied large payloads that were never dropped; the late `Drop` was then
+    /// hit-tested after the application had already changed the page.
+    unsafe fn probe_idataobject(data_obj: *const IDataObject) -> Self {
+        let mut lazy = Vec::new();
+        let png = {
+            let name = util::encode_wide("PNG");
+            let format = unsafe { RegisterClipboardFormatW(name.as_ptr()) };
+            format as u16
+        };
+        for (hint, cf_format) in [
+            (TypeHint::Plaintext, CF_UNICODETEXT),
+            (TypeHint::UriList, CF_HDROP),
+            (TypeHint::Image { extension_hint: Some("png") }, png),
+        ] {
+            if cf_format == 0 {
+                continue;
+            }
+            let format = FORMATETC {
+                cfFormat: cf_format,
+                ptd: std::ptr::null_mut(),
+                dwAspect: DVASPECT_CONTENT,
+                lindex: -1,
+                tymed: TYMED_HGLOBAL as u32,
+            };
+            let query = unsafe { (*(*data_obj).cast::<IDataObjectVtbl>()).QueryGetData };
+            if unsafe { query(data_obj as *mut _, &format) } == S_OK {
+                lazy.push(hint);
+            }
+        }
+        Self { data: HashMap::new(), lazy }
+    }
+
+    /// UI4ME patch: read one offered format now (from `Drop`, while the source is valid).
+    unsafe fn read_format(data_obj: *const IDataObject, hint: TypeHint) -> Result<Self, HRESULT> {
+        let mut data = HashMap::new();
+        match hint {
+            TypeHint::Plaintext => {
+                if let Some(text) = unsafe { read_unicode_text(data_obj) }? {
+                    data.insert(TypeHint::Plaintext, SendData::String(text));
+                }
+            },
+            TypeHint::UriList => {
+                if let Some(uris) = unsafe { read_uri_list(data_obj) }? {
+                    if !uris.is_empty() {
+                        data.insert(TypeHint::UriList, SendData::Uris(uris));
+                    }
+                }
+            },
+            TypeHint::Image { .. } => {
+                if let Some(png) = unsafe { read_png(data_obj) }? {
+                    if !png.is_empty() {
+                        data.insert(
+                            TypeHint::Image { extension_hint: Some("png") },
+                            SendData::Bytes(png),
+                        );
+                    }
+                }
+            },
+            _ => {},
+        }
+        Ok(Self { data, lazy: Vec::new() })
+    }
+
+    /// UI4ME patch: whether `hint` was offered but not read yet.
+    pub(crate) fn is_unread(&self, hint: TypeHint) -> bool {
+        !self.data.contains_key(&hint) && self.lazy.contains(&hint)
+    }
+
     unsafe fn from_idataobject(data_obj: *const IDataObject) -> Result<Self, HRESULT> {
         let mut data = HashMap::new();
 
@@ -86,11 +191,16 @@ impl DataObject {
             }
         }
 
-        Ok(Self { data })
+        Ok(Self { data, lazy: Vec::new() })
     }
 
-    fn resolve(&self, requested: TypeHint) -> Option<TypeHint> {
-        self.data.keys().copied().find(|stored| stored.matches(&requested))
+    pub(crate) fn resolve(&self, requested: TypeHint) -> Option<TypeHint> {
+        self.data.keys().chain(&self.lazy).copied().find(|stored| stored.matches(&requested))
+    }
+
+    /// UI4ME patch: a data object holding only `hint`, read now from a retained drag source.
+    pub(crate) fn read_from(source: &OleDataObject, hint: TypeHint) -> Result<Self, HRESULT> {
+        unsafe { Self::read_format(source.as_ptr(), hint) }
     }
 }
 
@@ -319,7 +429,7 @@ impl DataTransfer for WinDataTransfer {
         &'this self,
         func: &'_ mut dyn FnMut(&'this dyn TransferType) -> ControlFlow<()>,
     ) {
-        for hint in self.data.data.keys() {
+        for hint in self.data.data.keys().chain(&self.data.lazy) {
             if let ControlFlow::Break(()) = func(hint) {
                 break;
             }
@@ -515,8 +625,10 @@ impl FileDropHandler {
 
         let wid = WindowId::from_raw(drop_handler.window.addr());
 
-        let data = Arc::new(unsafe { DataObject::from_idataobject(pDataObj) }.unwrap_or_default());
-        drop_handler.runner.data_transfer().register_drag(data_transfer_id, wid, data);
+        // UI4ME patch: probe formats only; the payload is read at fetch time during `Drop`.
+        let data = Arc::new(unsafe { DataObject::probe_idataobject(pDataObj) });
+        let source = unsafe { OleDataObject::retain(pDataObj) };
+        drop_handler.runner.data_transfer().register_drag(data_transfer_id, wid, data, source);
 
         let pt_screen = POINT { x: pt.x, y: pt.y };
         let mut pt_client = pt_screen;
@@ -875,6 +987,8 @@ pub(crate) struct DragState {
     pub(crate) id: DataTransferId,
     pub(crate) window_id: WindowId,
     pub(crate) data: Arc<DataObject>,
+    /// UI4ME patch: the retained source of `data`'s unread formats.
+    pub(crate) source: Option<OleDataObject>,
     pub(crate) actions: Vec<DndAction>,
 }
 
@@ -905,9 +1019,10 @@ impl DataTransferState {
         id: DataTransferId,
         window_id: WindowId,
         data: Arc<DataObject>,
+        source: Option<OleDataObject>,
     ) {
         *self.drag.borrow_mut() =
-            Some(DragState { id, window_id, data, actions: Default::default() });
+            Some(DragState { id, window_id, data, source, actions: Default::default() });
     }
 
     pub(crate) fn remove_drag(&self, id: DataTransferId) {

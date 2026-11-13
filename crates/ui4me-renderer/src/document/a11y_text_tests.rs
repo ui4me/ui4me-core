@@ -248,3 +248,41 @@ fn scroll_into_view_on_static_text_scrolls_its_element() {
         "scrolled into view: {before:?} -> {after:?}"
     );
 }
+
+/// Adapters reach the engine through `decode_request`, which turns every
+/// ScrollIntoView (hint-less from UI Automation, hinted from AT-SPI) into
+/// `ScrollIntoViewWithHint`. On a static-text object that request must scroll
+/// the text node's element too; it previously scrolled nothing.
+#[test]
+fn adapter_scroll_into_view_on_static_text_scrolls_its_element() {
+    use accesskit::{Action, ActionData, ActionRequest, ScrollHint, TreeId};
+    for data in [None, Some(ActionData::ScrollHint(ScrollHint::TopEdge))] {
+        let mut d = Document::parse(
+            "<!doctype html><style>body{margin:0;font:16px sans-serif}#s{height:60px;overflow:auto}#far{margin-top:400px}</style>\
+             <div id=s><p>top</p><p id=far>Far away paragraph</p></div>",
+        )
+        .unwrap();
+        d.render(400, 200, 1.0).unwrap();
+        let before = d.element_rect("far").unwrap().unwrap();
+        let t = d.accessibility_tree().unwrap();
+        let leaf = t
+            .nodes
+            .values()
+            .find(|n| n.html_id.is_none() && n.name.contains("Far away"))
+            .expect("static text object");
+        let request = crate::a11y::decode_request(&ActionRequest {
+            action: Action::ScrollIntoView,
+            target_tree: TreeId::ROOT,
+            target_node: accesskit::NodeId(leaf.id),
+            data: data.clone(),
+        })
+        .expect("decoded");
+        d.accessibility_request(&request).unwrap();
+        d.render(400, 200, 1.0).unwrap();
+        let after = d.element_rect("far").unwrap().unwrap();
+        assert!(
+            after.y < before.y && after.y + after.height <= 60.5,
+            "{data:?}: scrolled into view: {before:?} -> {after:?}"
+        );
+    }
+}

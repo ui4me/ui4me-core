@@ -1,0 +1,29 @@
+{
+  "check": "R10",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T16:30:05.360990+00:00",
+  "build_identity": {
+    "host": "C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe",
+    "host_sha256": "bc704f662345611188b650cc9db1fa696c4934943ccc153100a74c0ba2836f6d",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "a089b4f5338f49417f56e95a7bef7f5cb6c8f3db7c0afba938628fac7d271d5d",
+    "base_commit": "33e1317",
+    "os": "Windows-2022Server-10.0.20348-SP0",
+    "release": "2022Server",
+    "version": "10.0.20348",
+    "session": 2,
+    "user": "ui4me_test",
+    "desktop": "Windows interactive RDP session (xfreerdp3 client), 1600x1000, 96 DPI unless stated"
+  },
+  "actions": [
+    "measure_resources --renderer (system and reduce): 5 startups, 60 s idle, 400 window + 400 DOM cycles; 1,200 window cycles; RC2 lab resize/animation/bitmap costs (cycle-accurate CPU)"
+  ],
+  "expected": "Measured idle/startup/update and settled memory",
+  "observed": "Startup-to-ready 130/132 ms; idle 0.08% CPU (cycles); combined private ~40 MiB; DOM churn flat; window churn bounded (29-38 MiB oscillation); resize-to-present p50 2.2 ms p95 3.5 ms; CSS animation 16.4% and 60 fps 320x200 bitmap 14.3% of a core, ~0.1% after removal",
+  "limitations": [],
+  "evidence_files_sha256": {
+    "final_misc.txt": "bb4a8660c8d562867720a6e0f274d3cff0ae0bd020d4876d424046e7faecc9bc",
+    "measure-1200.txt": "41573e49ca07d86fbf93962f4e74cfb91ab608b4af1bec8f02f3ffc058883e2c",
+    "rc2_perf.txt": "df8b8f576ab253dae0568bea02f846575737e64a5b0ca83b39c3957e88da1c14"
+  }
+}

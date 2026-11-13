@@ -1,0 +1,5 @@
+Chromium 158.0.8127.18
+  [lab started: ['window opened', 'policies set'] ]
+max |geometry delta| over 13 markers x 3 widths: 0.47 px at (360, 'sel')
+pixel regions (differing>48 / total): {'png glyph': [0, 1024], 'inset shadow': [0, 6000], 'liga-off': [1291, 13365], 'PNG glyph red pixels': 1024, 'liga default vs override differ': False}
+DONE

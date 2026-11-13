@@ -1,0 +1,30 @@
+{
+  "check": "N06",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T16:29:51.609704+00:00",
+  "build_identity": {
+    "host": "C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe",
+    "host_sha256": "bc704f662345611188b650cc9db1fa696c4934943ccc153100a74c0ba2836f6d",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "a089b4f5338f49417f56e95a7bef7f5cb6c8f3db7c0afba938628fac7d271d5d",
+    "base_commit": "33e1317",
+    "os": "Windows-2022Server-10.0.20348-SP0",
+    "release": "2022Server",
+    "version": "10.0.20348",
+    "session": 2,
+    "user": "ui4me_test",
+    "desktop": "Windows interactive RDP session (xfreerdp3 client), 1600x1000, 96 DPI unless stated"
+  },
+  "actions": [
+    "Microsoft Pinyin (zh-CN added temporarily) via Win+Space in the probe editor: nihao+Space, shijie+Escape, compose over selected char, Tab and mouse focus change during composition; back to ENG"
+  ],
+  "expected": "Real IME composition, Unicode, caret, layout switching",
+  "observed": "Preedit rendered inline with candidate window at the caret; commit 你好; Escape cancels; composition replaces a selected char; Tab is consumed by Microsoft Pinyin (window stays responsive); layout 0x804 -> 0x409 and ASCII typing afterwards. Renderer IME in all field kinds is C04/R03",
+  "limitations": [
+    "The v0.1 probe's host-local editor discards an uncommitted composition when a mouse click moves focus; the HTML renderer keeps it in the original field (C04/R03)"
+  ],
+  "evidence_files_sha256": {
+    "ime_suite.txt": "f617d783476ed30be27f846274856d98bdd1e2cab02fe0b873d16334b7ff7d9b",
+    "F:\\ui4me\\lab\\out\\final\\N06-probe-preedit.png": "4cf849be82dea0d7b2dffa4fefb4d141787e44698b6447f7d9ab44f0382b0f96"
+  }
+}

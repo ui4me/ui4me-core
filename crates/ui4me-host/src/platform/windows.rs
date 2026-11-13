@@ -984,6 +984,25 @@ pub fn standard_paths(app_id: &str) -> Result<serde_json::Value> {
     )
 }
 
+/// Whether Windows treats `path`'s file type as one that executes code when opened
+/// (`.exe`, `.bat`, `.cmd`, `.lnk`, `.js`, ...), using the shell's own classification
+/// (`AssocIsDangerous`, as the Attachment Manager does). Directories are never executable.
+pub fn executable_file_type(path: &std::path::Path) -> bool {
+    use windows_sys::Win32::UI::Shell::AssocIsDangerous;
+    if path.is_dir() {
+        return false;
+    }
+    let Some(extension) = path.extension() else {
+        return false;
+    };
+    let assoc: Vec<u16> = OsStr::new(".")
+        .encode_wide()
+        .chain(extension.encode_wide())
+        .chain(Some(0))
+        .collect();
+    unsafe { AssocIsDangerous(assoc.as_ptr()) != 0 }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

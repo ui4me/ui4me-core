@@ -6,6 +6,15 @@ Repeat against a native editor by providing its process ID and control ID/name;
 --first-edit chooses its first Edit control. This tool does not
 terminate the target application, alter its text, or change the machine setup.
 The select mode changes its selection and --focus changes foreground focus.
+
+--client chooses the managed System.Windows.Automation client (UiaTextProbe.cs)
+and/or the native IUIAutomation COM client (uia_com_probe.py, needs comtypes).
+Finding recorded for Core 1.0 (Windows Server 2022, .NET Framework 4.8): the
+managed client's TextPatternRange.GetText on a range returned by GetSelection
+raises AccessViolationException in UiaCoreApi.RawTextRange_GetText for every
+provider tested (UI4ME/AccessKit, WordPad RichEdit, Chrome), in MTA and STA;
+the native COM client completes every operation for all three. Treat a managed
+selection-read failure as a client defect unless the COM client fails too.
 """
 import argparse
 from datetime import datetime, timezone
@@ -16,7 +25,7 @@ import subprocess
 import sys
 import time
 
-MODES = ("pattern", "document-text", "selection", "selection-text", "select")
+MODES = ("pattern", "document-text", "selection", "selection-text", "select", "select-read")
 
 
 def stop_probe(process, stream):
@@ -51,6 +60,8 @@ def main():
     selector.add_argument("--first-edit", action="store_true")
     parser.add_argument("--apartment", action="append", choices=("MTA", "STA"))
     parser.add_argument("--mode", action="append", choices=MODES)
+    parser.add_argument("--client", action="append", choices=("managed", "com"),
+                        help="managed System.Windows.Automation (default) and/or native IUIAutomation via comtypes")
     parser.add_argument("--focus", action="store_true")
     parser.add_argument("--timeout", type=int, default=15)
     parser.add_argument("--output", type=Path, required=True)
@@ -69,56 +80,68 @@ def main():
         args.automation_id = "name"
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    clients = args.client or ["managed"]
+    if "com" in clients and (args.pid <= 0 or args.control_name is not None):
+        parser.error("--client com needs --pid and --automation-id or --first-edit")
     rows = []
-    for apartment in args.apartment or ["MTA", "STA"]:
-        for mode in args.mode or MODES:
-            name = apartment.lower() + "-" + mode
-            log = output / (name + ".log")
-            log.unlink(missing_ok=True)
-            command = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                "-" + apartment, "-File", str(Path(__file__).with_name("uia_text_probe.ps1")),
-                "-TargetProcessId", str(args.pid),
-                "-Mode", mode, "-Apartment", apartment, "-LogPath", str(log),
-                "-TimeoutSeconds", str(args.timeout)]
-            # Windows PowerShell 5.1 can drop empty -File arguments. Omit them
-            # and use a switch for the intentionally unqualified Edit selector.
-            if args.title.strip():
-                command += ["-WindowTitle", args.title]
-            if args.control_name is not None:
-                command += ["-ControlName", args.control_name]
-            elif args.first_edit or args.automation_id == "":
-                command.append("-FirstEdit")
+    for client, apartment, mode in [(c, a, m) for c in clients
+                                    for a in args.apartment or ["MTA", "STA"]
+                                    for m in args.mode or MODES]:
+        name = ("" if client == "managed" else "com-") + apartment.lower() + "-" + mode
+        log = output / (name + ".log")
+        log.unlink(missing_ok=True)
+        command = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+            "-" + apartment, "-File", str(Path(__file__).with_name("uia_text_probe.ps1")),
+            "-TargetProcessId", str(args.pid),
+            "-Mode", mode, "-Apartment", apartment, "-LogPath", str(log),
+            "-TimeoutSeconds", str(args.timeout)]
+        # Windows PowerShell 5.1 can drop empty -File arguments. Omit them
+        # and use a switch for the intentionally unqualified Edit selector.
+        if args.title.strip():
+            command += ["-WindowTitle", args.title]
+        if args.control_name is not None:
+            command += ["-ControlName", args.control_name]
+        elif args.first_edit or args.automation_id == "":
+            command.append("-FirstEdit")
+        elif args.automation_id is not None:
+            command += ["-AutomationId", args.automation_id]
+        if args.focus:
+            command.append("-Focus")
+        if client == "com":
+            command = [sys.executable, str(Path(__file__).with_name("uia_com_probe.py")),
+                       "--pid", str(args.pid), "--mode", mode, "--apartment", apartment,
+                       "--log", str(log)]
+            if args.first_edit or args.automation_id == "":
+                pass  # first Edit control type
             elif args.automation_id is not None:
-                command += ["-AutomationId", args.automation_id]
-            if args.focus:
-                command.append("-Focus")
-            started = time.monotonic()
-            errors = []
-            with (output / (name + "-process.log")).open("wb") as stream:
+                command += ["--automation-id", args.automation_id]
+        started = time.monotonic()
+        errors = []
+        with (output / (name + "-process.log")).open("wb") as stream:
+            try:
+                process = subprocess.Popen(command, stdout=stream, stderr=subprocess.STDOUT)
+            except OSError as error:
+                errors.append(f"launch: {error}")
+                rc = 125
+            else:
                 try:
-                    process = subprocess.Popen(command, stdout=stream, stderr=subprocess.STDOUT)
-                except OSError as error:
-                    errors.append(f"launch: {error}")
-                    rc = 125
-                else:
-                    try:
-                        rc = process.wait(timeout=args.timeout + 30)  # bounded compile/start overhead
-                    except subprocess.TimeoutExpired:
-                        errors.extend(stop_probe(process, stream))
-                        rc = 124
-            text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
-            status = "PASS" if rc == 0 and text.rstrip().endswith("PASS") else "TIMEOUT" if rc == 124 else "FAIL"
-            row = {"mode": mode, "apartment": apartment, "status": status, "exit_code": rc,
-                   "seconds": round(time.monotonic() - started, 3), "log": log.name,
-                   "last_marker": text.splitlines()[-1] if text else None, "argv": command,
-                   "errors": errors}
-            rows.append(row)
-            print(name, status, row["last_marker"], flush=True)
-            (output / "report.json").write_text(json.dumps({"schema": 1,
-                "time_utc": datetime.now(timezone.utc).isoformat(), "pid": args.pid,
-                "title": args.title, "focus_requested": args.focus,
-                "selection_note": "select changes target selection; prepare/reset the target before each independent reproduction",
-                "native_desktop_qualified": False, "results": rows}, indent=2) + "\n", encoding="utf-8")
+                    rc = process.wait(timeout=args.timeout + 30)  # bounded compile/start overhead
+                except subprocess.TimeoutExpired:
+                    errors.extend(stop_probe(process, stream))
+                    rc = 124
+        text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
+        status = "PASS" if rc == 0 and text.rstrip().endswith("PASS") else "TIMEOUT" if rc == 124 else "FAIL"
+        row = {"client": client, "mode": mode, "apartment": apartment, "status": status, "exit_code": rc,
+               "seconds": round(time.monotonic() - started, 3), "log": log.name,
+               "last_marker": text.splitlines()[-1] if text else None, "argv": command,
+               "errors": errors}
+        rows.append(row)
+        print(name, status, row["last_marker"], flush=True)
+        (output / "report.json").write_text(json.dumps({"schema": 1,
+            "time_utc": datetime.now(timezone.utc).isoformat(), "pid": args.pid,
+            "title": args.title, "focus_requested": args.focus,
+            "selection_note": "select changes target selection; prepare/reset the target before each independent reproduction",
+            "native_desktop_qualified": False, "results": rows}, indent=2) + "\n", encoding="utf-8")
     return 0 if rows and all(row["status"] == "PASS" for row in rows) else 1
 
 

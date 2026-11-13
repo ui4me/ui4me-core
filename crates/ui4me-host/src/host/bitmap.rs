@@ -19,6 +19,10 @@ pub(super) struct Bitmap {
     /// a killed host cannot leave tmpfs memory behind; dropping the bitmap
     /// before that point removes it as well.
     path: Option<TempPath>,
+    /// A path whose early unlink failed (Windows: a producer handle that does not
+    /// share deletion). Removed when the bitmap is dropped, after the producer
+    /// closed its handle, instead of leaking the file.
+    retained: Option<TempPath>,
     width: u32,
     height: u32,
     stride: u32,
@@ -123,6 +127,7 @@ impl Bitmap {
         Ok(Self {
             file,
             path: Some(path),
+            retained: None,
             width: request.width,
             height: request.height,
             stride,
@@ -165,9 +170,15 @@ impl Bitmap {
         self.last_sequence = sequence;
         if let Some(path) = self.path.take() {
             // The producer has mapped the file before presenting; both sides
-            // keep using their open descriptors and mappings.
-            if let Err(error) = path.close() {
-                tracing::debug!(%error, "cannot unlink bitmap transport file");
+            // keep using their open descriptors and mappings. On Windows this
+            // needs every handle to share deletion (the Python client opens it
+            // delete-on-close); otherwise keep the path for removal at drop.
+            match std::fs::remove_file(&path) {
+                Ok(()) => drop(path),
+                Err(error) => {
+                    tracing::debug!(%error, "cannot unlink bitmap transport file yet");
+                    self.retained = Some(path);
+                }
             }
         }
         Ok(Some(bytes.into()))
@@ -351,5 +362,81 @@ mod tests {
         let path = unpresented.path.as_ref().unwrap().to_path_buf();
         drop(unpresented);
         assert!(!path.exists());
+    }
+
+    /// Windows: a producer handle without delete sharing (the CRT default)
+    /// blocks the early unlink. The file must then go when the bitmap is
+    /// closed, after the producer released it; it previously leaked.
+    #[cfg(windows)]
+    #[test]
+    fn windows_transport_without_delete_sharing_is_removed_at_close() {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_SHARE_READ: u32 = 1;
+        const FILE_SHARE_WRITE: u32 = 2;
+        let req = Create {
+            window_id: "w".into(),
+            document_id: "d".into(),
+            bitmap_id: "x".into(),
+            width: 2,
+            height: 2,
+            slots: 2,
+            pixel_format: "RGBA8".into(),
+        };
+        let mut b = Bitmap::new(&req).unwrap();
+        let path = b.path.as_ref().unwrap().to_path_buf();
+        let producer = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .open(&path)
+            .unwrap();
+        assert!(b.read(0, 1).unwrap().is_some());
+        assert!(path.exists(), "the producer's handle forbids deletion");
+        drop(producer);
+        drop(b);
+        assert!(!path.exists(), "removed once both handles are closed");
+    }
+
+    /// Windows: a delete-on-close producer handle with delete sharing (how the
+    /// Python client opens it) lets the transport disappear even if neither
+    /// side cleans up explicitly.
+    #[cfg(windows)]
+    #[test]
+    fn windows_delete_on_close_transport_leaves_nothing_behind() {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_SHARE_ALL: u32 = 1 | 2 | 4;
+        const FILE_FLAG_DELETE_ON_CLOSE: u32 = 0x0400_0000;
+        const DELETE: u32 = 0x0001_0000;
+        let req = Create {
+            window_id: "w".into(),
+            document_id: "d".into(),
+            bitmap_id: "x".into(),
+            width: 2,
+            height: 2,
+            slots: 2,
+            pixel_format: "RGBA8".into(),
+        };
+        let b = Bitmap::new(&req).unwrap();
+        let path = b.path.as_ref().unwrap().to_path_buf();
+        let producer = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .access_mode(0xC000_0000 | DELETE)
+            .share_mode(FILE_SHARE_ALL)
+            .custom_flags(FILE_FLAG_DELETE_ON_CLOSE)
+            .open(&path)
+            .unwrap();
+        // The host is "killed": its handle closes and its TempPath is never run.
+        let Bitmap {
+            file, path: tmp, ..
+        } = b;
+        drop(file);
+        let _ = tmp.map(|t| t.keep());
+        assert!(path.exists() || std::fs::metadata(&path).is_err());
+        drop(producer);
+        assert!(
+            !path.exists(),
+            "delete-on-close removes the orphaned transport"
+        );
     }
 }

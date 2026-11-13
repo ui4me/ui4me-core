@@ -1,0 +1,25 @@
+start 100%: screen [1600, 1000] window dpi 96 outer [52, 52, 1096, 799] client 1080x760 pid 3708
+100%: clicks [('notes', 'notes'), ('name', 'name')]
+## N14 RDP disconnect / reconnect
+after disconnect: session [['ui4me_test', '2', 'Disc', '.', '11/13/2026', '2:13', 'PM']]
+host alive while disconnected True | agent still answering in session 2
+after reconnect: session [['ui4me_test', 'rdp-tcp#0', '2', 'Active', '.', '11/13/2026', '2:13', 'PM']]
+reconnected 100%: screen [1600, 1000] window dpi 96 outer [40, 0, 1100, 867] client 1084x828 pid 3708
+same host pid True | Name text preserved 'state before reconnect'
+typing after reconnect 'state before reconnect + typed after reconnect'
+## N08 scale 150% (RDP desktop scale factor)
+150%: screen [1600, 1000] window dpi 144 outer [-6, 5, 1612, 941] client 1590x885 pid 3708
+150%: clicks [('notes', 'notes'), ('name', 'name')]
+text preserved 'state before reconnect + typed after reconnect'
+Pinyin at 150%: '你好' 0x804
+second window created at 150%: [('UI4ME — Second document', 144, 810, 630)]
+## N08 back to 100% and RDP resize 1280x800
+back to 100%: screen [1600, 1000] window dpi 96 outer [-7, 6, 1076, 582] client 1060x543 pid 3708
+100% again: clicks [('notes', 'notes'), ('name', 'name')]
+RDP resized to 1280x800: screen [1280, 800] window dpi 96 outer [-7, 6, 1076, 582] client 1060x543 pid 3708
+1280x800: clicks [('notes', 'notes'), ('name', 'name')]
+restored 1600x1000: screen [1600, 1000] window dpi 96 outer [-7, 8, 1076, 582] client 1060x543 pid 3708
+same host pid through all reconnects True
+second launch forwarded: (see N02)
+host exited after close True
+DONE

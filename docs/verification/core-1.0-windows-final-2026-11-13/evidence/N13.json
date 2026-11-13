@@ -1,0 +1,31 @@
+{
+  "check": "N13",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T16:29:56.331618+00:00",
+  "build_identity": {
+    "host": "C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe",
+    "host_sha256": "bc704f662345611188b650cc9db1fa696c4934943ccc153100a74c0ba2836f6d",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "a089b4f5338f49417f56e95a7bef7f5cb6c8f3db7c0afba938628fac7d271d5d",
+    "base_commit": "33e1317",
+    "os": "Windows-2022Server-10.0.20348-SP0",
+    "release": "2022Server",
+    "version": "10.0.20348",
+    "session": 2,
+    "user": "ui4me_test",
+    "desktop": "Windows interactive RDP session (xfreerdp3 client), 1600x1000, 96 DPI unless stated"
+  },
+  "actions": [
+    "Real OLE drags: Unicode-named file from Explorer and selected text from WordPad onto the probe; synthetic sources in C06"
+  ],
+  "expected": "File/text drag-and-drop in the native session",
+  "observed": "dropped_files ['F:\\\\ui4me\\\\lab\\\\dnd\\\\žluťoučký 日本.txt'] and dropped_text 'drag this text: Příliš žluťoučký'",
+  "limitations": [],
+  "evidence_files_sha256": {
+    "probe_suite.txt": "db0b4b550a0520257b94ba338523fd035a0910da841523d595524d48ee6aa6a2",
+    "c_suite2.txt": "f7622b4fbc7539545ae7478309551486043cd5a6a2689ca5d429f0db9d96b411",
+    "F:\\ui4me\\lab\\out\\final\\N13-after-file-drop.png": "8770b0bf5d74f89e01cb340a350db5bcb9b509e8fa730287b7ccccc2a1e0b11b",
+    "F:\\ui4me\\lab\\out\\final\\N13-after-text-drop.png": "c356d8d45cd36702e3b1e9884190e728b930fb9fb506cb186ef886045ef1f98f",
+    "F:\\ui4me\\lab\\out\\final\\N13-probe-run.log": "99c7ae29287beeaa5cb1dac377c2eaae3d0f0fb69f5f8fda50c91f88641c3281"
+  }
+}

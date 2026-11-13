@@ -1,0 +1,29 @@
+{
+  "check": "R07",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T16:30:03.217839+00:00",
+  "build_identity": {
+    "host": "C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe",
+    "host_sha256": "bc704f662345611188b650cc9db1fa696c4934943ccc153100a74c0ba2836f6d",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "a089b4f5338f49417f56e95a7bef7f5cb6c8f3db7c0afba938628fac7d271d5d",
+    "base_commit": "33e1317",
+    "os": "Windows-2022Server-10.0.20348-SP0",
+    "release": "2022Server",
+    "version": "10.0.20348",
+    "session": 2,
+    "user": "ui4me_test",
+    "desktop": "Windows interactive RDP session (xfreerdp3 client), 1600x1000, 96 DPI unless stated"
+  },
+  "actions": [
+    "Installed app copy with landscape.png removed and fonts replaced by random bytes; launch, typing, 10 second-window cycles, Quit; ui4me-host render of the same document"
+  ],
+  "expected": "Missing/malformed resources handled",
+  "observed": "App usable; 10 cycles leave one window; Quit exits in 0.41 s; render diagnostics DECODE_FAILED and FILE_NOT_FOUND",
+  "limitations": [],
+  "evidence_files_sha256": {
+    "group2.txt": "44c3e53c8c0eeb604e63a483212233ce7974e35bc0c96da37833be12555cee0d",
+    "F:\\ui4me\\lab\\out\\final\\R07-broken-native.png": "4bb5c36a54d1d2de96a715fb7bca0a58ad1ac8866cf490452ba01fa693f261b8",
+    "F:\\ui4me\\lab\\out\\final\\R07-native.log": "b2ebb1eb0464b4f7dbaacca707fbb66b1562c435ee675dbbf1d38b11f9e11dfd"
+  }
+}

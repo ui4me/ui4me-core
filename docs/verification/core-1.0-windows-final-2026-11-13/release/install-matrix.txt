@@ -1,0 +1,24 @@
+=== Python 3.10.22
+install ok
+No broken requirements found.
+import 1.0.0 /tmp/claude-1000/-home-toor-projects-ui4me-core/b23d2329-f1d7-4e28-b71e-8f99cfee78ed/scratchpad/lwheel-3.10/lib/python3.10/site-packages/ui4me_core/__init__.py
+host /tmp/claude-1000/-home-toor-projects-ui4me-core/b23d2329-f1d7-4e28-b71e-8f99cfee78ed/scratchpad/lwheel-3.10/lib/python3.10/site-packages/ui4me_core/_bin/ui4me-host
+ui4me-host 1.0.0
+PASS installed Python wheel and native host: /tmp/claude-1000/-home-toor-projects-ui4me-core/b23d2329-f1d7-4e28-b71e-8f99cfee78ed/scratchpad/lwheel-3.10/lib/python3.10/site-packages/ui4me_core/_bin/ui4me-host ui4me-host 1.0.0
+doctor exit 0
+=== Python 3.12.16
+install ok
+No broken requirements found.
+import 1.0.0 /tmp/claude-1000/-home-toor-projects-ui4me-core/b23d2329-f1d7-4e28-b71e-8f99cfee78ed/scratchpad/lwheel-3.12/lib/python3.12/site-packages/ui4me_core/__init__.py
+host /tmp/claude-1000/-home-toor-projects-ui4me-core/b23d2329-f1d7-4e28-b71e-8f99cfee78ed/scratchpad/lwheel-3.12/lib/python3.12/site-packages/ui4me_core/_bin/ui4me-host
+ui4me-host 1.0.0
+PASS installed Python wheel and native host: /tmp/claude-1000/-home-toor-projects-ui4me-core/b23d2329-f1d7-4e28-b71e-8f99cfee78ed/scratchpad/lwheel-3.12/lib/python3.12/site-packages/ui4me_core/_bin/ui4me-host ui4me-host 1.0.0
+doctor exit 0
+=== Python 3.13.5
+install ok
+No broken requirements found.
+import 1.0.0 /tmp/claude-1000/-home-toor-projects-ui4me-core/b23d2329-f1d7-4e28-b71e-8f99cfee78ed/scratchpad/lwheel-3.13/lib/python3.13/site-packages/ui4me_core/__init__.py
+host /tmp/claude-1000/-home-toor-projects-ui4me-core/b23d2329-f1d7-4e28-b71e-8f99cfee78ed/scratchpad/lwheel-3.13/lib/python3.13/site-packages/ui4me_core/_bin/ui4me-host
+ui4me-host 1.0.0
+PASS installed Python wheel and native host: /tmp/claude-1000/-home-toor-projects-ui4me-core/b23d2329-f1d7-4e28-b71e-8f99cfee78ed/scratchpad/lwheel-3.13/lib/python3.13/site-packages/ui4me_core/_bin/ui4me-host ui4me-host 1.0.0
+doctor exit 0

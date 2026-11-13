@@ -13,9 +13,10 @@ requires-python = ">=3.10"
 license = "MIT AND OFL-1.1"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "crates/ui4me-host/assets/FONT-LICENSE.txt", "patches/licenses/MPL-2.0.txt"]
 authors = [{name="UI4ME Contributors"}]
-keywords = ["desktop", "html", "css", "rust", "wayland", "gui", "python"]
+keywords = ["desktop", "html", "css", "rust", "wayland", "windows", "gui", "python"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
+    "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",

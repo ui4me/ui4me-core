@@ -3,7 +3,7 @@
 
 A wheel distributes the compiled host, which statically links its Rust
 dependencies. Their licenses require the notices to travel with the binary.
-This reads `cargo metadata` (locked, Linux x86_64 target), walks the host's
+This reads `cargo metadata` (locked, for the x86_64 Linux or Windows target), walks the host's
 normal and build dependency closure, and concatenates each package's license
 files from its unpacked source (registry checkout or vendored `patches/` /
 `third_party/` directory). It fails if a package has neither an SPDX license
@@ -20,7 +20,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 LICENSE_PREFIXES = ("license", "licence", "copying", "notice", "copyright", "ofl", "unlicense")
-TARGET = "x86_64-unknown-linux-gnu"
+TARGETS = {"linux": "x86_64-unknown-linux-gnu", "windows": "x86_64-pc-windows-msvc"}
 
 
 def license_files(package: dict) -> list[Path]:
@@ -109,16 +109,19 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--package", default="ui4me-host")
+    parser.add_argument("--target", choices=sorted(TARGETS),
+                        default="windows" if sys.platform == "win32" else "linux")
     args = parser.parse_args()
+    target = TARGETS[args.target]
     metadata = json.loads(subprocess.check_output(
-        ["cargo", "metadata", "--locked", "--format-version", "1", "--filter-platform", TARGET],
+        ["cargo", "metadata", "--locked", "--format-version", "1", "--filter-platform", target],
         cwd=ROOT))
     packages = closure(metadata, args.package)
     missing = []
     sections = [
         "UI4ME Core host — third-party licenses\n",
         f"The `{args.package}` executable in this distribution statically links the "
-        f"{len(packages)} Rust packages listed below (resolved from Cargo.lock for {TARGET}).\n"
+        f"{len(packages)} Rust packages listed below (resolved from Cargo.lock for {target}).\n"
         "Each package's license texts follow its entry. MPL-2.0 packages (Servo/Stylo) are\n"
         "distributed with their complete source, including the project's patches, in the\n"
         "ui4me-core source distribution (patches/stylo).\n",

@@ -1,0 +1,5 @@
+before second launch [(4564, 'ui4me-host.exe'), (6096, 'python.exe')]
+start menu entry [183.0, 417.0, 'UI4ME Host Reference']
+after Start Menu second launch [(4564, 'ui4me-host.exe'), (6096, 'python.exe')] | windows ['UI4ME host — Python reference', 'UI4ME — Unicode ✓']
+first instance received: ['{"timestamp":"2026-11-13T15:35:50.223312Z","level":"INFO","fields":{"message":"backend output","source":"backend","stream":"stdout","text":"Second launch: {\\"activation_token\\": null, \\"args\\": [\\"C:\\\\\\\\Users\\\\\\\\ui4me_te']
+after quit []

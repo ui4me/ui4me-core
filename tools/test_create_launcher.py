@@ -22,6 +22,15 @@ class ShortcutNameTests(unittest.TestCase):
         self.assertEqual(name("Příliš ✓. "), "Příliš ✓.lnk")
 
 
+class ManifestEncodingTests(unittest.TestCase):
+    def test_manifest_with_utf8_byte_order_mark_is_accepted(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "app.toml"
+            path.write_bytes(b"\xef\xbb\xbf" + '[app]\nid = "org.example.Bom"\nname = "Příliš"\n'.encode("utf-8"))
+            self.assertEqual(create_launcher.read_manifest(path)["app"],
+                             {"id": "org.example.Bom", "name": "Příliš"})
+
+
 @unittest.skipUnless(sys.platform == "linux", "Desktop entries are the Linux launcher")
 class LinuxLauncherTests(unittest.TestCase):
     def test_install_refuses_modified_entry_and_uninstall_removes_only_its_own(self):

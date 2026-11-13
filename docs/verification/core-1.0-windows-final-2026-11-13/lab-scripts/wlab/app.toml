@@ -1,0 +1,16 @@
+[app]
+id = "org.ui4me.CoreLab"
+name = "UI4ME Core Lab"
+version = "1.0.0"
+icon = "{app_dir}/ui4me.png"
+
+[backend]
+program = "C:\\Program Files\\Python313\\python.exe"
+args = ["{app_dir}/clab.py"]
+cwd = "{app_dir}"
+
+[host]
+startup_timeout_ms = 30000
+shutdown_timeout_ms = 5000
+max_windows = 16
+instance = "single"

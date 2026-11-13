@@ -1,0 +1,13 @@
+layout 0x409
+layout after Win+Space 0x804
+during preedit ''
+commit '你好'
+Escape '你好'
+compose over selected char '你问'
+Tab during composition: focus Editable input text '你问'
+window responsive after focus change; commit again '你问中号'
+mouse focus change during composition: focus Copy text '你问中号'
+back in editor, compose again '你问中号好'
+layout back 0x409
+ASCII after switch back 'ASCII ok'
+exit 0

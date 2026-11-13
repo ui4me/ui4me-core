@@ -1,0 +1,30 @@
+{
+  "check": "N11",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T16:29:54.942729+00:00",
+  "build_identity": {
+    "host": "C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe",
+    "host_sha256": "bc704f662345611188b650cc9db1fa696c4934943ccc153100a74c0ba2836f6d",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "a089b4f5338f49417f56e95a7bef7f5cb6c8f3db7c0afba938628fac7d271d5d",
+    "base_commit": "33e1317",
+    "os": "Windows-2022Server-10.0.20348-SP0",
+    "release": "2022Server",
+    "version": "10.0.20348",
+    "session": 2,
+    "user": "ui4me_test",
+    "desktop": "Windows interactive RDP session (xfreerdp3 client), 1600x1000, 96 DPI unless stated"
+  },
+  "actions": [
+    "Probe with --external-target: F8 (desktop.open_external) opens Notepad, then Ctrl+Q; repeated with taskkill /F of the host"
+  ],
+  "expected": "An externally opened application survives host exit",
+  "observed": "Notepad 'external-open' survived both orderly quit and forced kill; no probe backend left",
+  "limitations": [],
+  "evidence_files_sha256": {
+    "group2.txt": "44c3e53c8c0eeb604e63a483212233ce7974e35bc0c96da37833be12555cee0d",
+    "F:\\ui4me\\lab\\out\\final\\N11-external-open.png": "8bd5f3fc9196895b5d7e1e216cb56c1951cf12f23db1b95957af33a2e589817c",
+    "F:\\ui4me\\lab\\out\\final\\N11-run1.log": "b5c2f618455fccbefa0b94e30e6f073180feb3abdc5a8bf7ad5fd4fe79eceb1d",
+    "F:\\ui4me\\lab\\out\\final\\N11-run2.log": "6409e4e6d1f1b891db802b480abbe7b9d88e6d96d50c06404e014ef18db80068"
+  }
+}

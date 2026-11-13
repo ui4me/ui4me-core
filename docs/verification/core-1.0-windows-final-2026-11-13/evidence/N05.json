@@ -1,0 +1,31 @@
+{
+  "check": "N05",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T16:29:51.030483+00:00",
+  "build_identity": {
+    "host": "C:\\Users\\ui4me_test\\.cargo\\bin\\ui4me-host.exe",
+    "host_sha256": "bc704f662345611188b650cc9db1fa696c4934943ccc153100a74c0ba2836f6d",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "a089b4f5338f49417f56e95a7bef7f5cb6c8f3db7c0afba938628fac7d271d5d",
+    "base_commit": "33e1317",
+    "os": "Windows-2022Server-10.0.20348-SP0",
+    "release": "2022Server",
+    "version": "10.0.20348",
+    "session": 2,
+    "user": "ui4me_test",
+    "desktop": "Windows interactive RDP session (xfreerdp3 client), 1600x1000, 96 DPI unless stated"
+  },
+  "actions": [
+    "F3 + Escape; F3 + Unicode path; F4 + Unicode name; F5 + Escape; F3 then F7 from second window; F4 then Ctrl+Q from second window; F3 then WM_CLOSE of parent"
+  ],
+  "expected": "IFileDialog owned/modal, cancellation and races",
+  "observed": "Dialogs owned by the invoking window, owner disabled while open and re-enabled after; open/save return exact Unicode paths; Escape -> cancelled; F7 -> 'client cancellation requested'; quit with save dialog open exits in 0.95 s ('Application is shutting down'); parent close -> 'Dialog parent is closing' and dialog gone",
+  "limitations": [],
+  "evidence_files_sha256": {
+    "probe_suite.txt": "db0b4b550a0520257b94ba338523fd035a0910da841523d595524d48ee6aa6a2",
+    "F:\\ui4me\\lab\\out\\final\\N05-open-dialog.png": "09fca7505998e683b81473ed9926f1c31ce0f3061b304798827e15365497150e",
+    "F:\\ui4me\\lab\\out\\final\\N05-folder-dialog.png": "81ed02f05782d9c2d288378562fc500207fb73017e81a25d8d909de502e202f7",
+    "F:\\ui4me\\lab\\out\\final\\N05-probe-run.log": "0d9f334a1de819c68866a356cc5d347ad96bb129efdf25dd90047b49f40e2c17",
+    "F:\\ui4me\\lab\\out\\final\\N05b-probe-run.log": "c048d89588c081d04bbb63852e26cb2539a2f3e42bc7a4850eca97e86adcd2fd"
+  }
+}

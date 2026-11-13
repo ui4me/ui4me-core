@@ -1,0 +1,161 @@
+2026-11-13 16:37:23 [WARN] unable to find a config path, falling back to default config
+error[unmaintained]: `ttf-parser` is unmaintained
+    ┌─ /home/toor/projects/ui4me-core/Cargo.lock:384:1
+    │
+384 │ ttf-parser 0.25.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ unmaintained advisory detected
+    │
+    ├ ID: RUSTSEC-2026-0192
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0192
+    ├ The author of `ttf-parser` has stated that the crate is unmaintained and will not receive further fixes (see the referenced issue).
+      
+      ## Alternative(s)
+      
+      - [`skrifa`](https://crates.io/crates/skrifa), an actively maintained TrueType and OpenType font parsing crate, part of the Google Fonts "oxidize" (`fontations`) project.
+    ├ Announcement: https://github.com/harfbuzz/ttf-parser/issues/217
+    ├ Solution: No safe upgrade is available!
+    ├ ttf-parser v0.25.1
+      └── fontdue v0.9.5
+          └── ui4me-host v1.0.0
+
+error[unmaintained]: `zbus_names` is unmaintained
+    ┌─ /home/toor/projects/ui4me-core/Cargo.lock:472:1
+    │
+472 │ zbus_names 4.3.5 registry+https://github.com/rust-lang/crates.io-index
+    │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ unmaintained advisory detected
+    │
+    ├ ID: RUSTSEC-2026-0371
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0371
+    ├ The `zbus_names` crate is no longer maintained as a standalone crate.
+      
+      It has been merged into [`zbus`](https://crates.io/crates/zbus) starting with version `6.0.0`, as its `names` module.
+      
+      Users should migrate to [`zbus`](https://crates.io/crates/zbus), with its default features disabled if they only need the D-Bus name types.
+    ├ Announcement: https://github.com/z-galaxy/zbus/issues/2043
+    ├ Solution: No safe upgrade is available!
+    ├ zbus_names v4.3.5
+      ├── atspi-common v0.13.0
+      │   ├── accesskit_atspi_common v0.21.1
+      │   │   ├── accesskit_unix v0.24.1
+      │   │   │   └── ui4me-host v1.0.0
+      │   │   └── ui4me-host v1.0.0 (*)
+      │   ├── atspi v0.29.0
+      │   │   └── accesskit_unix v0.24.1 (*)
+      │   └── atspi-proxies v0.13.0
+      │       └── atspi v0.29.0 (*)
+      ├── zbus v5.19.0
+      │   ├── accesskit_unix v0.24.1 (*)
+      │   ├── ashpd v0.13.13
+      │   │   └── ui4me-host v1.0.0 (*)
+      │   ├── atspi-common v0.13.0 (*)
+      │   ├── atspi-proxies v0.13.0 (*)
+      │   └── ui4me-host v1.0.0 (*)
+      ├── zbus_macros v5.19.0
+      │   └── zbus v5.19.0 (*)
+      └── zbus_xml v5.2.1
+          ├── zbus-lockstep v0.5.2
+          │   ├── atspi-common v0.13.0 (*)
+          │   └── zbus-lockstep-macros v0.5.2
+          │       └── atspi-common v0.13.0 (*)
+          └── zbus-lockstep-macros v0.5.2 (*)
+
+error[unmaintained]: `zvariant` is unmaintained
+    ┌─ /home/toor/projects/ui4me-core/Cargo.lock:484:1
+    │
+484 │ zvariant 5.15.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ unmaintained advisory detected
+    │
+    ├ ID: RUSTSEC-2026-0370
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0370
+    ├ The `zvariant` crate is no longer maintained as a standalone crate.
+      
+      It has been merged into [`zbus`](https://crates.io/crates/zbus) starting with version `6.0.0`, as its `wire` module.
+      
+      Users should migrate to [`zbus`](https://crates.io/crates/zbus), with its default features disabled if they only need the D-Bus wire format. Users of the GVariant format should migrate to [`zgvariant`](https://crates.io/crates/zgvariant).
+    ├ Announcement: https://github.com/z-galaxy/zbus/issues/2043
+    ├ Solution: No safe upgrade is available!
+    ├ zvariant v5.15.1
+      ├── accesskit_atspi_common v0.21.1
+      │   ├── accesskit_unix v0.24.1
+      │   │   └── ui4me-host v1.0.0
+      │   └── ui4me-host v1.0.0 (*)
+      ├── atspi-common v0.13.0
+      │   ├── accesskit_atspi_common v0.21.1 (*)
+      │   ├── atspi v0.29.0
+      │   │   └── accesskit_unix v0.24.1 (*)
+      │   └── atspi-proxies v0.13.0
+      │       └── atspi v0.29.0 (*)
+      ├── zbus v5.19.0
+      │   ├── accesskit_unix v0.24.1 (*)
+      │   ├── ashpd v0.13.13
+      │   │   └── ui4me-host v1.0.0 (*)
+      │   ├── atspi-common v0.13.0 (*)
+      │   ├── atspi-proxies v0.13.0 (*)
+      │   └── ui4me-host v1.0.0 (*)
+      ├── zbus-lockstep v0.5.2
+      │   ├── atspi-common v0.13.0 (*)
+      │   └── zbus-lockstep-macros v0.5.2
+      │       └── atspi-common v0.13.0 (*)
+      ├── zbus-lockstep-macros v0.5.2 (*)
+      ├── zbus_macros v5.19.0
+      │   └── zbus v5.19.0 (*)
+      ├── zbus_names v4.3.5
+      │   ├── atspi-common v0.13.0 (*)
+      │   ├── zbus v5.19.0 (*)
+      │   ├── zbus_macros v5.19.0 (*)
+      │   └── zbus_xml v5.2.1
+      │       ├── zbus-lockstep v0.5.2 (*)
+      │       └── zbus-lockstep-macros v0.5.2 (*)
+      └── zbus_xml v5.2.1 (*)
+
+error[unmaintained]: `zvariant_derive` is unmaintained
+    ┌─ /home/toor/projects/ui4me-core/Cargo.lock:485:1
+    │
+485 │ zvariant_derive 5.15.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ unmaintained advisory detected
+    │
+    ├ ID: RUSTSEC-2026-0372
+    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2026-0372
+    ├ The `zvariant_derive` crate is no longer maintained as a standalone crate.
+      
+      Its derive macros are provided by [`zbus`](https://crates.io/crates/zbus) starting with version `6.0.0`.
+      
+      Users should migrate to [`zbus`](https://crates.io/crates/zbus), with its default features disabled if they only need the D-Bus wire format.
+    ├ Announcement: https://github.com/z-galaxy/zbus/issues/2043
+    ├ Solution: No safe upgrade is available!
+    ├ zvariant_derive v5.15.1
+      └── zvariant v5.15.1
+          ├── accesskit_atspi_common v0.21.1
+          │   ├── accesskit_unix v0.24.1
+          │   │   └── ui4me-host v1.0.0
+          │   └── ui4me-host v1.0.0 (*)
+          ├── atspi-common v0.13.0
+          │   ├── accesskit_atspi_common v0.21.1 (*)
+          │   ├── atspi v0.29.0
+          │   │   └── accesskit_unix v0.24.1 (*)
+          │   └── atspi-proxies v0.13.0
+          │       └── atspi v0.29.0 (*)
+          ├── zbus v5.19.0
+          │   ├── accesskit_unix v0.24.1 (*)
+          │   ├── ashpd v0.13.13
+          │   │   └── ui4me-host v1.0.0 (*)
+          │   ├── atspi-common v0.13.0 (*)
+          │   ├── atspi-proxies v0.13.0 (*)
+          │   └── ui4me-host v1.0.0 (*)
+          ├── zbus-lockstep v0.5.2
+          │   ├── atspi-common v0.13.0 (*)
+          │   └── zbus-lockstep-macros v0.5.2
+          │       └── atspi-common v0.13.0 (*)
+          ├── zbus-lockstep-macros v0.5.2 (*)
+          ├── zbus_macros v5.19.0
+          │   └── zbus v5.19.0 (*)
+          ├── zbus_names v4.3.5
+          │   ├── atspi-common v0.13.0 (*)
+          │   ├── zbus v5.19.0 (*)
+          │   ├── zbus_macros v5.19.0 (*)
+          │   └── zbus_xml v5.2.1
+          │       ├── zbus-lockstep v0.5.2 (*)
+          │       └── zbus-lockstep-macros v0.5.2 (*)
+          └── zbus_xml v5.2.1 (*)
+
+advisories FAILED
