@@ -552,3 +552,89 @@ fn live_regions_map_implicit_and_explicit_politeness() {
     assert_eq!(ak("a"), Some(accesskit::Live::Assertive));
     assert_eq!(ak("n"), None);
 }
+
+/// Core 1.0 C08 (found on KDE with Orca): a dropdown combobox must expose its options natively,
+/// with the selected one as selected child and active descendant, while its label and value stay
+/// distinct. A leaf combobox gave AT-SPI no selected child, so Orca spoke the label twice and
+/// `Selection.select_child` had nothing to act on. An assistive Click on an option (the request
+/// the AT-SPI/UIA selection interfaces send) picks it with `input` and `change`.
+#[test]
+fn dropdown_exposes_selected_option_and_assistive_option_pick() {
+    let mut d = crate::Document::parse(
+        "<body><label for=p>Priority</label><select id=p><option>Normal</option>\
+         <option selected>High</option><option disabled>Gone</option></select>\
+         <select id=m multiple size=1 aria-label=Many><option>A</option><option>B</option></select></body>",
+    )
+    .unwrap();
+    d.render(400, 300, 1.0).unwrap();
+    let t = d.accessibility_tree().unwrap();
+    t.validate().unwrap();
+    let combo = by_html_id(&t, "p");
+    assert_eq!(combo.role, Role::ComboBox);
+    assert_eq!(combo.name, "Priority");
+    assert_eq!(combo.value.as_deref(), Some("High"));
+    let options: Vec<_> = combo.children.iter().map(|c| t.get(*c).unwrap()).collect();
+    assert_eq!(
+        options
+            .iter()
+            .map(|o| (o.role, o.name.clone(), o.states.selected))
+            .collect::<Vec<_>>(),
+        vec![
+            (Role::ListBoxOption, "Normal".to_string(), Some(false)),
+            (Role::ListBoxOption, "High".to_string(), Some(true)),
+            (Role::ListBoxOption, "Gone".to_string(), Some(false)),
+        ]
+    );
+    assert_eq!(combo.relations.active_descendant, Some(options[1].id));
+    assert!(
+        options.iter().all(|o| o.bounds.is_none()),
+        "boxless options must not shadow hit tests"
+    );
+    d.drain_events();
+
+    d.accessibility_request(&A11yRequest {
+        target: node_of_key(options[0].id),
+        kind: A11yRequestKind::Click,
+    })
+    .unwrap();
+    assert_eq!(d.get_value("p").unwrap(), "Normal");
+    let events = d.drain_events();
+    let kinds: Vec<_> = events.iter().filter_map(|e| e["type"].as_str()).collect();
+    assert!(
+        kinds.contains(&"input") && kinds.contains(&"change"),
+        "{kinds:?}"
+    );
+    let t = d.accessibility_tree().unwrap();
+    let combo = by_html_id(&t, "p");
+    assert_eq!(combo.name, "Priority", "label stays distinct from value");
+    assert_eq!(combo.value.as_deref(), Some("Normal"));
+    assert_eq!(combo.relations.active_descendant, Some(combo.children[0]));
+
+    // A disabled option is refused without changing the selection.
+    let gone = node_of_key(combo.children[2]);
+    assert!(
+        d.accessibility_request(&A11yRequest {
+            target: gone,
+            kind: A11yRequestKind::Click
+        })
+        .is_err()
+    );
+    assert_eq!(d.get_value("p").unwrap(), "Normal");
+
+    // A `multiple` dropdown toggles each picked option.
+    let many = by_html_id(&t, "m").children.clone();
+    for c in &many {
+        d.accessibility_request(&A11yRequest {
+            target: node_of_key(*c),
+            kind: A11yRequestKind::Click,
+        })
+        .unwrap();
+    }
+    let t = d.accessibility_tree().unwrap();
+    let selected: Vec<_> = by_html_id(&t, "m")
+        .children
+        .iter()
+        .map(|c| t.get(*c).unwrap().states.selected)
+        .collect();
+    assert_eq!(selected, vec![Some(true), Some(true)]);
+}

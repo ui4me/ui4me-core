@@ -642,10 +642,13 @@ impl<'a> Builder<'a> {
     fn make(&mut self, n: NodeId, e: &ElementData, role: Role, focusable: bool) -> Vec<u64> {
         let id = node_key(n);
         let (name, from_content) = self.name_of(n, e, role);
-        let mut children = if is_leaf(role) {
-            Vec::new()
-        } else if e.local_name() == "select" {
+        // A select exposes its options in both presentations: a dropdown combobox needs its
+        // selected option as a native child for the AT-SPI/UIA selection interface, the active
+        // descendant and screen-reader value speech (Core 1.0 C08); its value stays the label.
+        let mut children = if e.local_name() == "select" {
             self.options(n)
+        } else if is_leaf(role) {
+            Vec::new()
         } else {
             self.walk_children(n)
         };
@@ -1019,9 +1022,11 @@ impl<'a> Builder<'a> {
         })
     }
 
-    /// `option` children of a list box (a dropdown is a leaf whose value is the selected label).
+    /// `option` children of a list box or of a dropdown combobox (whose value is also the selected
+    /// label). Dropdown options have no box and report no bounds.
     fn options(&mut self, select: NodeId) -> Vec<u64> {
         let mut out = Vec::new();
+        let dropdown = self.d.select_is_dropdown(select);
         for o in self.d.select_options(select) {
             let Some(e) = self.el(o) else { continue };
             if e.attr("hidden").is_some() || attr_true(e, "aria-hidden") {
@@ -1034,7 +1039,12 @@ impl<'a> Builder<'a> {
                 "option".to_string(),
                 e.attr("id").map(str::to_string),
                 collapse(&self.d.option_label(o)),
-                self.info.bounds(o).or_else(|| self.info.bounds(select)),
+                // Dropdown options have no box; never let them shadow the select in hit tests.
+                if dropdown {
+                    None
+                } else {
+                    self.info.bounds(o).or_else(|| self.info.bounds(select))
+                },
             );
             node.states.selected = Some(self.d.option_selected(o));
             node.states.disabled = self.d.option_disabled(o);

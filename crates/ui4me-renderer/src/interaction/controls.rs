@@ -934,6 +934,38 @@ fn write_number(d: &mut Document, node: NodeId, v: f64) -> bool {
 
 /// An assistive technology's SetValue (`value`) or Increment/Decrement (`dir`) on a range or number
 /// input (`crate::interaction::assistive`): sanitised as the keyboard steps are, then `input` and `change`.
+/// An assistive Click on an `option` (what AT-SPI/UIA selection requests send): the same user
+/// pick as a press in the popup or listbox, then `input` and `change`. A `multiple` select
+/// toggles that option; a single select selects it alone. Disabled options/selects are refused.
+/// Returns `None` when `option` is not an option of a select (the caller falls back to a click).
+pub(crate) fn assistive_pick_option(
+    host: &mut dyn DispatchHost,
+    doc: DocumentId,
+    option: NodeId,
+    origin: DispatchOrigin,
+) -> Result<Option<bool>, Status> {
+    let Some((select, index, multiple)) = eng(host, doc, |_, d| {
+        if !html_named(d, option, "option") {
+            return None;
+        }
+        let select = d.option_select(option)?;
+        Some((select, d.option_index(option), d.select_is_multiple(select)))
+    })?
+    else {
+        return Ok(None);
+    };
+    let refused = eng(host, doc, |_, d| {
+        is_disabled(d, select) || d.option_disabled(option)
+    })?;
+    if refused {
+        return Err(crate::interaction::dispatch::status(
+            ui4me_engine_types::codes_generated::Code::InvalidState,
+        )
+        .with_message("the option or its select is disabled"));
+    }
+    commit(host, doc, select, index, multiple, origin, None).map(Some)
+}
+
 pub(crate) fn assistive_set_number(
     host: &mut dyn DispatchHost,
     doc: DocumentId,

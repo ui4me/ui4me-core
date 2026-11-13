@@ -6,7 +6,8 @@
 //! in-progress dispatch by its caller (the runtime calls it in turn step 1, on the owner thread).
 //!
 //! - [`focus`]: the focusing steps as for sequential navigation (focus-visible).
-//! - [`activate`] (Default/Click): focus the element when it is a focusable area, then a trusted
+//! - [`activate`] (Default/Click): an `option` is picked in its select (`input`, `change`);
+//!   otherwise focus the element when it is a focusable area, then a trusted
 //!   `click` (PointerEvent) at the given point with activation behaviour (checkbox toggle, submit,
 //!   label forwarding, ...), so the application's listeners run as for a real click.
 //! - [`set_text_value`]: focus the text control, then replace its whole value through the editing
@@ -81,6 +82,10 @@ pub fn activate(
         })?;
         if disabled {
             return Err(unsupported("the control is disabled"));
+        }
+        // An option of a dropdown has no box to click: pick it like the popup would.
+        if crate::interaction::controls::assistive_pick_option(h, doc, el, ORIGIN)?.is_some() {
+            return Ok(());
         }
         if focusable && rt(h, |ix| ix.focused_element(doc)) != Some(el) {
             focus_update(h, doc, Some(el), ORIGIN, FocusSource::Keyboard)?;
