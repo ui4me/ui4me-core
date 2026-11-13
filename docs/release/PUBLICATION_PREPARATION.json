@@ -2,11 +2,7 @@
   "source_baseline_commit": "4f9f4bde452880655d646a510f7795d4aa6bfc2c",
   "baseline_verification": "User-provided qualified Linux and Windows 1.0.0 evidence in docs/STATUS.md",
   "scope": "Public README and screenshots, documentation navigation and API guide, manual PyPI/GitHub workflow, coding-agent skill, cross-platform skill installer, project generator and release tests",
-  "not_started": [
-    "Manual publish workflow dispatch",
-    "Publishing to PyPI",
-    "Creating a GitHub Release"
-  ],
+  "not_started": [],
   "publishing_workflow": ".github/workflows/publish.yaml",
   "pypi_identity": {
     "owner": "ui4me",
@@ -26,5 +22,16 @@
     "ui4me_core-1.0.0.tar.gz": "ec44d0d9d02404aef243af6b70e9a62cb76a694da8d6ab2778d9d736f0690c32",
     "ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl": "6592fe5038ed0b31d55f51177e5c0f979b0181885496147c52762ab701b77029",
     "ui4me_core-1.0.0-py3-none-win_amd64.whl": "65d660cbd402a12fd15035cadbd188d4627f7656a5f4b8217a71e1859d3a143d"
+  },
+  "published": {
+    "source_commit": "d053e09478a081a48b68782f2204c4f649ae0e3b",
+    "workflow_run": "https://github.com/ui4me/ui4me-core/actions/runs/43484619109",
+    "pypi": "https://pypi.org/project/ui4me-core/1.0.0/",
+    "github_release": "https://github.com/ui4me/ui4me-core/releases/tag/v1.0.0",
+    "sha256": {
+      "ui4me_core-1.0.0.tar.gz": "6ea10a15da067e9bd951b527b957660b5baee48e4db328aa9ee218b29c22b6b0",
+      "ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl": "4e368121dc06387b966fb3f3653f636740eda78f88aed787b056d7eeccc71cb4",
+      "ui4me_core-1.0.0-py3-none-win_amd64.whl": "6a3606d0ac99d403c0eb4eeb22e055f5b3147f14a30c46d5b0175a8d94d19fcc"
+    }
   }
 }

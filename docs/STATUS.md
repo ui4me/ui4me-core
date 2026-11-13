@@ -185,8 +185,27 @@ wheels from one commit and uploads exactly those three files. Never upload local
 artifacts by hand, and never upload the local `linux_x86_64` wheel. See
 [PUBLISHING.md](release/PUBLISHING.md).
 
-**Status: not yet published.** This line is replaced with the run URL and published hashes
-only after the workflow succeeds.
+**Status: published 2026-11-13.** Workflow run
+[43484619109](https://github.com/ui4me/ui4me-core/actions/runs/43484619109) (manual dispatch,
+`version=1.0.0`) succeeded on source commit `d053e09478a081a48b68782f2204c4f649ae0e3b`:
+preflight → sdist → manylinux and Windows wheels from that sdist → assemble → PyPI (Trusted
+Publishing, environment `pypi`, attestations) → GitHub release
+[v1.0.0](https://github.com/ui4me/ui4me-core/releases/tag/v1.0.0), tag at that commit.
+PyPI: [ui4me-core 1.0.0](https://pypi.org/project/ui4me-core/1.0.0/).
+
+```
+6ea10a15da067e9bd951b527b957660b5baee48e4db328aa9ee218b29c22b6b0  ui4me_core-1.0.0.tar.gz
+4e368121dc06387b966fb3f3653f636740eda78f88aed787b056d7eeccc71cb4  ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl
+6a3606d0ac99d403c0eb4eeb22e055f5b3147f14a30c46d5b0175a8d94d19fcc  ui4me_core-1.0.0-py3-none-win_amd64.whl
+```
+
+Post-publication checks: the files downloaded from PyPI are byte-identical to the GitHub
+release assets and match PyPI's digests and the release `SHA256SUMS`;
+`verify_publish_dist.py` and `twine check` PASS on the published set; PyPI provenance for all three
+files names GitHub `ui4me/ui4me-core`, `publish.yaml`, environment `pypi`; the PyPI page renders
+the README screenshots. `pip install ui4me-core==1.0.0` from PyPI into clean venvs (Linux
+Python 3.13 and Windows Python 3.13, non-admin, interactive RDP) passed the installed smoke test, `doctor`,
+`ui4me-skill --dry-run`, and a `ui4me-new` app driven through AT-SPI / UI Automation.
 
 Evidence: [Windows](verification/core-1.0-windows-final-2026-11-13/README.md),
 [Linux](verification/core-1.0-linux-final-2026-11-13/README.md).

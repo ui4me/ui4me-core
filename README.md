@@ -35,7 +35,7 @@ python -m pip install ui4me-core
 ui4me-host --version
 ```
 
-The published package name is **`ui4me-core`**; the Python import is **`ui4me_core`**. If the release is not yet on PyPI, install its platform wheel from the [GitHub release](https://github.com/ui4me/ui4me-core/releases) instead. The first publication is performed manually, never by a push.
+The published package name is **`ui4me-core`**; the Python import is **`ui4me_core`**. The same sdist and wheels, with `SHA256SUMS`, are attached to the [GitHub release](https://github.com/ui4me/ui4me-core/releases/tag/v1.0.0). Releases are published by a manually dispatched workflow, never by a push.
 
 ## First application (HTML, CSS and Python)
 
