@@ -517,3 +517,56 @@ fn reduced_motion_media_query_stops_animation_wakeups() {
         );
     }
 }
+
+/// Core 1.0 C12 (found natively on KDE): removing the attached stylesheet that started an
+/// `infinite` animation left the animation running, so the host kept repainting at ~60 Hz
+/// (about 36 % of a core) until an unrelated environment change restyled the document.
+/// Detaching or replacing the sheet must cancel the animation and return the document to idle.
+#[test]
+fn detaching_or_replacing_the_animating_sheet_returns_to_idle() {
+    let mut d = Document::parse_hosted("<button id=b>spin</button>", None, 300, 120).unwrap();
+    d.render(300, 120, 1.0).unwrap();
+    assert!(!d.is_css_animating());
+    let css = "@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}} #b{animation:spin 1s linear infinite}";
+    let sheet = d.add_stylesheet(css).unwrap()["sheet"].as_u64().unwrap();
+    d.render(300, 120, 1.0).unwrap();
+    assert!(
+        d.is_css_animating(),
+        "the attached sheet starts the animation"
+    );
+    d.remove_stylesheet(sheet).unwrap();
+    d.render(300, 120, 1.0).unwrap();
+    assert!(
+        !d.is_css_animating(),
+        "detaching the sheet must stop the animation"
+    );
+    let sheet = d.add_stylesheet(css).unwrap()["sheet"].as_u64().unwrap();
+    d.render(300, 120, 1.0).unwrap();
+    assert!(d.is_css_animating());
+    d.replace_stylesheet(sheet, "#b{color:red}").unwrap();
+    d.render(300, 120, 1.0).unwrap();
+    assert!(
+        !d.is_css_animating(),
+        "replacing the sheet must stop the animation"
+    );
+    // A document `<style>` whose text changes behaves the same way.
+    let mut d = Document::parse_hosted(
+        &format!("<style id=s>{css}</style><button id=b>spin</button>"),
+        None,
+        300,
+        120,
+    )
+    .unwrap();
+    d.render(300, 120, 1.0).unwrap();
+    assert!(d.is_css_animating());
+    d.set_text("s", "#b{color:red}").unwrap();
+    d.render(300, 120, 1.0).unwrap();
+    assert!(
+        !d.is_css_animating(),
+        "replacing <style> text must stop the animation"
+    );
+    let transform = d
+        .computed_style(Some("b"), None, &["transform".into()])
+        .unwrap();
+    assert_eq!(transform["properties"]["transform"]["value"], "none");
+}
