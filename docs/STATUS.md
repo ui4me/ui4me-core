@@ -142,18 +142,51 @@ Diagnostics added: `tools/windows/uia_com_probe.py` (native COM client) and `--c
 * Wheel-from-sdist builds must use a fresh Cargo target directory (see
   [BUILDING_WINDOWS](release/BUILDING_WINDOWS.md)).
 
-## Final documentation and publishing preparation
+## Final documentation and publishing preparation (2026-11-13)
 
-The professional README, public Python documentation, real screenshots, `ui4me-new` project generator, `ui4me-python` Agent Skill and **manual-only** publishing workflow were prepared as a subsequent documentation/distribution change. The previous native qualification remains attached to its original source identity. **This does not claim that the new source or rebuilt wheels have been republished or independently requalified.** The release owner or local agent must run the new Python tests, rebuild both wheels, validate their skill payload and actual installer, update the source manifest, and operate the guarded workflow intentionally. See [manual release procedure](release/PUBLISHING.md).
+Added the public README with real screenshots, the documentation guides and API reference, the `ui4me-new` project generator, the bundled `ui4me-python` Agent Skill with `ui4me-skill`, and the **manual-only** `publish.yaml` workflow. **Native Core source is unchanged** (`crates/`, `patches/`, `third_party/`, `Cargo.*`, `examples/` are identical to `4f9f4bd`), so the native N/R/C ledgers remain attached to their original identity and were not re-recorded. Python tooling did change; the affected paths were tested on both platforms.
 
-## Can the owner publish?
+Defects found and fixed during this preparation:
 
-Yes, if they choose to: upload exactly `ui4me_core-1.0.0.tar.gz`,
-`ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl` and
-`ui4me_core-1.0.0-py3-none-win_amd64.whl` with the hashes above (or rebuild through
-`.github/workflows/release-linux.yml` / `release-windows.yml` and compare). Do not upload the local
-`linux_x86_64` wheel. No credentials are stored in the repository and no step publishes
-automatically.
+* The generated app's click handler failed at runtime because it batched `set_value`, which is not a batch operation. The documented batch whitelist is now pinned by a test against the host's `DomOp` enum.
+* Generated code could break on app names containing `"""`; HTML titles were not escaped; non-Latin-only names were rejected; the printed run command was not shell-quoted.
+* `ui4me-new`/`ui4me-skill` reported failure after succeeding when a redirected Windows console (cp1252) could not print a path.
+* The `ui4me-host` console wrapper orphaned the native host on SIGTERM; on POSIX it now `exec`s the host. On Windows the wrapper still waits for the host; see [platforms](guides/platforms.md).
+* The source manifest listed maintainer-local files; it now honours Git excludes. The README links are absolute so the PyPI page renders images and navigation.
+
+Qualification of source commit `0cbdff0`:
+
+| Gate | Result |
+| --- | --- |
+| `tools/verify.py` (fmt, check, test, python, headless, renderer, faults) | PASS (all stages at `d34d3f7`; python stage again at `0cbdff0`, the only later changes being Python) |
+| Clippy `-D warnings`, `python -m unittest discover -s tools` (87 tests) | PASS |
+| `refresh_source_manifest.py --check`, `verify_package.py`, `verify_source.py` | PASS (1760 files) |
+| Canonical sdist from a clean clone; manylinux (cibuildwheel 4.3.5, `manylinux_2_34`) and win_amd64 wheels built **from that sdist** | PASS, `twine check`, artifact validators, `verify_publish_dist.py` |
+| Clean venv install, Linux (KDE Plasma Wayland), Python 3.10 / 3.12 / 3.13 | PASS: smoke, `--version`, `doctor`, all four entry points, `ui4me-new` with active venv (manifest names the venv interpreter; Unicode/quotes/space paths; non-empty directory refused), generated window driven through AT-SPI with the Python handler updating the DOM, host stops on SIGTERM to the wrapper |
+| Clean venv install, Windows Server 2022, non-admin `ui4me_test` in interactive RDP, Python 3.10 / 3.12 / 3.13 | PASS: same checks; generated window driven through native UI Automation Invoke |
+| `ui4me-skill` on both platforms | PASS: dry-run writes nothing, install into all six per-user folders, status, reinstall, modified and unmanaged directories refused without `--force`, unrelated skills preserved, uninstall |
+| Agent discovery (Linux) | `ui4me-python` listed by Claude Code 2.1.323, Codex CLI 0.169.0, GitHub Copilot CLI 1.0.109 and OpenCode 2.2.5. Cursor and Gemini CLI were not installed, so for those only the folder placement was verified |
+
+Locally qualified artifacts (from `0cbdff0`):
+
+```
+ec44d0d9d02404aef243af6b70e9a62cb76a694da8d6ab2778d9d736f0690c32  ui4me_core-1.0.0.tar.gz
+6592fe5038ed0b31d55f51177e5c0f979b0181885496147c52762ab701b77029  ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl
+65d660cbd402a12fd15035cadbd188d4627f7656a5f4b8217a71e1859d3a143d  ui4me_core-1.0.0-py3-none-win_amd64.whl
+```
+
+The published files are built by `publish.yaml` from the commit that records this section (documentation-only difference from `0cbdff0`), so their hashes differ. sdists embed timestamps and the CI toolchains differ. The published hashes are recorded below after a successful run.
+
+## Publication
+
+Publishing happens only through the manually dispatched `.github/workflows/publish.yaml`
+(PyPI Trusted Publishing, GitHub environment `pypi`, restricted to `main`). It rebuilds the sdist and both
+wheels from one commit and uploads exactly those three files. Never upload local
+artifacts by hand, and never upload the local `linux_x86_64` wheel. See
+[PUBLISHING.md](release/PUBLISHING.md).
+
+**Status: not yet published.** This line is replaced with the run URL and published hashes
+only after the workflow succeeds.
 
 Evidence: [Windows](verification/core-1.0-windows-final-2026-11-13/README.md),
 [Linux](verification/core-1.0-linux-final-2026-11-13/README.md).
