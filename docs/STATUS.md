@@ -4,12 +4,14 @@
 and READY for Windows (Windows Server 2022 Desktop Experience x64, interactive RDP session).**
 All gates passed on the final, unchanged source. Nothing has been published: PyPI upload and a
 GitHub Release remain a separate, manual decision. macOS is out of scope.
+*(Later the same day both were published: Python 1.0.0 to PyPI and GitHub, see "Publication"; the
+PowerShell module `UI4ME.Core` 1.0.0 to the PowerShell Gallery, see below.)*
 
 ## PowerShell module UI4ME.Core 1.0.0 (2026-11-13)
 
 **Qualified on Linux (pwsh 7.7, Pester also on 7.2) and Windows (pwsh 7.6 and Windows PowerShell 5.1)
-with the unchanged 1.0.0 native hosts.** Publication to the PowerShell Gallery is the separate manual
-workflow `publish-powershell.yaml`; its outcome is recorded here after it runs. No Rust or Python source changed; the Python release above is
+with the unchanged 1.0.0 native hosts, and published to the PowerShell Gallery** (see the next section).
+No Rust or Python source changed; the Python release above is
 untouched.
 
 | Item | Value |
@@ -24,6 +26,26 @@ Limitations: the 39 native host scenarios (screen readers, drag and drop, DPI va
 with a PowerShell backend; they are host properties covered by the Core 1.0.0 evidence. Wayland refuses
 client focus/placement/un-minimize (documented); Linux/Windows x64 only; PowerShell 7.0/7.1 are refused
 at import.
+
+## PowerShell Gallery publication (2026-11-13)
+
+**Published.** Manual run of `publish-powershell.yaml`:
+[43512337180](https://github.com/ui4me/ui4me-core/actions/runs/43512337180) on `main` at
+`023859c683a499cb035dd4713e900f889f72545f` (`version=1.0.0`, `confirmation=publish-powershell-1.0.0`);
+jobs build-and-check, windows-check (Pester on the staged package under pwsh and Windows PowerShell 5.1),
+publish-psgallery (environment `psgallery`, restricted to `main`) and github-release-asset all succeeded.
+
+| Item | Value |
+| --- | --- |
+| Gallery | [UI4ME.Core 1.0.0](https://www.powershellgallery.com/packages/UI4ME.Core/1.0.0), published 2026-11-13 21:40 UTC, author "UI4ME contributors" |
+| `.nupkg` | `UI4ME.Core.1.0.0.nupkg`, 30,632,666 bytes, SHA-256 `8a7ccddb47043094b681b57bbc15d39c4caf789f8ef96ad07465fc10bb520a57` (Gallery download and the `v1.0.0` release asset are identical) |
+| Package content | every file byte-identical to the qualified module (`module-files.sha256`); `HOST-SOURCE-MANIFEST.json` source identity `023859c`; hosts `22ba596e…` (Linux), `c56698b6…` (Windows) |
+| GitHub release `v1.0.0` | `.nupkg` attached; Python sdist, wheels, `SHA256SUMS` and `SOURCE_COMMIT.txt` unchanged |
+| Fresh install, Linux | empty HOME, `Install-Module UI4ME.Core -Scope CurrentUser` (pwsh 7.7), execute bit restored by `Get-UI4MEHostPath`, `New-UI4MEProject` + `Start-UI4MEHost`, real typing/click, exit 0, no Python process |
+| Fresh install, Windows | normal user `ui4me_test`, `Install-Module -Scope CurrentUser` separately in pwsh 7.6 and Windows PowerShell 5.1 (NuGet provider bootstrapped per user), generated app run in the RDP session with real input, exit 0, process tree `ui4me-host.exe` → `pwsh.exe`/`powershell.exe` (+ `conhost.exe`) only |
+
+Follow-ups: the Gallery package cannot be replaced; any fix needs 1.0.1. PSScriptAnalyzer reports no errors,
+only style warnings (plural nouns such as `Get-UI4MENodes`, no `ShouldProcess` on state-changing commands).
 
 ## Final identities (one source, both platforms)
 

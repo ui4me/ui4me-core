@@ -121,6 +121,13 @@ evidence in `../core-1.0-linux-final-2026-11-13/` and `../core-1.0-windows-final
 They were not repeated with a PowerShell backend; the PowerShell binding only transports the
 same events and commands.
 
+## After publication
+
+The Gallery package (run 43512337180, `.nupkg` SHA-256 `8a7ccddb…`) was downloaded with `Save-PSResource`;
+all files equal `module-files.sha256`. Fresh `Install-Module -Scope CurrentUser` then ran a generated
+app with real input on Linux pwsh 7.7, Windows pwsh 7.6 and Windows PowerShell 5.1
+(`screenshots/gallery-install-*.png`). See `docs/STATUS.md`.
+
 ## Reproduce
 
 ```bash
