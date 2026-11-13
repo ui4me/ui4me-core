@@ -591,7 +591,7 @@ fn direct_surface_render_matches_allocating_render_and_rejects_bad_destinations(
 #[test]
 fn node_reference_from_a_replaced_document_is_stale_in_its_replacement() {
     let html = "<ul><li>alpha</li><li>beta</li></ul>";
-    let mut old = doc(html);
+    let old = doc(html);
     let reference = old.query_nodes("li", 0, 10).unwrap()["nodes"][0]["node"]
         .as_str()
         .unwrap()

@@ -11,9 +11,13 @@ supplied 0.2 code and preserves the existing native fixes. Both Linux and Window
 code, the Python API, examples, tests, audit dispositions and autonomous local
 completion prompt are included.
 
-**Native qualification is not claimed by this source ZIP.** The previous
-Windows UI Automation selection stall requires controlled diagnosis on Windows.
-See [STATUS](docs/STATUS.md) for exact preparation evidence and remaining gates.
+**Status: Linux/KDE Plasma Wayland checkpoint.** The automated gates and the
+N01–N15, R01–R12 and C01–C12 native scenarios were run on Debian 13 / KDE
+Plasma 6.3 Wayland with the installed release host; the defects they exposed are
+fixed in this tree. **Windows Server 2022 qualification has not been run for this
+candidate**, and the Windows UI Automation selection stall from 0.2 remains open
+until it is diagnosed there. See [STATUS](docs/STATUS.md) for evidence, open
+findings and remaining gates.
 
 ## Start here
 
