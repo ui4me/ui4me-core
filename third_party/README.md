@@ -143,3 +143,27 @@ Linux screen-reader qualification must check initial focus, keyboard selection
 changes, app naming and teardown. The independent Windows UI Automation R05
 text-selection hang is a separate blocker; no speculative Windows provider
 patch is included here.
+
+## Core 1.0 AT-SPI table, tree, live-region and relationship metadata
+
+`accesskit_atspi_common-0.21.1/core-1.0-atspi-metadata.patch` is a diff against
+the tree after `core-1.0-identity-selection.patch` (added during Core 1.0 KDE
+qualification, 2026-11-13). The renderer already gives AccessKit table/grid
+row and column indices, counts and spans, tree levels, live/atomic/busy state and
+explicit labelled-by/described-by/details/flow-to/error-message relationships
+(DOC-29/DOC-30), but the pinned AT-SPI adapter published only `posinset`,
+`setsize`, `id` and `controller-for`: an inspection of the installed host on
+KDE showed table cells without indices, tree items without levels, live regions
+without live/atomic attributes and controls without label relations.
+
+The patched `attributes()` adds 1-based `rowindex`/`colindex`, `rowcount`/`colcount`,
+spans above one, `level`, `live`/`atomic`/`busy` on the region and
+`container-live`/`container-atomic`/`container-busy` on its descendants, the
+attribute names browsers use on AT-SPI. `relation_set()` adds `LabelledBy`,
+`DescribedBy`, `Details`, `FlowsTo` and `ErrorMessage`, resolved in the node's
+tree and filtered like the existing `ControllerFor`. The host test
+`atspi_publishes_table_tree_live_metadata_and_relationships` fails without it.
+
+Limit: `accesskit_unix` 0.24.1 implements no AT-SPI `Table`/`TableCell` D-Bus
+interfaces, so table navigation commands of a screen reader that require those
+interfaces are not available; cell indices are object attributes only.

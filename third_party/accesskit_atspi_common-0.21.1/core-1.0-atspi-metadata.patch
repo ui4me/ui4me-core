@@ -1,0 +1,104 @@
+--- a/src/node.rs
++++ b/src/node.rs
+@@ -442,6 +442,61 @@
+         if let Some(role_description) = self.braille_role_description() {
+             attributes.insert("brailleroledescription", role_description.to_string());
+         }
++        // UI4ME: publish the table/tree and live-region metadata the document projection
++        // already carries (Core 1.0 DOC-29/DOC-30). The pinned D-Bus adapter has no Table or
++        // TableCell interface, so cells carry 1-based row/column attributes as browsers do for
++        // ARIA tables; tree items and headings carry their one-based level.
++        let data = self.0.data();
++        if let Some(level) = self.0.level() {
++            // AccessKit levels are zero-based; AT-SPI `level` is one-based like ARIA.
++            attributes.insert("level", (level + 1).to_string());
++        }
++        if let Some(index) = data.row_index() {
++            attributes.insert("rowindex", (index + 1).to_string());
++        }
++        if let Some(index) = data.column_index() {
++            attributes.insert("colindex", (index + 1).to_string());
++        }
++        if let Some(count) = data.row_count() {
++            attributes.insert("rowcount", count.to_string());
++        }
++        if let Some(count) = data.column_count() {
++            attributes.insert("colcount", count.to_string());
++        }
++        if let Some(span) = data.row_span().filter(|span| *span > 1) {
++            attributes.insert("rowspan", span.to_string());
++        }
++        if let Some(span) = data.column_span().filter(|span| *span > 1) {
++            attributes.insert("colspan", span.to_string());
++        }
++        let politeness = |live: Live| match live {
++            Live::Off => "off",
++            Live::Polite => "polite",
++            Live::Assertive => "assertive",
++        };
++        if let Some(live) = data.live() {
++            attributes.insert("live", politeness(live).to_string());
++            if data.is_live_atomic() {
++                attributes.insert("atomic", "true".to_string());
++            }
++        }
++        if data.is_busy() {
++            attributes.insert("busy", "true".to_string());
++        }
++        let mut container = Some(*self.0);
++        while let Some(node) = container {
++            if let Some(live) = node.data().live() {
++                attributes.insert("container-live", politeness(live).to_string());
++                if node.data().is_live_atomic() {
++                    attributes.insert("container-atomic", "true".to_string());
++                }
++                if node.data().is_busy() {
++                    attributes.insert("container-busy", "true".to_string());
++                }
++                break;
++            }
++            container = node.parent();
++        }
+ 
+         attributes
+     }
+@@ -996,11 +1051,38 @@
+                 .controls()
+                 .filter(|controlled| filter(controlled) == FilterResult::Include)
+                 .map(|controlled| controlled.id())
+-                .map(f)
++                .map(&f)
+                 .collect();
+             if !controls.is_empty() {
+                 relations.insert(RelationType::ControllerFor, controls);
+             }
++            // UI4ME: explicit ARIA/HTML relationships carried by the projection (Core 1.0
++            // DOC-30), resolved within the node's own tree and filtered like `controls`.
++            let (_, tree_id) = node.locate();
++            let data = node.data();
++            for (relation, targets) in [
++                (RelationType::LabelledBy, data.labelled_by()),
++                (RelationType::DescribedBy, data.described_by()),
++                (RelationType::Details, data.details()),
++                (RelationType::FlowsTo, data.flow_to()),
++            ] {
++                let targets: Vec<_> = targets
++                    .iter()
++                    .filter_map(|target| node.tree_state.node_by_tree_local_id(*target, tree_id))
++                    .filter(|target| filter(target) == FilterResult::Include)
++                    .map(|target| f(target.id()))
++                    .collect();
++                if !targets.is_empty() {
++                    relations.insert(relation, targets);
++                }
++            }
++            if let Some(target) = data
++                .error_message()
++                .and_then(|target| node.tree_state.node_by_tree_local_id(target, tree_id))
++                .filter(|target| filter(target) == FilterResult::Include)
++            {
++                relations.insert(RelationType::ErrorMessage, vec![f(target.id())]);
++            }
+             Ok(relations)
+         })
+     }

@@ -679,4 +679,113 @@ mod tests {
             "Label stays distinct from value"
         );
     }
+
+    /// Core 1.0 C08 (found on KDE with AT-SPI): the document projection's table indices, tree
+    /// level, live-region/busy metadata and label/description relationships must reach AT-SPI
+    /// object attributes and relations; the pinned adapter published only position/size.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn atspi_publishes_table_tree_live_metadata_and_relationships() {
+        use accesskit_atspi_common::RelationType;
+        use accesskit_atspi_common::{
+            Adapter, AdapterCallback, AppContext, Event, FullNodeId, InterfaceSet, WindowBounds,
+        };
+        struct Callback;
+        impl AdapterCallback for Callback {
+            fn register_interfaces(&self, _: &Adapter, _: FullNodeId, _: InterfaceSet) {}
+            fn unregister_interfaces(&self, _: &Adapter, _: FullNodeId, _: InterfaceSet) {}
+            fn emit_event(&self, _: &Adapter, _: Event) {}
+        }
+        struct Handler;
+        impl ActionHandler for Handler {
+            fn do_action(&mut self, _: ActionRequest) {}
+        }
+        let mut root = Node::new(Role::Window);
+        root.set_children([NodeId(1), NodeId(4), NodeId(5), NodeId(6), NodeId(7)]);
+        let mut grid = Node::new(Role::Grid);
+        grid.set_label("Inventory");
+        grid.set_row_count(3);
+        grid.set_column_count(2);
+        grid.set_children([NodeId(2)]);
+        let mut row = Node::new(Role::Row);
+        row.set_row_index(2);
+        row.set_children([NodeId(3)]);
+        let mut cell = Node::new(Role::GridCell);
+        cell.set_label("30");
+        cell.set_row_index(2);
+        cell.set_column_index(1);
+        cell.set_column_span(2);
+        let mut item = Node::new(Role::TreeItem);
+        item.set_label("Child A");
+        item.set_level(1); // AccessKit is zero-based: aria-level 2
+        let mut live = Node::new(Role::Status);
+        live.set_live(accesskit::Live::Polite);
+        live.set_live_atomic();
+        live.set_busy();
+        live.set_children([NodeId(8)]);
+        let mut label = Node::new(Role::Label);
+        label.set_value("Fruit");
+        let mut combo = Node::new(Role::ComboBox);
+        combo.set_label("Fruit");
+        combo.set_labelled_by([NodeId(6)]);
+        combo.set_described_by([NodeId(4)]);
+        let text = Node::new(Role::Label);
+        let app = AppContext::new(Some("Manifest App".into()));
+        let adapter = Adapter::new(
+            &app,
+            Callback,
+            TreeUpdate {
+                nodes: vec![
+                    (NodeId(0), root),
+                    (NodeId(1), grid),
+                    (NodeId(2), row),
+                    (NodeId(3), cell),
+                    (NodeId(4), item),
+                    (NodeId(5), live),
+                    (NodeId(6), label),
+                    (NodeId(7), combo),
+                    (NodeId(8), text),
+                ],
+                tree: Some(TreeInfo::new(NodeId(0))),
+                tree_id: TreeId::ROOT,
+                focus: NodeId(7),
+            },
+            true,
+            WindowBounds::default(),
+            Handler,
+        );
+        let root = adapter.platform_node(adapter.root_id());
+        let child = |index| adapter.platform_node(root.child_at_index(index).unwrap().unwrap());
+        let grid = child(0);
+        assert_eq!(grid.attributes().unwrap()["rowcount"], "3");
+        assert_eq!(grid.attributes().unwrap()["colcount"], "2");
+        let row = adapter.platform_node(grid.child_at_index(0).unwrap().unwrap());
+        let cell = adapter.platform_node(row.child_at_index(0).unwrap().unwrap());
+        let attributes = cell.attributes().unwrap();
+        assert_eq!(
+            (
+                attributes["rowindex"].as_str(),
+                attributes["colindex"].as_str()
+            ),
+            ("3", "2")
+        );
+        assert_eq!(attributes["colspan"], "2");
+        assert_eq!(child(1).attributes().unwrap()["level"], "2");
+        let live = child(2).attributes().unwrap();
+        assert_eq!(
+            (
+                live["live"].as_str(),
+                live["atomic"].as_str(),
+                live["busy"].as_str()
+            ),
+            ("polite", "true", "true")
+        );
+        let status = child(2);
+        let inside = adapter.platform_node(status.child_at_index(0).unwrap().unwrap());
+        assert_eq!(inside.attributes().unwrap()["container-live"], "polite");
+        assert_eq!(inside.attributes().unwrap()["container-atomic"], "true");
+        let relations = child(4).relation_set(|id| id).unwrap();
+        assert_eq!(relations[&RelationType::LabelledBy].len(), 1);
+        assert_eq!(relations[&RelationType::DescribedBy].len(), 1);
+    }
 }
