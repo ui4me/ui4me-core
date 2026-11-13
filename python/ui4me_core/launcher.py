@@ -39,6 +39,13 @@ def main() -> int:
     except (OSError, FileNotFoundError) as error:
         print(str(error), file=sys.stderr)
         return 1
+    if os.name == "posix":
+        # Replace this Python wrapper with the native host so signals from a
+        # process manager (SIGTERM, SIGHUP) reach the host itself instead of
+        # orphaning it, and the host's exit status is returned unchanged.
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.execv(str(binary), [str(binary), *args])
     return subprocess.call([str(binary), *args])
 
 
