@@ -26,6 +26,7 @@ pub(super) struct HostedDocument {
     pub(super) asset_root: Option<PathBuf>,
     pub(super) viewport: (u32, u32, f64),
     pub(super) native_refresh_pending: bool,
+    pub(super) bitmaps: super::bitmap::Bitmaps,
 }
 
 impl HostedDocument {
@@ -307,6 +308,7 @@ impl Host {
             a11y: None,
             viewport: (width, height, scale),
             native_refresh_pending: false,
+            bitmaps: Default::default(),
             source,
             asset_root,
         };

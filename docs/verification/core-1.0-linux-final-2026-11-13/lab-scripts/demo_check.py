@@ -1,0 +1,20 @@
+
+import lab, time, os, subprocess
+C='Live bitmap'
+files=lambda: sorted(f for f in os.listdir('/run/user/1000') if f.startswith('ui4me-bitmap-'))
+w=lab.wait_window(C); hp=w['pid']; time.sleep(1)
+print('window', {k:w[k] for k in ('caption','res','w','h')}, '| exe', os.readlink(f'/proc/{hp}/exe'), subprocess.check_output(['sha256sum',os.readlink(f'/proc/{hp}/exe')],text=True).split()[0])
+print('backing files', files(), '| host fds', [os.readlink(f'/proc/{hp}/fd/{fd}') for fd in os.listdir(f'/proc/{hp}/fd') if 'bitmap' in os.readlink(f'/proc/{hp}/fd/{fd}')])
+lab.set_geometry(C, 600, 200, 700, 510); time.sleep(0.8); w=lab.window(C); lab.screenshot('/home/toor/projects/ui4me-core/verification/core-1.0-linux-final/evidence/RC2-livebitmap-demo.png')
+lab.drag(w['x']+150,w['y']+22,w['x']-150,w['y']+172,steps=30); time.sleep(0.6); w2=lab.window(C); print('title drag moved', (round(w2['x']-w['x']),round(w2['y']-w['y'])))
+lab.dblclick(w2['x']+150,w2['y']+22); time.sleep(1); print('dblclick -> maximized', lab.window(C)['maximized'])
+w3=lab.window(C); lab.dblclick(w3['x']+150,w3['y']+22); time.sleep(1); print('dblclick -> maximized', lab.window(C)['maximized'])
+w=lab.window(C); lab.drag(w['x']+w['w']-72,w['y']+22,w['x']+w['w']-272,w['y']+122,steps=20); time.sleep(0.6); print('press on button then drag: moved', (lab.window(C)['x'],lab.window(C)['y'])!=(w['x'],w['y']))
+lab.click(w['x']+w['w']-72,w['y']+22); time.sleep(1); wm=lab.window(C); print('max button -> maximized', wm['maximized'])
+lab.click(wm['x']+wm['w']-72,wm['y']+22); time.sleep(1); wr=lab.window(C); print('max button again -> maximized', wr['maximized'])
+lab.drag(wr['x']+wr['w']-10,wr['y']+wr['h']-3,wr['x']+wr['w']+90,wr['y']+wr['h']+60,steps=25); time.sleep(0.6); w5=lab.window(C); print('SE grip resize', (w5['w']-wr['w'], w5['h']-wr['h']))
+lab.click(w5['x']+w5['w']-120,w5['y']+22); time.sleep(1); print('minimize button -> minimized', lab.window(C)['minimized'])
+lab.kwin_script("var ws=workspace.windowList(); for (var i=0;i<ws.length;i++){ if (ws[i].caption.indexOf('Live bitmap')>=0){ ws[i].minimized=false; workspace.activeWindow=ws[i]; } } OUT('x')"); time.sleep(1)
+w6=lab.window(C); lab.click(w6['x']+w6['w']-24,w6['y']+22); t=time.time()
+while time.time()-t<10 and subprocess.run(['kill','-0',str(hp)],capture_output=True).returncode==0: time.sleep(0.05)
+time.sleep(1); print('close button -> host exited; backing files', files())

@@ -10,7 +10,7 @@ use winit::{
     keyboard::{Key, PhysicalKey},
     window::{
         ImeCapabilities, ImeEnableRequest, ImeHint, ImePurpose, ImeRequest, ImeRequestData,
-        ImeSurroundingText,
+        ImeSurroundingText, ResizeDirection,
     },
 };
 
@@ -387,6 +387,7 @@ impl Host {
                     .accessibility
                     .update_document(&document.id, ui4me_renderer::a11y::full_update(&tree));
                 document.a11y = Some(tree);
+                document.native_refresh_pending = false;
             }
             native
                 .window
@@ -730,6 +731,66 @@ impl Host {
         }
     }
 
+    /// Called directly from native pointer press: Wayland requires the active
+    /// pointer serial for server-side move/resize, so Python must never be in
+    /// this path. Interactive HTML controls are excluded from drag regions.
+    fn start_native_chrome_drag(&mut self, id: &str, x: f64, y: f64) -> bool {
+        let Some(record) = self.windows.get_mut(id) else {
+            return false;
+        };
+        if record.decorations || record.closing {
+            return false;
+        }
+        let Some(document) = &mut record.document else {
+            return false;
+        };
+        let Some(action) = document.engine.native_chrome_hit(x, y) else {
+            return false;
+        };
+        let Some(native) = &mut record.native else {
+            return false;
+        };
+        if action == "move" {
+            let now = Instant::now();
+            let double = native.last_titlebar_press.is_some_and(|(before, px, py)| {
+                now.duration_since(before) <= Duration::from_millis(350)
+                    && (x - px).abs() <= 5.0
+                    && (y - py).abs() <= 5.0
+            });
+            native.last_titlebar_press = Some((now, x, y));
+            if double && record.resizable {
+                native.window.set_maximized(!native.window.is_maximized());
+                return true;
+            }
+            match native.window.drag_window() {
+                Ok(()) => return true,
+                Err(error) => tracing::debug!(%error, "Native window move unavailable"),
+            }
+            return false;
+        }
+        let direction = match action {
+            "north" => ResizeDirection::North,
+            "south" => ResizeDirection::South,
+            "east" => ResizeDirection::East,
+            "west" => ResizeDirection::West,
+            "north-east" => ResizeDirection::NorthEast,
+            "north-west" => ResizeDirection::NorthWest,
+            "south-east" => ResizeDirection::SouthEast,
+            "south-west" => ResizeDirection::SouthWest,
+            _ => return false,
+        };
+        if !record.resizable {
+            return false;
+        }
+        match native.window.drag_resize_window(direction) {
+            Ok(()) => true,
+            Err(error) => {
+                tracing::debug!(%error, "Native window resize unavailable");
+                false
+            }
+        }
+    }
+
     /// Returns true only for input consumed by a hosted document. Window
     /// lifecycle, presentation, scale and native data transfers stay in Host.
     pub(super) fn document_window_event(
@@ -839,6 +900,9 @@ impl Host {
                 let (x, y) = (position.x / scale, position.y / scale);
                 if let Some(native) = self.windows.get_mut(id).and_then(|w| w.native.as_mut()) {
                     native.pointer = (x, y);
+                }
+                if state.is_pressed() && button == 0 && self.start_native_chrome_drag(id, x, y) {
+                    return true;
                 }
                 Some(Input::PointerButton {
                     pressed: state.is_pressed(),

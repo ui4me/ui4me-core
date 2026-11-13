@@ -1,0 +1,28 @@
+{
+  "check": "N12",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T09:23:29.685470+00:00",
+  "build_identity": {
+    "host": "/home/toor/.cargo/bin/ui4me-host",
+    "host_sha256": "c70346ba412e8348cb6cbbd9fd322128df9bec12accff10d4b26c26fd6dd3146",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "02bf81e422eb060d53abd5e9235fb85f5a23d1ed806d696294e77056ab939aac",
+    "base_commit": "ca348d9",
+    "os": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+    "desktop": "KDE",
+    "session": "wayland",
+    "user": "toor"
+  },
+  "actions": [
+    "tools/install.py (release cargo install) + --example-dir ~/.local/share/ui4me-core1-*, create_launcher.py, Kickoff launch"
+  ],
+  "expected": "Installed normal-user launch outside checkout",
+  "observed": "Host exe ~/.cargo/bin/ui4me-host (cwd $HOME, systemd user unit), backend /usr/bin/python3 renderer_demo.py from ~/.local/share/ui4me-core1-reference",
+  "limitations": [],
+  "evidence_files_sha256": {
+    "ref-suite.txt": "a5c42dea95cecdf2d7572ae74adcbc6f119c0b07dd25a90412a4296f047ad369",
+    "../install-reference.txt": "b2112a90b586a7cd736b388e08b29d1dfeb76a66d949eb60dd3f1e1de8525797",
+    "../install-probe.txt": "3f85326b2fdfa37bf821a57215dee36cec1f3cce94923bb63c305dd5149cf3ef",
+    "../install-launchers.txt": "77dc810af6433b9a018ecd8aa434db5f3582550f511b0454b3b9508a3a6b6325"
+  }
+}

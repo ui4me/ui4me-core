@@ -852,7 +852,7 @@ impl DocumentPipeline {
         let natural = |n: NodeId| {
             self.resources
                 .as_ref()
-                .and_then(|r| r.image_element_state(n))
+                .and_then(|r| r.image_element_state_in(doc, n))
         };
         let css_natural = |n: NodeId, property: &str| {
             self.resources

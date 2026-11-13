@@ -255,6 +255,40 @@ impl StyleBridge {
         })
     }
 
+    /// Update the Stylo device without throwing away author/UA sheets, sidecars, font
+    /// metrics or running animations. Environment revisions are already a whole-document
+    /// restyle in `restyle_with`, so rebuilding the bridge is unnecessary.
+    ///
+    /// The two read guards are held only across Stylo's synchronous media-query
+    /// invalidation; no application callbacks occur under either guard.
+    pub(crate) fn update_environment(
+        &mut self,
+        env: StyleEnvironment,
+        text: &crate::text::fonts::TextServices,
+    ) {
+        let device = build_device(
+            &env,
+            self.quirks,
+            Box::new(crate::pipeline::lifecycle::SharedMetrics(
+                text.metrics_service(),
+            )),
+        );
+        let guard = self.sidecars.lock.read();
+        let ua_guard = crate::style::ua::shared().lock.read();
+        let guards = StylesheetGuards {
+            author: &guard,
+            ua_or_user: &ua_guard,
+        };
+        // Stylo reports the origins whose media-query results changed; their
+        // cascade data must be rebuilt by the next `flush`, or rules guarded by
+        // `prefers-reduced-motion`, `prefers-color-scheme` or width queries keep
+        // their old applicability.
+        let changed = self.stylist.set_device(device, &guards);
+        if !changed.is_empty() {
+            self.stylist.force_stylesheet_origins_dirty(changed);
+        }
+    }
+
     /// The document base URL (L-RES-r3): relative `<link href>` and `@import` references, and the
     /// `url()`s of `<style>` text and `style=""` values, resolve against it. Linked sheets carry
     /// their own URL. A change re-parses the author sheets at the next pass.

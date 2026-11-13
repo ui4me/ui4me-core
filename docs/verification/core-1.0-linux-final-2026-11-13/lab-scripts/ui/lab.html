@@ -1,0 +1,36 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>RC2 lab</title>
+<style>
+:root{color-scheme:light;font-family:sans-serif}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#f3f6fa;color:#111}
+.title{height:40px;background:#25364d;color:#fff;display:flex;align-items:center;gap:6px;padding:0 4px}
+.drag{flex:1;align-self:stretch;display:flex;align-items:center;padding-left:10px;font-weight:bold}
+.title input{width:110px;height:26px}
+.title button{width:40px;height:30px}
+.rz{position:fixed;background:rgba(255,120,0,.55)}
+.n{top:0;left:12px;right:12px;height:6px}.s{bottom:0;left:12px;right:12px;height:6px}
+.e{right:0;top:12px;bottom:12px;width:6px}.w{left:0;top:12px;bottom:12px;width:6px}
+.ne{top:0;right:0;width:12px;height:12px}.nw{top:0;left:0;width:12px;height:12px}
+.se{bottom:0;right:0;width:12px;height:12px}.sw{bottom:0;left:0;width:12px;height:12px}
+main{padding:12px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}
+#pad{width:200px;height:120px;background:#cde;border:1px solid #89a;display:flex;align-items:center;justify-content:center}
+#bmp{display:block;border:1px solid #555;max-width:640px;max-height:480px}
+#bimg{display:block;border:1px solid #555}
+#ftext{font-family:LabFont,monospace;font-size:28px}
+#status{font:12px monospace}
+</style>
+<body>
+<header class="title"><div class="drag" data-ui4me-drag id="drag">RC2 lab — drag</div>
+<input id="tin" value="title input" aria-label="Title input"><button id="min" aria-label="Minimize">_</button><button id="max" aria-label="Maximize">□</button><button id="cls" aria-label="Close">×</button></header>
+<div class="rz n" data-ui4me-resize="n"></div><div class="rz s" data-ui4me-resize="s"></div>
+<div class="rz e" data-ui4me-resize="e"></div><div class="rz w" data-ui4me-resize="w"></div>
+<div class="rz ne" data-ui4me-resize="ne"></div><div class="rz nw" data-ui4me-resize="nw"></div>
+<div class="rz se" data-ui4me-resize="se"></div><div class="rz sw" data-ui4me-resize="sw"></div>
+<main>
+<div id="pad">click pad</div>
+<img id="bmp" src="ui4me-bitmap://b1" alt="live">
+<img id="bimg" src="ui4me-res://lab/pic.png" alt="bundle">
+<div id="ftext">Ag Font</div>
+<div id="status">ready</div>
+</main>
+</body></html>

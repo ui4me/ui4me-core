@@ -376,7 +376,34 @@ fn native_pointer_sequences_deliver_double_aux_and_keyboard_context_events() {
             y: 20.0,
         })
         .unwrap();
-    assert!(events.iter().any(|e| e["type"] == "auxclick"));
+    assert!(
+        events
+            .iter()
+            .any(|e| e["type"] == "auxclick" && e["button"] == 1)
+    );
+    // A real secondary pointer press must generate both auxiliary activation
+    // and a context menu, not only the keyboard ContextMenu command.
+    d.handle_input(Input::PointerButton {
+        pressed: true,
+        button: 2,
+        x: 20.0,
+        y: 20.0,
+    })
+    .unwrap();
+    let right = d
+        .handle_input(Input::PointerButton {
+            pressed: false,
+            button: 2,
+            x: 20.0,
+            y: 20.0,
+        })
+        .unwrap();
+    assert!(
+        right
+            .iter()
+            .any(|e| e["type"] == "auxclick" && e["button"] == 2)
+    );
+    assert!(right.iter().any(|e| e["type"] == "contextmenu"));
     d.focus("b").unwrap();
     let events = d
         .handle_input(Input::Key {

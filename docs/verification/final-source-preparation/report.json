@@ -1,0 +1,22 @@
+{
+  "status": "PYTHON_AND_SOURCE_VALIDATED",
+  "python_tests": 55,
+  "passed": 54,
+  "skipped": 1,
+  "rust_toolchain": "unavailable",
+  "rust_test_execution": "NOT_RUN",
+  "wayland_native": "NOT_RUN",
+  "built_wheels": "NOT_PRODUCED_HERE",
+  "manylinux_repair": "NOT_RUN",
+  "platform": "Cloud Linux, not KDE qualification",
+  "python": "3.13.5",
+  "source_versions": {
+    "rust": "1.0.0",
+    "python": "1.0.0",
+    "ui4me-assets": "1.0.0",
+    "ui4me-document": "1.0.0",
+    "ui4me-engine-types": "1.0.0",
+    "ui4me-host": "1.0.0",
+    "ui4me-renderer": "1.0.0"
+  }
+}

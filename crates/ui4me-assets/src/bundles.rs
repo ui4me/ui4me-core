@@ -281,6 +281,45 @@ impl BundleRegistry {
             .is_some()
     }
 
+    /// Compare the new source bytes against the registered bundle before it is
+    /// replaced. Classification is conservative: unknown extensions invalidate
+    /// styles as well as images rather than silently leaving stale content.
+    pub fn impact(&self, name: &str, entries: Option<&[BundleEntryInput]>) -> BundleImpact {
+        let inner = self.inner.read().unwrap_or_else(|p| p.into_inner());
+        let old = inner.bundles.get(name);
+        let current: std::collections::HashMap<&str, (&[u8], Option<&str>)> = entries
+            .unwrap_or_default()
+            .iter()
+            .map(|e| (e.path.as_str(), (e.data.as_ref(), e.mime.as_deref())))
+            .collect();
+        let mut result = BundleImpact::default();
+        if let Some(old) = old {
+            for (path, old_entry) in &old.entries {
+                let changed = match current.get(path.as_str()) {
+                    None => true,
+                    Some((bytes, mime)) => {
+                        old_entry.data.as_ref() != *bytes || old_entry.mime.as_deref() != *mime
+                    }
+                };
+                if changed {
+                    // A resource can be reclassified by MIME when the same
+                    // path is replaced. Invalidate consumers of both the old
+                    // and new meaning; retaining either is unsafe.
+                    result.include(path, old_entry.mime.as_deref());
+                    if let Some((_, new_mime)) = current.get(path.as_str()) {
+                        result.include(path, *new_mime);
+                    }
+                }
+            }
+        }
+        for (path, (_, mime)) in &current {
+            if old.and_then(|b| b.entries.get(*path)).is_none() {
+                result.include(path, *mime);
+            }
+        }
+        result
+    }
+
     pub fn contains(&self, name: &str) -> bool {
         self.inner
             .read()
@@ -493,6 +532,48 @@ fn walk(
     Ok(())
 }
 
+/// Which engine stages may depend on a changed bundle's bytes. A PNG-only
+/// update does not imply a stylesheet or font-source change.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct BundleImpact {
+    pub stylesheets: bool,
+    pub fonts: bool,
+    pub images: bool,
+    pub unknown: bool,
+}
+impl BundleImpact {
+    fn include(&mut self, path: &str, mime: Option<&str>) {
+        let p = path.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+        let m = mime
+            .unwrap_or("")
+            .split(';')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase();
+        if p == "css" || m == "text/css" {
+            self.stylesheets = true;
+        } else if matches!(p.as_str(), "woff" | "woff2" | "ttf" | "otf" | "ttc")
+            || m.starts_with("font/")
+        {
+            self.fonts = true;
+        } else if matches!(
+            p.as_str(),
+            "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "svg" | "ico"
+        ) || m.starts_with("image/")
+        {
+            self.images = true;
+        } else {
+            // Unknown data can be a stylesheet/font referenced without a
+            // conventional extension. It must not silently bypass invalidation.
+            self.unknown = true;
+        }
+    }
+    pub fn is_empty(self) -> bool {
+        !(self.stylesheets || self.fonts || self.images || self.unknown)
+    }
+}
+
 /// What a bundle registration or removal did to the documents.
 #[derive(Clone, Debug, Default)]
 pub struct BundleChange {
@@ -502,6 +583,7 @@ pub struct BundleChange {
     pub affected: Vec<ui4me_engine_types::ids::DocumentId>,
     /// `true` if a bundle of this name existed before (a replacement or a removal).
     pub existed: bool,
+    pub impact: BundleImpact,
 }
 
 #[cfg(test)]
@@ -736,5 +818,43 @@ mod tests {
             .map(|i| BundleEntryInput::new(format!("f{i}"), Vec::new(), None))
             .collect();
         assert_eq!(r.register("big", many).unwrap_err().code, Code::SizeLimit);
+    }
+}
+
+#[cfg(test)]
+mod impact_regressions {
+    use super::*;
+    #[test]
+    fn pixel_only_bundle_edit_is_distinct_from_stylesheet_and_font_changes() {
+        let registry = BundleRegistry::new();
+        registry
+            .register(
+                "demo",
+                vec![
+                    BundleEntryInput::new("view.css", b"body{color:red}".to_vec(), None),
+                    BundleEntryInput::new("icon.png", b"old".to_vec(), None),
+                    BundleEntryInput::new("text.ttf", b"oldfont".to_vec(), None),
+                ],
+            )
+            .unwrap();
+        let impact = registry.impact(
+            "demo",
+            Some(&[
+                BundleEntryInput::new("view.css", b"body{color:red}".to_vec(), None),
+                BundleEntryInput::new("icon.png", b"new".to_vec(), None),
+                BundleEntryInput::new("text.ttf", b"oldfont".to_vec(), None),
+            ]),
+        );
+        assert!(impact.images);
+        assert!(!impact.stylesheets && !impact.fonts && !impact.unknown);
+        let changed_font = registry.impact(
+            "demo",
+            Some(&[
+                BundleEntryInput::new("view.css", b"body{color:red}".to_vec(), None),
+                BundleEntryInput::new("icon.png", b"old".to_vec(), None),
+                BundleEntryInput::new("text.ttf", b"newfont".to_vec(), None),
+            ]),
+        );
+        assert!(changed_font.fonts && !changed_font.stylesheets);
     }
 }

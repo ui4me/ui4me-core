@@ -251,6 +251,7 @@ impl DocumentPipeline {
             caret_visible: true,
             caret_upstream: false,
             env_pending: false,
+            font_context_pending: false,
             reduced_motion: false,
             dark: false,
             committed: None,

@@ -1,0 +1,119 @@
+{
+  "schema": "ui4me-source-provenance/2",
+  "product": "UI4ME Core",
+  "version": "1.0.0-rc.1",
+  "recorded_utc": "2026-11-12T23:25:11.792240+00:00",
+  "reported_baseline_commit": "63e50dc",
+  "baseline_commit_source": "User-provided v0.2 qualification report. The supplied ZIP contains no Git metadata; ancestry is not independently verified here.",
+  "delivery_kind": "Complete source repository replacement candidate; preserve the existing local .git directory and private lab configuration when importing.",
+  "inputs": [
+    {
+      "file": "ui4me-core-main(1).zip",
+      "bytes": 7433204,
+      "sha256": "f442cf88c15c5c048c70dd8518b21cb43727f825af3574b3fe0f9a1f645c1507"
+    },
+    {
+      "file": "ui4me-core-capability-audit(1).xlsx",
+      "bytes": 53376,
+      "sha256": "edff7d60e084c58feda4861b550a4923493ad554c2fae702d8245ff92b2f9502"
+    }
+  ],
+  "audit": {
+    "rows": 125,
+    "dispositions": "docs/CAPABILITY_SCOPE.json",
+    "original_audit_text_retained": true
+  },
+  "dependency_policy": {
+    "upstream_package_identities_versions_sources_checksums_unchanged": true,
+    "lockfile_sha256": "7a6c65bebce2feb0145bf0f836b452aa25648726bcc5c54058fa6591cb2bbc75",
+    "workspace_packages_versioned": 5,
+    "note": "Feature selections and dependency edges change as documented. This does not assert a byte-identical Cargo.lock."
+  },
+  "preservation_checks": [
+    {
+      "path": "third_party/winit-wayland-0.31.0-beta.4",
+      "files": 39,
+      "byte_identical_to_supplied_v0_2": true
+    },
+    {
+      "path": "third_party/softbuffer-0.4.8",
+      "files": 29,
+      "byte_identical_to_supplied_v0_2": true
+    },
+    {
+      "path": "third_party/winit-win32-0.31.0-beta.4",
+      "files": 23,
+      "byte_identical_to_supplied_v0_2": true
+    },
+    {
+      "path": "third_party/accesskit_atspi_common-0.21.1/src/adapter.rs",
+      "files": 1,
+      "byte_identical_to_supplied_v0_2": true
+    },
+    {
+      "path": "patches/stylo/stylo",
+      "files": 391,
+      "byte_identical_to_supplied_v0_2": true
+    },
+    {
+      "path": "patches/taffy/taffy",
+      "files": 70,
+      "byte_identical_to_supplied_v0_2": true
+    },
+    {
+      "path": "crates/ui4me-host/src/backend.rs",
+      "files": 1,
+      "byte_identical_to_supplied_v0_2": true
+    },
+    {
+      "path": "crates/ui4me-host/src/transport.rs",
+      "files": 1,
+      "byte_identical_to_supplied_v0_2": true
+    },
+    {
+      "path": "crates/ui4me-host/src/lifecycle.rs",
+      "files": 1,
+      "byte_identical_to_supplied_v0_2": true
+    },
+    {
+      "path": "examples/python/client.py",
+      "files": 1,
+      "byte_identical_to_supplied_v0_2": true
+    },
+    {
+      "path": "crates/ui4me-host/src/config.rs",
+      "files": 1,
+      "byte_identical_to_supplied_v0_2": true
+    },
+    {
+      "path": "crates/ui4me-host/src/logging.rs",
+      "files": 1,
+      "byte_identical_to_supplied_v0_2": true
+    }
+  ],
+  "new_vendor_change": {
+    "path": "third_party/accesskit_atspi_common-0.21.1",
+    "patch": "third_party/accesskit_atspi_common-0.21.1/core-1.0-identity-selection.patch",
+    "purpose": "Manifest application identity, selected combo option exposure and active-descendant notifications. The existing adapter teardown file is byte-identical to the supplied baseline.",
+    "accesskit_windows_provider_patch_applied": false
+  },
+  "historical_evidence": {
+    "status": "docs/BASELINE_0.2_STATUS.md",
+    "provenance": "docs/SOURCE_PROVENANCE_0.2.json",
+    "source_manifest": "docs/SOURCE_FILES_0.2.sha256",
+    "qualification_rule": "Historical evidence qualifies only its original source and environment, not this candidate."
+  },
+  "current_evidence": "docs/verification/core-1.0-preparation/report.json",
+  "source_integrity": "docs/SOURCE_FILES.sha256",
+  "native_qualification": {
+    "linux_kde_wayland": "PENDING local installed-release qualification",
+    "windows_server_2022_rdp": "PENDING local installed-release qualification; prior independent UIA text-selection/read stall remains open"
+  },
+  "excluded_from_delivery": [
+    "Git metadata",
+    "Cargo build products and dependency caches",
+    "Private credentials and lab configuration",
+    "Transient verification output",
+    "Prebuilt platform executables"
+  ]
+}

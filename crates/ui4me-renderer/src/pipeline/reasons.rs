@@ -95,6 +95,8 @@ pub enum Reason {
     EnvironmentMedia,
     FontEpoch,
     ResourceEpoch,
+    /// An already-sized image changed pixels without changing its geometry.
+    ResourcePixels,
     Scroll,
     CaretSelectionPaint,
     AnimationTick,
@@ -150,7 +152,7 @@ const R: Stage = Stage::Raster;
 const A: Stage = Stage::Access;
 
 impl Reason {
-    pub const ALL: [Reason; 21] = [
+    pub const ALL: [Reason; 22] = [
         Reason::DomChildList,
         Reason::DomText,
         Reason::DomAttrClass,
@@ -165,6 +167,7 @@ impl Reason {
         Reason::EnvironmentMedia,
         Reason::FontEpoch,
         Reason::ResourceEpoch,
+        Reason::ResourcePixels,
         Reason::Scroll,
         Reason::CaretSelectionPaint,
         Reason::AnimationTick,
@@ -191,6 +194,7 @@ impl Reason {
             Reason::EnvironmentMedia => "ENVIRONMENT_MEDIA",
             Reason::FontEpoch => "FONT_EPOCH",
             Reason::ResourceEpoch => "RESOURCE_EPOCH",
+            Reason::ResourcePixels => "RESOURCE_PIXELS",
             Reason::Scroll => "SCROLL",
             Reason::CaretSelectionPaint => "CARET_SELECTION_PAINT",
             Reason::AnimationTick => "ANIMATION_TICK",
@@ -220,7 +224,7 @@ impl Reason {
             Reason::EnvironmentViewport | Reason::EnvironmentScale => SubjectKind::WindowOrDocument,
             Reason::EnvironmentMedia | Reason::ColdRebuild => SubjectKind::Document,
             Reason::FontEpoch => SubjectKind::FontFamilySet,
-            Reason::ResourceEpoch => SubjectKind::ResourceAndReferrers,
+            Reason::ResourceEpoch | Reason::ResourcePixels => SubjectKind::ResourceAndReferrers,
             Reason::Scroll => SubjectKind::ScrollContainer,
             Reason::CaretSelectionPaint => SubjectKind::ControlOrTextNode,
             Reason::AnimationTick => SubjectKind::AnimatingElement,
@@ -248,6 +252,7 @@ impl Reason {
             Reason::EnvironmentScale => set(&[R]),
             Reason::FontEpoch => set(&[S, L, P]),
             Reason::ResourceEpoch => set(&[L, P]),
+            Reason::ResourcePixels => set(&[P]),
             Reason::Scroll | Reason::CaretSelectionPaint => set(&[P]),
             Reason::AnimationCancel => StageSet::EMPTY,
             Reason::ContainerFacts | Reason::ColdRebuild => set(&[S, B, L, P]),
@@ -283,6 +288,7 @@ impl Reason {
             Reason::EnvironmentMedia => set(&[S]),
             Reason::FontEpoch => set(&[S, L, P]),
             Reason::ResourceEpoch => set(&[L, P]),
+            Reason::ResourcePixels => set(&[P]),
             Reason::Scroll | Reason::CaretSelectionPaint => set(&[P]),
             Reason::AnimationCancel => StageSet::EMPTY,
             // Restyle of the subtrees anchored by relative-selector flags.
@@ -295,7 +301,10 @@ impl Reason {
     /// one exists in principle (`widened: true` in the update record). Bookkeeping-only and cold
     /// rebuilds are not substitutes for anything.
     pub const fn is_widened_in_v1(self) -> bool {
-        !matches!(self, Reason::AnimationCancel | Reason::ColdRebuild)
+        !matches!(
+            self,
+            Reason::AnimationCancel | Reason::ColdRebuild | Reason::ResourcePixels
+        )
     }
 }
 

@@ -1,0 +1,29 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>C10</title>
+<style>
+@font-face{font-family:T;src:url(NotoSans-Regular.ttf)}
+@font-face{font-family:TL;src:url(NotoSans-Regular.ttf);font-feature-settings:'liga' 0}
+@font-face{font-family:Bitmap;src:url(UI4MEBitmapTest.ttf)}
+html,body{margin:0;background:#fff;color:#000;font:16px/20px T}
+.box{margin:6px 8px}
+.row{display:flex;width:350px;outline:1px solid #ccc}
+.row div{flex-grow:0;flex-shrink:0;min-width:0;width:200px;background:#def}
+#fb-min{flex-basis:min-content} #fb-max{flex-basis:max-content}
+#bal{text-wrap:balance;width:300px;background:#efe}
+#bw{width:90px;word-break:break-word;background:#fee}
+#sel{font:16px T}
+#rz{resize:both;width:140px;height:40px;direction:rtl}
+#sh{width:120px;height:50px;box-shadow:inset 6px 4px 0 2px #c33;border-radius:20px 6px 30px 10px / 10px 25px 6px 18px;background:#eef}
+#liga-off{font:40px/50px TL} #liga-on{font:40px/50px TL;font-feature-settings:'liga' 1}
+#png{font:32px/40px Bitmap;color:#000}
+</style></head><body>
+<div class="box"><div class="row"><div id="fb-min">hello hello</div></div></div>
+<div class="box"><div class="row"><div id="fb-max">hello hello</div></div></div>
+<div class="box"><p id="bal">Balanced wrapping keeps the lines of this short heading roughly equal in length <span id="bal-end">end</span></p></div>
+<div class="box"><div id="bw">Supercalifragilisticexpialidocious <span id="bw-end">x</span></div></div>
+<div class="box"><select id="sel"><option>Short</option><option>A much longer option label</option></select></div>
+<div class="box"><textarea id="rz">rtl</textarea></div>
+<div class="box"><div id="sh"></div></div>
+<div class="box"><span id="liga-off">office affinity</span></div>
+<div class="box"><span id="liga-on">office affinity</span></div>
+<div class="box"><span id="png">&#xE000;</span> <span id="png-end">|</span></div>
+</body></html>

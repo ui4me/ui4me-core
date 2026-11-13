@@ -1,0 +1,29 @@
+{
+  "check": "C04",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T10:03:59.915066+00:00",
+  "build_identity": {
+    "host": "/home/toor/.cargo/bin/ui4me-host",
+    "host_sha256": "c70346ba412e8348cb6cbbd9fd322128df9bec12accff10d4b26c26fd6dd3146",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "02bf81e422eb060d53abd5e9235fb85f5a23d1ed806d696294e77056ab939aac",
+    "base_commit": "ca348d9",
+    "os": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+    "desktop": "KDE",
+    "session": "wayland",
+    "user": "toor"
+  },
+  "actions": [
+    "UTF-16 selection/replace/undo/redo; split-surrogate rejection; keyboard grapheme navigation/deletion; readonly and beforeinput-cancelled fields (typing, paste, programmatic); fcitx5 pinyin in text/email/textarea/password/readonly; programmatic focus; focus change mid-composition; Escape"
+  ],
+  "expected": "Correct UTF-16/grapheme editing, history, cancellation and real IME",
+  "observed": "Selections round-trip with direction; split offsets rejected with state unchanged; replace + undo/redo exact; caret stops 1,2,4,5,6,8,9; Backspace/Delete remove whole graphemes; cancel-field rejects typing/paste/programmatic replace (beforeinput default_prevented); pinyin commits 你好 in text/email/textarea; password keeps the IME off; readonly unchanged; programmatic focus enables the IME; focus change keeps \"zhong\" in t2 and the next composition goes to mail (\"问\"); Escape cancels",
+  "limitations": [
+    "A composition interrupted by a focus change stays in its own field (browser behaviour, required by the finish instructions)"
+  ],
+  "evidence_files_sha256": {
+    "c-suite.txt": "d1864c1878248be2c220e8b4c0b10811cc079fe6b0ba933f487d6419a4ff2940",
+    "C04-after-ime.png": "1c4d0aa0be812715089c5f6b62b728b54cbe17bda62edaa4db26c24c43077582",
+    "C04-preedit-t2.png": "9be5fab21be836a63824191bfdf86b024c744d36b098b870ba13218c8f66dcf8"
+  }
+}

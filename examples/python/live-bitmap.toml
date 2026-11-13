@@ -1,0 +1,15 @@
+[app]
+id = "org.ui4me.LiveBitmapDemo"
+name = "UI4ME Live Graphics"
+version = "1.0.0"
+
+[backend]
+program = "python3"
+args = ["{app_dir}/live_bitmap_demo.py"]
+cwd = "{app_dir}"
+
+[host]
+startup_timeout_ms = 30000
+shutdown_timeout_ms = 5000
+max_windows = 16
+instance = "single"

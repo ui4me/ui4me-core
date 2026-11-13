@@ -1,5 +1,6 @@
 //! Host controller. The GUI thread owns every window and policy transition.
 //! Workers can only send bounded messages back to this controller.
+mod bitmap;
 #[cfg(test)]
 mod document_integration_tests;
 mod document_native;
@@ -48,7 +49,11 @@ struct NativeWindow {
     drag_selecting: bool,
     /// Whether a frame has been presented (logged once for startup timing).
     presented: bool,
+    /// When the compositor last resized the surface and no frame of that
+    /// size has been presented yet (debug-level resize-to-present timing).
+    resized_at: Option<Instant>,
     pointer: (f64, f64),
+    last_titlebar_press: Option<(Instant, f64, f64)>,
     document_epoch: Option<String>,
     composing: bool,
     ime_resets: u64,
@@ -110,6 +115,7 @@ struct WindowRecord {
     height: u32,
     visible: bool,
     resizable: bool,
+    decorations: bool,
     limits: requests::WindowLimits,
     probe: Probe,
     document: Option<HostedDocument>,
@@ -1268,6 +1274,7 @@ mod tests {
                 height: 500,
                 visible: true,
                 resizable: true,
+                decorations: true,
                 limits: requests::WindowLimits::default(),
                 probe: Probe::default(),
                 document: None,

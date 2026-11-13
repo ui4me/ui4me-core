@@ -1,36 +1,41 @@
-# UI4ME Core 1.0 candidate
+# UI4ME Core 1.0.0 — Native HTML/CSS desktop applications
 
-Build native desktop applications from **local HTML, CSS and Python**. Rust owns
-the native window, application lifecycle, rendering, editing and OS services.
-Python owns application logic in a supervised process. No browser, JavaScript,
-HTTP server, Qt runtime or embedded Python interpreter is included in the host.
+Python programs control normal local HTML/CSS desktop windows through a separate
+Rust-owned native host. **Release 1.0.0 is qualified for Linux: Debian 13, KDE
+Plasma 6.3, native Wayland**, as an installed release binary and as a Python
+wheel. The qualification record, measurements and remaining limits are in
+[docs/STATUS.md](docs/STATUS.md). Windows sources remain in the tree; Windows
+qualification is a later, separate stage. Nothing is published automatically.
 
-This repository is **1.0.0-rc.1**, the implementation candidate for the finite
-completion scope in [CORE_1.0_SPEC](docs/CORE_1.0_SPEC.md). It builds on the
-supplied 0.2 code and preserves the existing native fixes. Both Linux and Windows
-code, the Python API, examples, tests, audit dispositions and autonomous local
-completion prompt are included.
+## Install the Python package (Linux x86_64)
 
-**Status: Linux/KDE Plasma Wayland checkpoint.** The automated gates and the
-N01–N15, R01–R12 and C01–C12 native scenarios were run on Debian 13 / KDE
-Plasma 6.3 Wayland with the installed release host; the defects they exposed are
-fixed in this tree. **Windows Server 2022 qualification has not been run for this
-candidate**, and the Windows UI Automation selection stall from 0.2 remains open
-until it is diagnosed there. See [STATUS](docs/STATUS.md) for evidence, open
-findings and remaining gates.
+The wheel contains the pure-Python client (`ui4me_core`) and the compiled
+`ui4me-host` executable; installing it needs no Rust toolchain. It is tagged
+`py3-none-manylinux_2_34_x86_64` (glibc 2.34+) and works with any Python 3.10+.
 
-## Start here
+```sh
+python3 -m venv ~/.venvs/ui4me && ~/.venvs/ui4me/bin/pip install ui4me_core-1.0.0-*.whl
+~/.venvs/ui4me/bin/ui4me-host --version
+~/.venvs/ui4me/bin/ui4me-host doctor
+```
 
-1. Extract into the existing repository, preserving its Git directory, local
-   configuration and history.
-2. Give the local agent [LOCAL_FINISH_PROMPT.md](LOCAL_FINISH_PROMPT.md).
-3. It qualifies Python/Linux KDE first and commits and pushes, then Windows
-   Server 2022 and commits and pushes, then performs final common-source
-   stabilization and the final commit and push.
+```python
+from ui4me_core import Application
+```
 
-The prompt authorizes debugging and fixes without handing feature development
-back to the user. It cannot turn unexecuted scenarios into passes. The public
-1.0 version is set after release gates, not merely after unzipping.
+Build the sdist, a local wheel and a repaired manylinux wheel as described in
+[docs/release/BUILDING_LINUX.md](docs/release/BUILDING_LINUX.md).
+
+## Live pixels and custom title bars
+
+* `<img src="ui4me-bitmap://NAME">` displays a live RGBA8 surface created with
+  `document.create_bitmap(NAME, width, height)`; `present()`/`try_present()`
+  hand over whole frames through a private, bounded, host-owned mapping (no
+  JSON pixels, no image encoding). Same-size frames repaint without style or
+  layout. See [examples/python/live_bitmap_demo.py](examples/python/live_bitmap_demo.py).
+* `decorations=False` windows mark HTML regions with `data-ui4me-drag` (native
+  move, double-click maximize/restore) and `data-ui4me-resize="n|s|e|w|ne|nw|se|sw"`
+  (native resize). Interactive controls inside a drag region stay ordinary controls.
 
 ## Build and run
 
@@ -49,18 +54,9 @@ Omit `--install-system` if prerequisites are installed. Run as the logged-in
 user with that desktop's D-Bus and portal services. Linux supervision uses a
 systemd user service. There is no automatic X11 fallback.
 
-### Windows Server 2022, Desktop Experience
+### Windows (deferred)
 
-From PowerShell in the normal test user's interactive RDP session:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File tools/bootstrap_windows.ps1
-python tools/run_renderer.py
-```
-
-Administrative provisioning is separate from normal-user application execution.
-SSH can launch tasks into an existing interactive session using the supplied
-helpers. An SSH logon alone does not qualify desktop behavior.
+The Windows sources and adapter contracts remain in the tree. No Windows development, build or native qualification is part of the final Linux stage. Windows begins only after the Linux release is locked.
 
 ### Install a standalone app
 
@@ -70,14 +66,6 @@ Choose a **new or empty** application destination:
 python3 tools/install.py --example-dir ~/.local/share/ui4me-core1-reference
 python3 tools/create_launcher.py install --app ~/.local/share/ui4me-core1-reference/app.toml
 ui4me-host run --app ~/.local/share/ui4me-core1-reference/app.toml
-```
-
-PowerShell equivalent:
-
-```powershell
-python tools/install.py --example-dir "$env:LOCALAPPDATA\ui4me-core1-reference"
-python tools/create_launcher.py install --app "$env:LOCALAPPDATA\ui4me-core1-reference\app.toml"
-ui4me-host run --app "$env:LOCALAPPDATA\ui4me-core1-reference\app.toml"
 ```
 
 The installer builds the release host and copies the complete HTML/CSS/Python
@@ -99,8 +87,7 @@ with Application.from_environment() as app:
     app.run()
 ```
 
-Copy `client.py` and `application.py` alongside application logic and launch it
-through an app manifest. The reference app also uses `completion_checks.py`
+For development you may copy `client.py` and `application.py` alongside an app. The publishable Python package instead provides `from ui4me_core import Application`. Launch through an application manifest. The reference app also uses `completion_checks.py`
 for automated verification; the installer copies it.
 
 The facade covers editing/selection/undo, forms/validity, stable node handles,

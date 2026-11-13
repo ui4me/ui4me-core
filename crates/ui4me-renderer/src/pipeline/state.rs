@@ -415,6 +415,9 @@ pub struct DocumentPipeline {
     /// The environment changed since the last publication: the next update restyles against a
     /// fresh stylist (media/viewport units) and rebuilds layout and scene (005 P-C1 / AB).
     pub(crate) env_pending: bool,
+    /// Font-source/face changes require a fresh text collection; viewport, DPI,
+    /// colour scheme and reduced motion do not.
+    pub(crate) font_context_pending: bool,
     /// The document's `prefers-reduced-motion: reduce` preference (006 P-006-1); set through
     /// [`DocumentPipeline::set_reduced_motion`], default no-preference.
     pub(crate) reduced_motion: bool,

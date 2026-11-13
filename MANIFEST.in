@@ -1,0 +1,22 @@
+include LICENSE README.md THIRD_PARTY_NOTICES.md Cargo.toml Cargo.lock rust-toolchain.toml .gitignore
+# Build inputs include extensionless files (e.g. pinned SHA256SUMS manifests,
+# generated-code inputs, vendored crate metadata): take whole trees.
+graft crates
+graft patches
+graft third_party
+graft python
+graft examples
+graft tools
+recursive-include docs *.md *.json *.csv *.txt *.svg *.png *.sha256
+recursive-include .github/workflows *.yml *.yaml
+prune target
+prune .git
+prune verification
+prune dist
+prune dist-manylinux
+prune build
+prune .venv
+prune .local
+prune evidence
+prune python/ui4me_core.egg-info
+global-exclude __pycache__ *.pyc *.pyo *.pem *.key *.secret *.log *.credentials.json *.local.json *.egg-info

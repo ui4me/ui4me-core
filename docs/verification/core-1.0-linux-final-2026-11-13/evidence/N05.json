@@ -1,0 +1,30 @@
+{
+  "check": "N05",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T09:48:01.852542+00:00",
+  "build_identity": {
+    "host": "/home/toor/.cargo/bin/ui4me-host",
+    "host_sha256": "c70346ba412e8348cb6cbbd9fd322128df9bec12accff10d4b26c26fd6dd3146",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "02bf81e422eb060d53abd5e9235fb85f5a23d1ed806d696294e77056ab939aac",
+    "base_commit": "ca348d9",
+    "os": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+    "desktop": "KDE",
+    "session": "wayland",
+    "user": "toor"
+  },
+  "actions": [
+    "F3 + Escape; F3 + Unicode path; F4 + path; F5 + Escape; F3 then F7 from the second window; F3 then parent close; F5 then Ctrl+Q"
+  ],
+  "expected": "Native open/save/folder dialogs: select, cancel, parent-close and quit races",
+  "observed": "Open/Save transient+modal for the probe; cancel -> cancelled; selection and save paths exact (Unicode); F7 cancelled the dialog; parent close -> -32004 and dialog withdrawn; Ctrl+Q with the folder chooser open exited 0 in 0.34 s, chooser gone",
+  "limitations": [
+    "KDE folder chooser is not parented (known since 0.1)"
+  ],
+  "evidence_files_sha256": {
+    "probe-suite.txt": "42c749d9c2e21ec88f3a18278f2683ca953ebe09b4ace76a5042f39b4811f897",
+    "N05-probe-run.log": "bcb674b3f1c6eaa66e9b9fe9a5d1a3e73b49f5f7644e54a6325c37ea31b3c7da",
+    "N05-open-dialog.png": "7d3f492f2ad6bd7438d962e3a5007bbbcde22ee17566bece7a1a44d2ad93b0ad",
+    "N05-folder-dialog.png": "bcc168e71e4a22142745375b1b57c07b737c240fab91aa0d854aa3a026a394da"
+  }
+}

@@ -57,7 +57,7 @@ def main():
         if args.evidence:
             args.evidence.parent.mkdir(parents=True, exist_ok=True)
             args.evidence.write_text(json.dumps({
-                "schema": 1, "version": "1.0.0-rc.1", "time_utc": datetime.now(timezone.utc).isoformat(),
+                "schema": 1, "version": "1.0.0", "time_utc": datetime.now(timezone.utc).isoformat(),
                 "native_desktop_qualified": False,
                 "mode": "headless" if args.headless_verify else "native-smoke" if args.native_verify else "interactive",
                 "results": results,

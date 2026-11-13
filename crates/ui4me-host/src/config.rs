@@ -153,7 +153,19 @@ impl AppConfig {
             if !resolved.is_file() {
                 bail!("backend.program is not a file");
             }
-            resolved
+            // Spawn through the path the manifest names. A virtual
+            // environment's interpreter is a symlink whose own location
+            // (next to pyvenv.cfg) selects the environment; executing the
+            // resolved target would run the base interpreter without the
+            // application's installed packages (e.g. the ui4me-core wheel).
+            #[cfg(unix)]
+            {
+                candidate
+            }
+            #[cfg(not(unix))]
+            {
+                resolved
+            }
         } else {
             // Command resolves a single component through PATH. Do not join it
             // with the manifest directory, or a normal `python3` would break.
@@ -338,6 +350,34 @@ mod tests {
 
     fn manifest() -> &'static str {
         "[app]\nid='org.ui4me.Probe'\nname='Host probe'\n[backend]\nprogram='python3'\nargs=['{app_dir}/backend.py', 'literal $HOME $(ignored)']\n"
+    }
+
+    /// A manifest naming a virtual environment's `bin/python` must run that
+    /// path, not the interpreter the symlink resolves to; otherwise the app
+    /// loses its venv (and the installed `ui4me_core` package).
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_backend_program_keeps_the_named_path() {
+        let directory = tempfile::tempdir().unwrap();
+        let base = directory.path().canonicalize().unwrap();
+        std::fs::write(base.join("real-python"), b"").unwrap();
+        std::fs::create_dir_all(base.join("venv/bin")).unwrap();
+        std::os::unix::fs::symlink(base.join("real-python"), base.join("venv/bin/python")).unwrap();
+        let config = AppConfig::from_toml(
+            "[app]\nid='org.ui4me.Venv'\nname='Venv app'\n[backend]\nprogram='{app_dir}/venv/bin/python'\n",
+            &base,
+        )
+        .unwrap();
+        assert_eq!(config.backend.program, base.join("venv/bin/python"));
+        // A dangling program is still rejected before launch.
+        std::fs::remove_file(base.join("real-python")).unwrap();
+        assert!(
+            AppConfig::from_toml(
+                "[app]\nid='org.ui4me.Venv'\nname='Venv app'\n[backend]\nprogram='{app_dir}/venv/bin/python'\n",
+                &base,
+            )
+            .is_err()
+        );
     }
 
     #[test]

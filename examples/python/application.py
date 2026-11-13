@@ -47,11 +47,12 @@ class Application:
         return cls(RpcClient.from_environment(ordered_notifications=True))
 
     def create_window(self, *, title: str = "UI4ME", width: int = 900,
-                      height: int = 600, visible: bool = True,
+                      height: int = 600, visible: bool = True, decorations: bool = True,
                       min_width: int | None = None, min_height: int | None = None,
                       max_width: int | None = None, max_height: int | None = None) -> Window:
         options = {
             "title": title, "width": width, "height": height, "visible": visible,
+            "decorations": decorations,
         }
         for key, value in (("min_width", min_width), ("min_height", min_height),
                            ("max_width", max_width), ("max_height", max_height)):
@@ -293,6 +294,7 @@ class Document:
         self.window, self.id = window, document_id
         self._retired = False
         self._handlers: list[tuple[str, str | None, Callable[[dict], Any]]] = []
+        self._bitmaps: list[Any] = []
         self._lock = threading.RLock()
 
     def _check(self) -> None:
@@ -303,6 +305,17 @@ class Document:
         with self._lock:
             self._retired = True
             self._handlers.clear()
+            for bitmap in list(self._bitmaps):
+                bitmap.close()
+
+    def create_bitmap(self, bitmap_id: str, width: int, height: int, *, slots: int = 2):
+        """Create a bounded live image for ``<img src="ui4me-bitmap://ID">``.
+
+        Use the returned object's synchronous ``present`` or nonblocking
+        ``try_present``. The host keeps geometry stable across same-sized frames.
+        """
+        from live_bitmap import LiveBitmap
+        return LiveBitmap(self, bitmap_id, width, height, slots=slots)
 
     def command(self, op: str, **fields) -> Any:
         self._check()

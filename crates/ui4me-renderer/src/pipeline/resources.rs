@@ -38,6 +38,7 @@ use ui4me_document::document::Document;
 use ui4me_engine_types::codes_generated::Code;
 use ui4me_engine_types::ids::{DocumentId, NodeId};
 use ui4me_engine_types::resource_ids::ResourceRef;
+use ui4me_engine_types::stage::Stage;
 use ui4me_engine_types::status::Status;
 
 /// The runtime-wide manager, shared by every document's [`PipelineResources`]. Every method of the
@@ -70,6 +71,10 @@ struct State {
     viewport: (f32, f32),
     /// The `ImageData` handed to the scene per request, rebuilt when the pixels change.
     images: HashMap<ResourceRef, Cached>,
+    /// Raw application-provided frames, keyed by a stable document-local
+    /// surface name. They do not enter image decoders, URL fetching or bundle
+    /// version caches; replacing a frame only changes the image scene.
+    live: HashMap<String, Arc<ImageData>>,
     /// The request of each `<img>` element that asked for its image.
     img_refs: HashMap<NodeId, ResourceRef>,
     /// The request of each CSS image (`list-style-image`, `content: url()`, backgrounds) by
@@ -216,6 +221,7 @@ impl PipelineResources {
                 scale: 1.0,
                 viewport: (800.0, 600.0),
                 images: HashMap::new(),
+                live: HashMap::new(),
                 img_refs: HashMap::new(),
                 css_refs: HashMap::new(),
                 sized: HashMap::new(),
@@ -224,6 +230,76 @@ impl PipelineResources {
                 inline_last: HashMap::new(),
             })),
         }
+    }
+
+    /// Install an already-decoded RGBA8 frame. `pixels` are owned, premultiplied
+    /// and tightly packed. The size is fixed by the host's bitmap-creation API.
+    /// Caller invalidates the scene, not CSS or layout, for subsequent frames.
+    pub fn set_live_bitmap(
+        &self,
+        name: &str,
+        width: u32,
+        height: u32,
+        pixels: Arc<[u8]>,
+    ) -> Result<bool, Status> {
+        if name.is_empty()
+            || name.len() > 64
+            || !name
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+        {
+            return Err(Status::new(Code::InvalidArgument, Stage::Resource)
+                .with_message("bitmap identifier must be 1..64 ASCII letters, digits, _ or -"));
+        }
+        let expected = u64::from(width)
+            .checked_mul(u64::from(height))
+            .and_then(|n| n.checked_mul(4))
+            .ok_or_else(|| Status::new(Code::SizeLimit, Stage::Resource))?;
+        if expected == 0 || expected as usize != pixels.len() || expected > 64 * 1024 * 1024 {
+            return Err(Status::new(Code::SizeLimit, Stage::Resource).with_message(
+                "live bitmap must contain at most 64 MiB of tightly packed RGBA8 pixels",
+            ));
+        }
+        let mut s = lock(&self.state);
+        let replaced = s.live.contains_key(name);
+        if !replaced && s.live.len() >= 8 {
+            return Err(Status::new(Code::SizeLimit, Stage::Resource)
+                .with_message("at most 8 live bitmap surfaces per document"));
+        }
+        s.next_id += 1;
+        let id = s.next_id;
+        s.live.insert(
+            name.to_owned(),
+            Arc::new(ImageData {
+                id,
+                natural: (Some(width as f32), Some(height as f32)),
+                ratio: Some(width as f32 / height as f32),
+                pixels: ImagePixels {
+                    width,
+                    height,
+                    data: pixels,
+                },
+                vector: None,
+            }),
+        );
+        Ok(replaced)
+    }
+
+    pub fn remove_live_bitmap(&self, name: &str) -> bool {
+        lock(&self.state).live.remove(name).is_some()
+    }
+
+    fn live_bitmap(&self, reference: &str) -> Option<ImageLookup> {
+        let key = reference.strip_prefix("ui4me-bitmap://")?;
+        // A matching reference has a fixed identity and never reaches the
+        // regular resource manager; no disk/network or image decode happens.
+        Some(
+            lock(&self.state)
+                .live
+                .get(key)
+                .map(|data| ImageLookup::Ready(data.clone()))
+                .unwrap_or(ImageLookup::Pending),
+        )
     }
 
     pub fn document(&self) -> DocumentId {
@@ -368,6 +444,34 @@ impl PipelineResources {
         Some(self.manager().natural_size(&r))
     }
 
+    /// The layout view of an `<img>` in `doc`: a `ui4me-bitmap://` source is
+    /// sized from its live surface (it never becomes a resource request, so
+    /// the request table has no entry for it); anything else is
+    /// [`Self::image_element_state`].
+    pub fn image_element_state_in(&self, doc: &Document, node: NodeId) -> Option<ImageState> {
+        if let Ok(Some(src)) = doc.get_attribute(node, "src")
+            && let Some(state) = self.live_image_state(src)
+        {
+            return Some(state);
+        }
+        self.image_element_state(node)
+    }
+
+    /// Natural size of a live surface reference: `Ready` with the surface's
+    /// pixel size, `Pending` while no surface of that name exists, `None` for
+    /// any other URL.
+    fn live_image_state(&self, reference: &str) -> Option<ImageState> {
+        let key = reference.trim().strip_prefix("ui4me-bitmap://")?;
+        Some(match lock(&self.state).live.get(key) {
+            Some(data) => ImageState::Ready {
+                width_css: data.natural.0,
+                height_css: data.natural.1,
+                ratio: Some((data.pixels.width as f32, data.pixels.height as f32)),
+            },
+            None => ImageState::Pending,
+        })
+    }
+
     /// 007's natural-size view of a CSS image already requested by the scene stage under
     /// (`node`, `property`) (`None` before its first request: layout then treats it as pending).
     pub fn css_image_state(&self, node: NodeId, property: &str) -> Option<ImageState> {
@@ -385,6 +489,9 @@ impl PipelineResources {
     /// `lookup` for a `srcset` selection: `density` is the density of the selected candidate (the
     /// natural size is the pixel size divided by it).
     fn lookup_at(&self, requester: Requester, reference: &str, density: f32) -> ImageLookup {
+        if let Some(image) = self.live_bitmap(reference) {
+            return image;
+        }
         let base = lock(&self.state).base.clone();
         let img_node = if let Requester::ImgElement(n) = &requester {
             Some(*n)
@@ -582,6 +689,9 @@ impl ImageSource for PipelineResources {
     }
 
     fn img_element(&self, node: NodeId, src: &str) -> ImageLookup {
+        if let Some(image) = self.live_bitmap(src) {
+            return image;
+        }
         self.lookup(Requester::ImgElement(node), src)
     }
 
@@ -603,6 +713,9 @@ impl ImageSource for PipelineResources {
         srcset: Option<&str>,
         sizes: Option<&str>,
     ) -> Option<ImageLookup> {
+        if let Some(image) = src.and_then(|reference| self.live_bitmap(reference)) {
+            return Some(image);
+        }
         let env = self.source_env();
         let list: Vec<PictureSource<'_>> = sources
             .iter()
@@ -682,19 +795,36 @@ impl DocumentPipeline {
     /// (007 `BundleChange::affected`): linked sheets and `@import`s are read again at the next
     /// update, the resource epoch advances once and the next update restyles, relays out and
     /// repaints (`RESOURCE_EPOCH`, `COLD_REBUILD`; the request serial 0 stands for the bundle). Images from the bundle restart in 007 and arrive as ordinary batches.
-    pub fn apply_bundle_change(&mut self) -> Result<(), Status> {
+    pub fn apply_bundle_change(
+        &mut self,
+        impact: ui4me_assets::bundles::BundleImpact,
+    ) -> Result<(), Status> {
         self.check_open()?;
-        self.style.reload_linked_sheets();
-        self.resource_epoch += 1;
-        // The cascade reads the sheets: restyle too (as `attach_resources`), not only L and P.
-        self.dirty.note(
-            crate::pipeline::reasons::Reason::ResourceEpoch,
-            crate::pipeline::reasons::Subject::Resource(0),
-        );
-        self.note_input_reason(
-            crate::pipeline::reasons::Reason::ColdRebuild,
-            crate::pipeline::reasons::Subject::Document,
-        );
+        if impact.is_empty() {
+            return Ok(());
+        }
+        if impact.stylesheets || impact.unknown {
+            self.style.reload_linked_sheets();
+            // The CSS cascade may change across an imported stylesheet. A cold
+            // pass is necessary here, but not for a changed PNG's pixels.
+            self.note_input_reason(
+                crate::pipeline::reasons::Reason::ColdRebuild,
+                crate::pipeline::reasons::Subject::Document,
+            );
+        }
+        if impact.fonts {
+            // Face URLs are unchanged, but their contents aren't: the manager
+            // invalidates and re-requests their loaded state before this call.
+            let families = self
+                .exported_faces
+                .iter()
+                .map(|f| f.family.clone())
+                .collect();
+            self.note_font_epoch_changed(families)?;
+        }
+        // Image requests are restarted by ResourceManager and produce a
+        // properly classified AppliedBatch when new pixels arrive. Do not
+        // invent a layout or cascade change before that completion.
         Ok(())
     }
 
@@ -716,8 +846,20 @@ impl DocumentPipeline {
             ));
         }
         let ids: Vec<u64> = batch.changed.iter().map(|r| r.request.serial).collect();
-        self.apply_resource_completions(&ids)?;
-        Ok(!ids.is_empty())
+        if ids.is_empty() {
+            return Ok(false);
+        }
+        let paint_only = batch.intrinsic_size.is_empty()
+            && ids.len() == batch.paint_only.len()
+            && ids
+                .iter()
+                .all(|id| batch.paint_only.iter().any(|r| r.request.serial == *id));
+        if paint_only {
+            self.apply_resource_pixels(&ids)?;
+        } else {
+            self.apply_resource_completions(&ids)?;
+        }
+        Ok(true)
     }
 }
 

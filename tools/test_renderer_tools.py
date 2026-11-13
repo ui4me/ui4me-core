@@ -53,8 +53,10 @@ class SourceIdentityTests(unittest.TestCase):
             (root / "source.rs").write_text("source", encoding="utf-8")
             with patch.object(native_acceptance, "ROOT", root):
                 original = native_acceptance.source_identity()
-                for folder in ("verification", "docs", "target", ".git", "__pycache__"):
-                    (root / folder).mkdir()
+                # Reports and build outputs (Cargo, setuptools, wheel builds) are not source.
+                for folder in ("verification", "docs", "target", ".git", "__pycache__", "build",
+                               "dist", "dist-manylinux", "python/ui4me_core.egg-info"):
+                    (root / folder).mkdir(parents=True)
                     (root / folder / "result").write_text("new evidence", encoding="utf-8")
                 self.assertEqual(native_acceptance.source_identity(), original)
                 (root / "source.rs").write_text("changed executable source", encoding="utf-8")

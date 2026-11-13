@@ -1,189 +1,131 @@
-# UI4ME Core 1.0.0-rc.1 — status
+# UI4ME Core 1.0.0 — Linux release status
 
-**Linux/KDE Plasma Wayland checkpoint qualified; Windows Server 2022 not yet run.**
-On 2026-11-13 the candidate passed the full automated verifier, Clippy and all
-N01–N15, R01–R12 and C01–C12 native scenarios on Debian 13 / KDE Plasma 6.3
-(native Wayland) with the installed release host
-(`fc422be508059785022d3937d277e51d14e80be4f3731a47fdfff6828bdecc33`, source
-commit `d94ecfc`). Seven product defects found by those scenarios are fixed in
-this tree. Evidence, measurements and open findings:
-[core-1.0-linux-2026-11-13](verification/core-1.0-linux-2026-11-13/README.md).
+**Release decision (2026-11-13): READY for Linux (Debian 13 / KDE Plasma 6.3 / native Wayland).**
+All Linux release gates passed on the final, unchanged source. Nothing has been published:
+PyPI upload and a GitHub Release remain a separate, manual decision. Windows sources are in
+the tree; Windows qualification has not started and is the next stage.
 
-**Windows qualification is pending** (stage 2 of `LOCAL_FINISH_PROMPT.md`). The
-0.2 Windows UI Automation selection stall remains an open blocker, and every
-shared-code fix made here still needs Windows verification. The version stays
-`1.0.0-rc.1`; no final release gate has been passed.
+## Final identities
 
-### Linux checkpoint summary
-
-| Gate | Result |
+| Item | Value |
 | --- | --- |
-| `tools/verify.py` (fmt, check, test, python, headless, renderer IPC, faults) | PASS; Rust 1,085 passed / 0 failed / 11 pre-existing ignored, nothing filtered |
-| Clippy, all targets, `-D warnings` | PASS |
-| Native ledgers (installed host) | host 15/15, renderer 12/12, completion 12/12 PASS, each with its automated subset |
-| Browser oracle | R12 4/4 PASS; C10 focused fixtures match Chromium geometry |
-| Measurements | ready median 569 ms, idle host 0.22 % CPU, 59.6 MB host+backend PSS; DOM churn flat |
+| Product version | `1.0.0` (Cargo workspace, Python metadata, examples) |
+| Base commit | `ca348d9` (RC1 Linux checkpoint) + supplied final source + the fixes below |
+| Ledger source identity (`tools/native_acceptance.py`) | `02bf81e422eb060d53abd5e9235fb85f5a23d1ed806d696294e77056ab939aac` |
+| Installed host | `~/.cargo/bin/ui4me-host` 1.0.0, 41,039,744 bytes, SHA-256 `c70346ba412e8348cb6cbbd9fd322128df9bec12accff10d4b26c26fd6dd3146` |
+| Source distribution | `ui4me_core-1.0.0.tar.gz`, 6,919,087 bytes, SHA-256 `0654251dc76c3a0f15e911de851534ef26390ce3714bbdd9146725ed0e0d50cd` |
+| Repaired wheel (public candidate) | `ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl`, 16,316,258 bytes, SHA-256 `94789932dbbff719b310b4aa78efd7c2a17b3be98b2ec4fcf1d474e570f6b402` |
+| Local wheel (not for PyPI) | `ui4me_core-1.0.0-py3-none-linux_x86_64.whl`, 16,314,988 bytes, SHA-256 `80edb21c7d371655468ff5653620be4b36ded8d0887dce77d52f31f67b2625fe` |
+| Toolchain | Rust 1.99.1 (pinned), Cargo.lock unchanged by this stage |
+| Platform | Debian 13.7, kernel 6.12.116, KDE Plasma 6.3.6 / KWin native Wayland, normal user, physical HDMI monitor 2048x1080 (scale 1; 1.5 and 2 tested), uinput keyboard/pointer for scripted input, fcitx5 pinyin + us-intl (temporary), AT-SPI 2.56.2, Orca 48.1 |
 
-Defects fixed during this checkpoint: keyboard-only Wayland clipboard
-(winit-wayland seat patch), dropdown options/value missing from AT-SPI, node
-references aliasing across replaced documents, dark UA control colors on pages
-without `color-scheme` (Stylo P-006-20), decoded rasters retained after bundle
-replacement or image removal, animations surviving removal of their stylesheet,
-and AT-SPI table/tree/live/relationship metadata (accesskit_atspi_common patch).
+Artifacts were built with `tools/release/build_linux.sh` (sdist, then the wheel built *from*
+the sdist) and the checked-in manylinux workflow reproduced locally with `cibuildwheel` in
+`quay.io/pypa/manylinux_2_34_x86_64`, again from the sdist, followed by `auditwheel repair`.
 
-Open findings, reported rather than closed: a residual ~17–19 KiB host PSS
-growth per replacement of a *displayed* resource-bundle image (unattributed);
-and the C04 wording about preedits on focus change versus the retained,
-browser-like behavior of keeping the composed text in its own field. Both are
-detailed in the checkpoint README.
+## Gates (final source)
 
-The supplied 0.2 source is the baseline (reported commit `63e50dc`, verified as
-the repository ancestor). The previous report is
-[BASELINE_0.2_STATUS.md](BASELINE_0.2_STATUS.md). Historical results qualify
-only their original source and environments.
+* `tools/verify.py` — fmt, check, test, python, headless, renderer, faults: **all PASS**.
+  Rust: **1,093 passed, 0 failed**, 11 pre-existing ignored harnesses, nothing filtered
+  (real Unix sockets and processes). Python: 57 run, 2 Windows-only skips.
+* `cargo clippy --locked --workspace --all-targets -- -D warnings`: clean.
+* Native ledgers on the installed binary, each `qualification: PASS` including its automated
+  subset: host **N01–N15**, renderer **R01–R12**, completion **C01–C12**.
+* Final-binary RC2 scenarios: frameless title bar drag / double-click maximize-restore /
+  buttons excluded from dragging, all 8 native resize directions, left/right/middle button
+  semantics, live bitmap (≥1,000 frames at 64x64, 320x200 and 1024x768, newest-frame on
+  screen, ordering, error and budget semantics, overload dropping, teardown), bundle image and
+  same-URL font replacement, scale 1/1.5/2, close veto, resize/animation/bitmap cost.
+* Distribution: `twine check` PASS, `tools/release/verify_linux_artifact.py` PASS
+  (`py3-none` tag, root layout, license files, no local-only/VCS/cache/credential files),
+  `auditwheel show`: consistent with `manylinux_2_34_x86_64` (only libc/libm/libgcc_s,
+  max `GLIBC_2.34`). The sdist matches the tree file-for-file (1,473 files).
+* Clean installs without any Rust build (`pip install --no-index --only-binary :all:`) into
+  fresh venvs outside the repository with CPython 3.10.22, 3.12.16 and 3.13.5: `pip check`
+  clean, `import ui4me_core`, `ui4me-host --version`, `ui4me-host doctor`, installed smoke
+  test; the live-bitmap example ran on the wheel's packaged host; an independent consumer
+  app (own directory, manifest naming the venv's `bin/python`) presented 120 live frames and
+  exited 0.
+* `cargo deny check advisories`: no vulnerabilities, unsound or yanked crates; four
+  *unmaintained* notices (`ttf-parser`, `zbus_names`, `zvariant`, `zvariant_derive`). Their
+  only remedy is the zbus 6 migration of the pinned AccessKit/portal stack — a maintenance
+  item, not a security fix, so it was not upgraded speculatively.
+* Licenses: the 380 Rust packages linked into the host are MIT/Apache-2.0/BSD/Zlib/Unicode/ISC
+  family and MPL-2.0 (Servo/Stylo, source and patches shipped in the sdist); no GPL. The wheel
+  carries `ui4me_core/_bin/THIRD_PARTY_LICENSES.txt` (generated from `cargo metadata`) and the
+  project, font (OFL) and MPL texts in its dist-info.
 
-## Implementation delivered
+## Measurements (installed release host)
 
-The [fixed specification](CORE_1.0_SPEC.md), [protocol additions](CORE_1.0_PROTOCOL.md)
-and [capability ledger](CAPABILITY_SCOPE.md) define the scope. All 125 audit rows
-have decisions: 37 completion implementations, 17 retained core capabilities,
-8 explicit profile boundaries, 61 outside this core, and 2 assigned to the
-application/UI library. Excluded items are not a promised later batch.
-
-- Anonymous node queries and atomic mutations; node-aware focus, blur, focus
-  inspection and hit testing, with stale document/node rejection.
-- UTF-16 selection and replacement, native undo/redo and edit commands, Unicode
-  grapheme handling, form reset/request-submit/custom validity and ordered form
-  entries preserving duplicate names, submitters and file metadata.
-- Expanded Python facade, close-policy routing, cancellation, native service
-  helpers and bounded resource registration, plus a real-IPC completion fixture.
-- Opt-in native file/text drops, additional input notifications, accessible
-  table/tree and relationship metadata, busy/atomic live state, assistive
-  ScrollIntoView, Linux application identity and combobox selection exposure.
-- Window size constraints and requested/observed state; native attention,
-  color/motion/contrast observation, parent-aware external open, native reveal
-  and explicit platform availability reporting.
-- Intrinsic/balanced flex, selected-option sizing, font-face feature/variation
-  defaults, break-word, logical resize grips and inset corner radii. PNG bitmap
-  color glyphs, optional hinting and optional higher precision CPU rasterization
-  are included within the documented profile.
-- Visible selected-file labels, bounded atomic resource bundles, decoded/SVG
-  cache accounting and unused-resource purging. Native presentation uses the
-  supplied buffer directly; retained full-frame raster storage is reused.
-- A static default reference page, three native acceptance ledgers, independent
-  Windows UI Automation probes and bounded diagnostic process cleanup.
-
-## Checks completed during cloud preparation (historical)
-
-Exact commands, counts, logs and scope are in the
-[preparation report](verification/core-1.0-preparation/README.md) and its
-[machine-readable record](verification/core-1.0-preparation/report.json).
-
-| Check | Result and scope |
+| Measure | Result |
 | --- | --- |
-| Main Rust workspace run | **1,066 passed, 0 failed**, 11 pre-existing ignored harnesses, 12 explicitly filtered transport/process tests |
-| Final native-preference regressions | **4 passed**, including unknown portal values and pending availability |
-| Python suite | **48 passed, 1 Windows-only skipped**, 49 total |
-| Linux Clippy, all workspace targets | **PASS**, warnings treated as errors |
-| Windows MSVC source/type/Clippy check | **PASS**, all workspace targets; only the host resource build script disabled in a generated mirror |
-| Owned workspace formatting | **PASS** |
-| Default-build high-quality request | **PASS**: explicit unsupported-feature error without the required build feature |
-| Optional high-quality raster and glyph hinting | **11 targeted regressions passed** with both options enabled |
-| CPU reference render | **PASS**: local resources settled; 1080×760 PNG generated and visually reviewed |
-| Audit/source consistency | All 125 unique IDs and counts verified; referenced implementation/test paths exist; 27 Python source files parse |
-| Dependency preservation | Upstream package identities, versions, sources and checksums unchanged; existing native fixes preserved |
+| Renderer reference ready (5 runs, median) | 534 ms (system) / 541 ms (explicit reduce); RC1 569 ms, 0.2 527 ms |
+| Static idle CPU (60 s) | host 0.25 %, backend 0.29–0.48 %; caret blink adds ~0.9 % |
+| Host + backend PSS after idle | 59.9 MiB (RC1 59.6 MiB); probe 33.7 MiB, ready 127 ms |
+| DOM churn (400 cycles) | flat, ≤ 0.07 KiB/cycle |
+| Window open/close (400 cycles) | 24–26 KiB/cycle with AT-SPI enabled, **0.1 KiB/cycle with AT-SPI disabled** (known zbus/AT-SPI residual) |
+| Displayed bundle PNG replacement (1,000) | +484 KiB host PSS (~0.39 KiB/replacement; RC1 open finding was 17–19 KiB), one decoded raster throughout |
+| Resize-to-present (≈240 distinct sizes) | p50 2.6 ms, p95 6.3 ms, max 18.7 ms (static); max ≤ 18.3 ms with an animation or a 60 fps bitmap |
+| Infinite CSS animation | ~33 % host (full-window CPU raster), back to 0.25–0.30 % after removal |
+| Live bitmap 60 fps 320x200 | ~16 % host, identical with AT-SPI on/off |
+| Live bitmap throughput (ack p50) | 64x64: 0.064 ms (~11,000 fps); 1024x768: 0.92 ms (~660 fps); memory flat, threads/fds constant |
+| Click→Python callback | 27–28 ms idle, 26–31 ms while an unthrottled 1024x768 producer runs |
 
-The main Rust run preceded the final pending-preference regression and equivalent
-lint/format corrections. The four preference tests then passed. The final
-Windows check covers the corrected Windows import. Supplementary optional-raster
-results are recorded in the preparation report.
+## Defects found and fixed in this stage
 
-**The 12 filtered tests are not passes.** This environment rejects AF_UNIX
-listener binding with `EPERM`. Socket-pair Python tests work but do not qualify
-the production socket. Four host unit tests and eight real-process integration
-tests must run unfiltered locally. This also prevents qualification of real-IPC
-headless reference and fault fixtures here. No alternate production transport
-or test-only success fallback was introduced.
+Each has a regression test where it can be tested without a desktop.
 
-The Windows source check does not link an executable or exercise Windows,
-named pipes, Job Objects or RDP. C#/PowerShell UIA execution remains local work.
-Neither source checking nor a headless PNG qualifies native input, IME,
-accessibility, services or presentation.
+| # | Defect | Fix / test |
+| --- | --- | --- |
+| F1 | Supplied source did not compile (missing `Stage` import; test used a private method) | Import; `pub(crate)` accessor |
+| F2 | Clippy `chunks_exact_to_as_chunks` in new code | `as_chunks_mut` |
+| F3 | In-place Stylo `set_device` ignored the returned origin set: media queries (reduced motion, colour scheme, width) kept stale results | `force_stylesheet_origins_dirty`; 4 existing tests that had failed |
+| F4 | Web-font loads no longer rebuilt the text context (`font_context_pending` never set): @font-face features and PNG colour glyphs lost | Set it on font-epoch changes; 2 existing tests that had failed |
+| F5 | Byte-identical bundle re-registration dropped decoded caches yet notified nobody | Consistent no-op; test updated to the RC2 contract |
+| F6 | `<img src="ui4me-bitmap://…">` without explicit size laid out at 0x0 (layout read only the request table) | Live surfaces size layout; `recreated_live_bitmap_is_laid_out_and_painted_again` |
+| F7 | Bitmap backing file leaked in `$XDG_RUNTIME_DIR` (up to 64 MiB/document) when the host was killed | Unlink after the first present; `transport_file_is_unlinked_after_the_first_present` |
+| F8 | Every pixel-only present republished the whole accessibility tree | Present only requests a redraw (ack p50 0.2 → 0.064 ms for 64x64) |
+| F9 | Manifest `backend.program` was canonicalized, so a venv's `bin/python` ran the base interpreter without the app's packages (e.g. `ui4me_core` from the wheel) | Spawn the named path on Unix; `symlinked_backend_program_keeps_the_named_path` |
+| F10 | Packaged `ui4me_core.application` lacked the `decorations` window option | Synced; `tools/test_package_sync.py` |
+| F11 | `LiveBitmap.close()` raised during host shutdown (demo exited 1) | Tolerate closed/shutting-down; Python test |
+| F12 | Demo maximize button read a non-existent state key (never restored) | Use `observed.maximized` |
+| F13 | Wheel tagged `cp313-cp313`, modules under `.data/purelib` | `py3-none-<platform>`, platlib root |
+| F14 | sdist omitted extensionless build inputs (e.g. `SHA256SUMS`) and could not build; local build hid it | `graft` trees; wheel built from the sdist |
+| F15 | Wheel shipped no third-party license texts for the statically linked host | `tools/release/collect_licenses.py`, license-files |
+| F16 | sdist would include local agent files; `verify_source.py` required one | Removed; verifier rejects local-only/VCS/cache/credential files |
+| F17 | Ledger source identity changed while wheels were being built (`build/`, `*.egg-info`) | Excluded build outputs; test extended |
+| F18 | ScrollIntoView on a static-text accessibility object scrolled nothing | Hint-less request fixed; see limitations |
 
-## Open release blocker: Windows UI Automation text selection
+Debug-level frame timing (`RUST_LOG=ui4me_host=debug`: frame ms, resize→present ms) was added
+for measurement; it is off by default.
 
-The 0.2 report records an independent UIA client stalling while selecting or
-reading a text selection, despite a responsive application and working NVDA
-speech. **That blocker is not marked fixed here.** The old diagnostic combined
-operations, so it did not identify the failing call or prove an AccessKit
-provider deadlock.
+## Remaining limitations (not claimed fixed)
 
-The new diagnostic isolates TextPattern acquisition, DocumentRange text,
-Select, GetSelection and selected-range GetText in separate client processes.
-It uses an explicit MTA or STA thread, logs before/after markers, reads initial
-selection before changing it and has bounded watchdog cleanup. MTA is the
-required client; STA is a separately recorded comparison. The local agent must
-compare an actual native text control and the simpler host probe, reproduce the
-cause and fix any host/provider defect. No speculative AccessKit Windows
-provider patch is included. See the
-[R05 procedure](CORE_1.0_ACCEPTANCE.md#windows-r05-isolate-each-uia-operation).
+* AT-SPI `Component.scroll_to` on a static-text leaf object still does not scroll: AT-SPI always
+  sends a scroll hint (`ScrollIntoViewWithHint`), whose arm in `Document::accessibility_request`
+  still targets the text node. Element and field text-run scrolling work. Pre-existing since
+  RC1; follow-up.
+* At output scale ≠ 1 AT-SPI extents are physical pixels (AccessKit adapter behaviour).
+* `aria-labelledby` to a non-exposed `<span>` yields the name but no labelled-by relation;
+  accesskit_unix 0.24.1 has no AT-SPI Table/TableCell interfaces (indices are attributes).
+* ~24–26 KiB retained per closed window while the AT-SPI bus is enabled (none when disabled).
+* A composition interrupted by a focus change stays in the field that owned it (browser
+  behaviour, as the finish instructions require).
+* KDE folder chooser is unparented; KDE's portal exposes no reduced-motion value; RTL resize
+  grip stays physical lower-right; in native failure mode a frameless window has no title bar
+  (its Quit button works).
+* An empty `text/uri-list` transfer is delivered as a drop with zero paths.
+* Evidence used a physical monitor but scripted uinput input devices. Alt+F4 did not reach
+  windows in this session's input-method configuration (compositor close and the HTML close
+  button were verified instead).
 
-Do not waive this gate because NVDA works, disable text patterns or turn a
-timeout into an empty successful selection. A harness-caused failure can be
-closed only with corrected compliant-client and control-comparison evidence.
+## Can the owner publish?
 
-## Native work still required (Windows)
+Yes, for Linux, if they choose to: upload exactly `ui4me_core-1.0.0.tar.gz` and
+`ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl` with the hashes above (or rebuild them
+through `.github/workflows/release-linux.yml` and compare). Do not upload the local
+`linux_x86_64` wheel. No credentials are stored in the repository and no step publishes
+automatically.
 
-Linux is complete for this source (see above). For Windows, run the full
-verifier and Clippy, install the release build, and complete N01–N15, R01–R12
-and C01–C12 with source/binary-bound evidence, including the R05 UIA matrix.
-The [acceptance procedures](CORE_1.0_ACCEPTANCE.md) cover lifecycle, services,
-real IME, Orca/NVDA, independent UIA, document interactions, installed launch and
-resource/performance measurements. Runtime availability is separate from
-implementation and qualification in the capability API.
-
-After Windows fixes affect shared code, rerun the affected Linux cases. Final
-release gates run against the common source. Set `1.0.0` only after those gates,
-then rebuild/reinstall and verify that version too.
-
-## Explicit limits and inherited issues
-
-- Linux targets native Wayland. The pinned backend does not implement explicit
-  visibility changes or programmatic focus; these now return errors instead of
-  claiming success. Attention remains compositor-dependent.
-- Windows IME field-purpose hints are not applied by the pinned windowing
-  backend. Ordinary composition remains supported and must be retested.
-- The baseline KDE folder picker was not attached despite the parent request.
-  External reveal APIs cannot currently forward a parent. Service acceptance
-  does not prove that another application's window appeared.
-- With AT-SPI enabled, about 18–21 KiB is retained per closed document window
-  on KDE (measured 2026-11-13; 0.2: ~19 KiB), attributed to zbus object-path
-  retention. accesskit_unix 0.24.1 provides no AT-SPI Table/TableCell
-  interfaces; table indices are published as object attributes.
-- Rendering remains CPU based. Animated content costs work even though the
-  default reference is static. Do not relabel 0.2 performance as new measurements.
-- Static SVG and the declared HTML/CSS profile are supported. This is not a
-  complete browser, networking/JavaScript runtime, printing system, GPU renderer
-  or full forced-colors implementation. Font fallback depends on installed
-  fonts; PNG glyph support does not claim every color-font format.
-- Physical Windows hardware, physical multiple monitors, X11 and macOS are
-  outside the present qualification environments.
-
-## Integrity and history
-
-[SOURCE_PROVENANCE.json](SOURCE_PROVENANCE.json) identifies the input archive and
-audit by SHA-256. The Wayland, softbuffer and Windows IME vendor trees, AT-SPI
-teardown, transport, supervision/lifecycle and Python transport client were
-checked byte-for-byte against the supplied baseline. The new AT-SPI
-identity/selection change is a separately documented small patch.
-
-Run `python3 tools/verify_package.py` before editing. `docs/SOURCE_FILES.sha256`
-covers delivered files and excludes itself. After local fixes, preserve the
-original delivery manifest and produce a new final evidence record; do not
-alter checks to hide differences.
-
-This is complete source, assets, patches and tests. It excludes Git metadata,
-private lab configuration, build products and prebuilt platform binaries.
-Setup needs the pinned toolchain, native prerequisites and dependency downloads.
-No local desktop, account, VM, installation or remote Git repository was
-modified during this cloud preparation.
+Evidence index: [verification/core-1.0-linux-final-2026-11-13/](verification/core-1.0-linux-final-2026-11-13/README.md).
+Historical baseline: [BASELINE_RC1_LINUX_STATUS.md](BASELINE_RC1_LINUX_STATUS.md).

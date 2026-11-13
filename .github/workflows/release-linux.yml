@@ -1,0 +1,45 @@
+name: Build Linux source and manylinux wheels (not published)
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v1.0.0']
+permissions:
+  contents: read
+jobs:
+  linux-distributions:
+    runs-on: ubuntu-24.04
+    env:
+      CIBW_BUILD: 'cp312-manylinux_x86_64'
+      CIBW_ARCHS_LINUX: 'x86_64'
+      CIBW_MANYLINUX_X86_64_IMAGE: 'manylinux_2_34'
+      CIBW_BUILD_VERBOSITY: '1'
+      CIBW_BEFORE_ALL_LINUX: >-
+        dnf install -y wayland-devel libxkbcommon-devel dbus-devel pkgconf-pkg-config curl
+        && curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.99.1
+        && . $HOME/.cargo/env
+        && rustup component add clippy rustfmt
+      CIBW_ENVIRONMENT_LINUX: 'PATH="$HOME/.cargo/bin:$PATH" CARGO_BUILD_JOBS=2'
+      CIBW_REPAIR_WHEEL_COMMAND_LINUX: 'auditwheel repair -w {dest_dir} {wheel}'
+      CIBW_TEST_COMMAND_LINUX: 'python {project}/tools/release/smoke_installed_wheel.py'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build distributions using pinned Rust
+        run: python -m pip install --upgrade cibuildwheel build twine
+      - name: Build source archive
+        run: python -m build --sdist --outdir wheelhouse
+      - name: Build and repair manylinux wheel from the source archive
+        # Building from the sdist proves it is a complete build input.
+        run: python -m cibuildwheel --platform linux --output-dir wheelhouse wheelhouse/ui4me_core-1.0.0.tar.gz
+      - name: Validate source and repaired wheel
+        run: |
+          python -m twine check wheelhouse/*
+          python tools/release/verify_linux_artifact.py wheelhouse
+      - name: Upload artifacts for explicit manual publishing
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui4me-core-linux-1.0.0
+          path: wheelhouse/*
+          if-no-files-found: error

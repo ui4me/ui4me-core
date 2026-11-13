@@ -1,0 +1,15 @@
+[app]
+id = "org.ui4me.Rc2Lab"
+name = "UI4ME RC2 Lab"
+version = "1.0.0"
+
+[backend]
+program = "/usr/bin/python3"
+args = ["{app_dir}/lab_app.py"]
+cwd = "{app_dir}"
+
+[host]
+startup_timeout_ms = 30000
+shutdown_timeout_ms = 5000
+max_windows = 16
+instance = "single"

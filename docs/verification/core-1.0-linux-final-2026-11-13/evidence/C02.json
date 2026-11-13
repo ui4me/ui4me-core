@@ -1,0 +1,27 @@
+{
+  "check": "C02",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T10:03:59.426970+00:00",
+  "build_identity": {
+    "host": "/home/toor/.cargo/bin/ui4me-host",
+    "host_sha256": "c70346ba412e8348cb6cbbd9fd322128df9bec12accff10d4b26c26fd6dd3146",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "02bf81e422eb060d53abd5e9235fb85f5a23d1ed806d696294e77056ab939aac",
+    "base_commit": "ca348d9",
+    "os": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+    "desktop": "KDE",
+    "session": "wayland",
+    "user": "toor"
+  },
+  "actions": [
+    "prefers-color-scheme/reduced-motion stylesheet; plasma-apply-colorscheme; set_environment overrides; gsettings high-contrast; portal restart; 30 s dbus-monitor"
+  ],
+  "expected": "Native observation, override precedence, unknown stays null, no idle polling",
+  "observed": "Media queries switch live with the OS scheme (gridcap red/blue); app overrides win over OS changes and \"system\" returns to the observation (BreezeLight may report no-preference -> null, default light); reduced-motion override switches 1s/0s; high_contrast observed; updates continue after a portal restart; 0 D-Bus messages from the host in 30 s idle",
+  "limitations": [
+    "KDE portal exposes no reduced-motion value"
+  ],
+  "evidence_files_sha256": {
+    "c-suite.txt": "d1864c1878248be2c220e8b4c0b10811cc079fe6b0ba933f487d6419a4ff2940"
+  }
+}

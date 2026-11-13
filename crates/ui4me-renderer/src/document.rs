@@ -438,7 +438,12 @@ impl Document {
             suppress_next_text: false,
         })
     }
-    fn id(&self) -> DocumentId {
+    /// Read-only access for in-crate regression tests (update records).
+    #[cfg(test)]
+    pub(crate) fn pipeline_for_tests(&self) -> &DocumentPipeline {
+        &self.pipeline
+    }
+    pub(crate) fn id(&self) -> DocumentId {
         self.pipeline.document().id()
     }
     fn node(&self, element: &str) -> Result<NodeId> {
@@ -982,7 +987,26 @@ impl Document {
             K::Decrement => {
                 assistive::step(self, id, el, -1)?;
             }
-            K::ScrollIntoView => self.scroll_node_into_view(el, "nearest", "nearest", "instant")?,
+            K::ScrollIntoView => {
+                // A static-text leaf is a DOM text node: scroll its element.
+                let target = if self
+                    .pipeline
+                    .document()
+                    .arena()
+                    .get(el)
+                    .is_some_and(|n| n.as_element().is_some())
+                {
+                    el
+                } else {
+                    self.pipeline
+                        .document()
+                        .parent(el)
+                        .ok()
+                        .flatten()
+                        .unwrap_or(el)
+                };
+                self.scroll_node_into_view(target, "nearest", "nearest", "instant")?
+            }
             K::ScrollIntoViewWithHint {
                 target_id,
                 block,

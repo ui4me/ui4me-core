@@ -1,0 +1,27 @@
+{
+  "check": "C05",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T10:04:00.154917+00:00",
+  "build_identity": {
+    "host": "/home/toor/.cargo/bin/ui4me-host",
+    "host_sha256": "c70346ba412e8348cb6cbbd9fd322128df9bec12accff10d4b26c26fd6dd3146",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "02bf81e422eb060d53abd5e9235fb85f5a23d1ed806d696294e77056ab939aac",
+    "base_commit": "ca348d9",
+    "os": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+    "desktop": "KDE",
+    "session": "wayland",
+    "user": "toor"
+  },
+  "actions": [
+    "form_data, request_submit, pointer/Enter/Space submission, validity, custom validity, Reset + Ctrl+Z, real portal pickers single/multiple/cancel, Reset"
+  ],
+  "expected": "Ordered entries, submitter identity, validity, reset, file labels",
+  "observed": "Ordered entries with duplicate names, disabled omitted, external control included, submitter recorded; submit events carry sub1/sub2 with the pre-registered prevention; invalid and custom-invalid block submission, clearing allows it; Reset restores defaults and undo cannot revive; Unicode single and multiple file selections reach form data and labels; cancel keeps the selection; Reset empties both",
+  "limitations": [],
+  "evidence_files_sha256": {
+    "c-suite.txt": "d1864c1878248be2c220e8b4c0b10811cc079fe6b0ba933f487d6419a4ff2940",
+    "C05-files-selected.png": "888e8276bbaee8ed0b5ddf78a32519853857da13c4adb037ea93fca942848150",
+    "C05-after-reset.png": "a8b30c781fd76374e91714f2e6c2495b5323d491b67a16308ba21959f817c239"
+  }
+}

@@ -1,0 +1,65 @@
+== repaired manylinux wheel host ELF
+/tmp/claude-1000/-home-toor-projects-ui4me-core/d6bab0d7-7bb7-4a6c-b84c-a5812eceb36c/scratchpad/whl-x/ui4me_core/_bin/ui4me-host: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 3.2.0, BuildID[sha1]=01765e77d227537cfbf1df7ee63da668dbebc81f, not stripped
+ 0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]
+max GLIBC symbol version: GLIBC_2.34
+eed4e22b7b8f6d1b8aa6ffbb8d909f196cfd7dba4f8bc9d7652e827724a46d70  /tmp/claude-1000/-home-toor-projects-ui4me-core/d6bab0d7-7bb7-4a6c-b84c-a5812eceb36c/scratchpad/whl-x/ui4me_core/_bin/ui4me-host
+ui4me-host 1.0.0
+== wheel contents
+./ui4me_core-1.0.0.dist-info/entry_points.txt
+./ui4me_core-1.0.0.dist-info/licenses/crates/ui4me-host/assets/FONT-LICENSE.txt
+./ui4me_core-1.0.0.dist-info/licenses/LICENSE
+./ui4me_core-1.0.0.dist-info/licenses/patches/licenses/MPL-2.0.txt
+./ui4me_core-1.0.0.dist-info/licenses/THIRD_PARTY_NOTICES.md
+./ui4me_core-1.0.0.dist-info/METADATA
+./ui4me_core-1.0.0.dist-info/RECORD
+./ui4me_core-1.0.0.dist-info/top_level.txt
+./ui4me_core-1.0.0.dist-info/WHEEL
+./ui4me_core/application.py
+./ui4me_core/_bin/README.txt
+./ui4me_core/_bin/THIRD_PARTY_LICENSES.txt
+./ui4me_core/_bin/ui4me-host
+./ui4me_core/client.py
+./ui4me_core/__init__.py
+./ui4me_core/launcher.py
+./ui4me_core/live_bitmap.py
+./ui4me_core/__main__.py
+== bundled license file
+762
+UI4ME Core host — third-party licenses
+
+The `ui4me-host` executable in this distribution statically links the 380 Rust packages listed below (resolved from Cargo.lock for x86_64-unknown-linux-gnu).
+Each package's license texts follow its entry. MPL-2.0 packages (Servo/Stylo) are
+License-Expression: MIT AND OFL-1.1
+License-File: LICENSE
+License-File: THIRD_PARTY_NOTICES.md
+License-File: crates/ui4me-host/assets/FONT-LICENSE.txt
+License-File: patches/licenses/MPL-2.0.txt
+== licenses by SPDX in the linked closure
+    157 MIT OR Apache-2.0
+     83 MIT
+     48 Apache-2.0 OR MIT
+     22 Unicode-3.0
+     14 MPL-2.0
+      8 MIT/Apache-2.0
+      6 MIT OR Apache-2.0 OR Zlib
+      5 MIT AND OFL-1.1
+      5 Apache-2.0
+      4 Zlib OR Apache-2.0 OR MIT
+      4 Zlib
+      4 Unlicense OR MIT
+      4 BSD-3-Clause
+      2 Unlicense/MIT
+      2 MIT OR Zlib OR Apache-2.0
+      2 BSD-3-Clause OR Apache-2.0
+      2 Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
+      1 (MIT OR Apache-2.0) AND Unicode-3.0
+      1 ISC
+      1 BSD-3-Clause/MIT
+      1 BSD-2-Clause
+      1 (Apache-2.0 OR MIT) AND BSD-3-Clause
+      1 Apache-2.0 / MIT
+      1 Apache-2.0 AND MIT
+      1 0BSD OR MIT OR Apache-2.0

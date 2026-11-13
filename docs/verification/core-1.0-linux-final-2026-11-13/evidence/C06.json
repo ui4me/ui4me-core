@@ -1,0 +1,25 @@
+{
+  "check": "C06",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T10:04:00.317479+00:00",
+  "build_identity": {
+    "host": "/home/toor/.cargo/bin/ui4me-host",
+    "host_sha256": "c70346ba412e8348cb6cbbd9fd322128df9bec12accff10d4b26c26fd6dd3146",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "02bf81e422eb060d53abd5e9235fb85f5a23d1ed806d696294e77056ab939aac",
+    "base_commit": "ca348d9",
+    "os": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+    "desktop": "KDE",
+    "session": "wayland",
+    "user": "toor"
+  },
+  "actions": [
+    "Real Dolphin file and KWrite text drags onto all policy regions; GTK3 drag source: mixed, https, 1.1 MB text, 1024/1025 files, malformed URIs, delayed transfer with receiver removal, policy change, document replacement, window close"
+  ],
+  "expected": "Nearest eligible policy; rejections; limits; no retargeting",
+  "observed": "files / \"files text\" accept files and text-capable regions accept text with accepted->cleared feedback; nested none/text override parents; text-only, disabled, inert and non-opted regions reject; mixed offer into text-only delivers text; https/malformed URIs -> explicit error; 1.1 MB -> \"Data transfer exceeds 1 MiB\"; 1024 files delivered, 1025 -> \"Native drop exceeds 1024 files\"; delayed transfers discarded after removal, policy change, replacement or window close (control delivered)",
+  "limitations": [],
+  "evidence_files_sha256": {
+    "c-suite2.txt": "17269895bb2f538731bc553f47d6c55938837be38f46b97c8e04bbf0b1f8c0e5"
+  }
+}

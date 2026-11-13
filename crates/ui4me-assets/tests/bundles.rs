@@ -348,15 +348,36 @@ fn replacement_restarts_images_bumps_the_epoch_and_drops_cached_decodes() {
     let epoch0 = e.mgr.resource_epoch(e.doc).unwrap();
     let decodes0 = e.counter.decodes.load(Ordering::SeqCst);
 
-    // same bytes again: still a new generation, so the cached decode is dropped and made again
+    // Byte-identical re-registration is a new registry generation but changes nothing a
+    // document can observe: no document is notified and the cached decode is kept.
     let change = e.mgr.bundle_register("app", bundle_inputs("app")).unwrap();
     assert!(change.existed);
+    assert!(change.impact.is_empty());
+    assert!(change.affected.is_empty(), "identical bytes affect nobody");
+    assert!(e.mgr.process_completions().is_empty());
+    assert_eq!(e.mgr.resource_epoch(e.doc).unwrap(), epoch0);
+    assert_eq!(e.counter.decodes.load(Ordering::SeqCst), decodes0);
+    assert_eq!(e.size(&r), ready(4.0, 3.0));
+
+    // A changed entry restarts the image: the old image stays shown until the new one is
+    // Ready, the epoch advances and the decode is redone.
+    let mut entries = bundle_inputs("app");
+    for entry in &mut entries {
+        if entry.path == "img/logo.fake" {
+            entry.data = FakeImage {
+                rgba: [0, 0, 255, 255],
+                ..FakeImage::new(4, 3)
+            }
+            .bytes()
+            .into();
+        }
+    }
+    let change = e.mgr.bundle_register("app", entries).unwrap();
     assert_eq!(
         change.affected,
         vec![e.doc],
         "only the document that referenced the bundle"
     );
-    // the old image stays shown until the new one is Ready
     assert_eq!(e.size(&r), ready(4.0, 3.0));
     let batches = e.mgr.process_completions();
     assert_eq!(batches.len(), 1);

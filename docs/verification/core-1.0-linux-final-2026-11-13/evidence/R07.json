@@ -1,0 +1,28 @@
+{
+  "check": "R07",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T09:28:53.788454+00:00",
+  "build_identity": {
+    "host": "/home/toor/.cargo/bin/ui4me-host",
+    "host_sha256": "c70346ba412e8348cb6cbbd9fd322128df9bec12accff10d4b26c26fd6dd3146",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "02bf81e422eb060d53abd5e9235fb85f5a23d1ed806d696294e77056ab939aac",
+    "base_commit": "ca348d9",
+    "os": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+    "desktop": "KDE",
+    "session": "wayland",
+    "user": "toor"
+  },
+  "actions": [
+    "Copy of the installed app with landscape.png removed and fonts replaced by random bytes; native launch, typing, 10 rapid second-window cycles, Quit; ui4me-host render of the same document"
+  ],
+  "expected": "Missing/malformed resources: bounded diagnostics, no hang",
+  "observed": "Document renders with fallback fonts and an empty image box; diagnostics FILE_NOT_FOUND and DECODE_FAILED; typing works; 10 window cycles leave one window; Quit exits in 0.32 s. Payload/cache limits and cancellation are covered by the full Rust suite (1,093 passed)",
+  "limitations": [],
+  "evidence_files_sha256": {
+    "group2.txt": "deed9598eac9c390662cde9f56597cd00690e493a45c494bf6cfc31c7c365b1f",
+    "R07-native.log": "5f437cc6f5db67beadbdff2be190dc833cf635405295af78d30f22218957d752",
+    "R07-broken-render.json": "fe86472c29e3fb2734e69e24711ca6826edc0eed7f5fe42daff215a972093c6f",
+    "R07-broken-native.png": "66ebc865022d391ea9461b1a514af1896edd8b289a3a31c471a0bf56941635f1"
+  }
+}

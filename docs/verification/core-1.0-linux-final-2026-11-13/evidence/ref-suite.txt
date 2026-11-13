@@ -1,0 +1,71 @@
+## N01/N02/N12/R11/R01
+host sha256 c70346ba412e8348cb6cbbd9fd322128df9bec12accff10d4b26c26fd6dd3146
+N01 KWin {'caption': 'UI4ME — Desktop workspace', 'res': 'org.ui4me.RendererReference', 'desktopFile': 'org.ui4me.RendererReference', 'pid': 219100}
+  N12 219097    1521 /home/toor/.cargo/bin/ui4me-host run --app /home/toor/.local/share/ui4me-core1-reference/app.toml | cwd /home/toor | exe /home/toor/.cargo/bin/ui4me-host
+  N12 219100    1521 /home/toor/.cargo/bin/ui4me-host run --app /home/toor/.local/share/ui4me-core1-reference/app.toml | cwd /home/toor | exe /home/toor/.cargo/bin/ui4me-host
+  N12 219104  219100 /usr/bin/python3 /home/toor/.local/share/ui4me-core1-reference/renderer_demo.py | cwd /home/toor/.local/share/ui4me-core1-reference | exe /usr/bin/python3.13
+N02 after second launch: windows 1 backends 1
+## R02
+AT-SPI app name UI4ME Desktop Workspace
+name '<tag> & value'
+checkbox True -> False
+radio Work True
+estimate 5.0
+slider 50.0 -> 52.0
+priority ['High']
+rows before [[], ['01', 'Load HTML and a stylesheet', 'Normal', 'Yes'], ['02', 'Connect an application callback', 'High', 'Yes']]
+rows after ['03', '<tag> & value', 'High', 'No'] | status ['Added <tag> & value. Updated in one document transaction.']
+## R04
+tab order [('entry', 'Name'), ('list item', 'High'), ('entry', 'Notes'), ('spin button', 'Estimate'), ('slider', 'Progress'), ('check box', 'Include notification flag'), ('radio button', 'Work'), ('button', 'Attachment'), ('button', 'Add row'), ('button', 'Change palette'), ('button', 'Quit'), ('button', 'Open second window'), ('button', 'Choose a file'), ('button', 'About this workspace')]
+shift-tab ('button', 'Choose a file')
+empty required + Enter: rows 4 -> 4 focus ('entry', 'Name')
+implicit submit: last row ['04', 'Typed item', 'High', 'No']
+drag selection 0 10
+cut/undo/redo ' gamma' 'alpha beta gamma' ' gamma' | wl-paste 'alpha beta'
+wheel: first row y 711 -> 689
+## R05 (Orca)
+Selection.select_child(0) ['Normal']
+EditableText 'Set via AT-SPI'
+set_selection 0 3
+checkbox action False -> True
+slider value 75.0
+Add row action: rows 5 -> 6
+status attrs {'atomic': 'true', 'setsize': '2', 'container-live': 'polite', 'id': 'status', 'live': 'polite', 'container-atomic': 'true'}
+scroll_to last cell True y 841 | selection unchanged True
+orca speech ["'Screen reader on.'", "'UI4ME — Desktop workspace frame'", "'Notes entry  gamma.'", "'Name entry Typed item required.'", "'tab'", "'Priority combo box collapsed'", "'High.'", "'Low.'", "'tab'", "'Notes entry  gamma.'", "'Priority combo box collapsed'", "'Normal.'", "'escape'", "'Name entry Set via AT-SPI required.'", "'Include notification flag check box checked.'", "'Add row button.'", "'Added Set via AT-SPI. Updated in one document transaction.'", "'Screen reader off.'"]
+## R06 / N08
+second window UI4ME — Second document
+resize 700 500
+maximize 2048 1036 max 3 min False
+unmaximize 700 500 max 0 min False
+minimize 700 500 max 0 min True
+restore 700 500 max 0 min False
+narrow click Name -> ('entry', 'Name')
+after closing second ['UI4ME — Desktop workspace']
+scale 1.5: clicks [('Notes', ('entry', 'Notes')), ('Name', ('entry', 'Name'))]
+scale 2: clicks [('Notes', ('entry', 'Notes')), ('Name', ('entry', 'Name'))]
+scale 1: clicks [('Notes', ('entry', 'Notes')), ('Name', ('entry', 'Name'))]
+scale restored 1
+## R03 (IME + clipboard)
+IM keyboard-us-intl
+IM after toggle pinyin
+preedit value 'ni hao'
+commit '你好'
+Escape '你好'
+candidate 2 '你好中温'
+compose over selection '测试'
+focus change mid-preedit: Notes '测试hao' | Name 'Set via AT-SPI'
+IM back keyboard-us-intl
+Ctrl+C -> wl-paste '测试hao'
+wl-copy -> Ctrl+V 'Žluťoučký 日本 😀 from wl-copy'
+## R08
+picker [('Choose a local document', True, True, 'UI4ME — Desktop workspace')]
+cancel -> ['Selection cancelled'] []
+select -> ['Selected: /home/toor/ui4me-test/žluťoučký 日本.txt'] []
+HTML dialog focus ('button', 'Close') ['dialog']
+Escape -> focus ('button', 'About this workspace')
+popover ['Name']
+Escape popover -> focus ('button', 'Quick help')
+picker open [('Choose a local document', True, True, 'UI4ME — Desktop workspace')]
+parent close -> picker [] app windows [] host alive False
+DONE

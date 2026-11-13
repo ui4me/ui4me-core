@@ -206,6 +206,34 @@ impl FaceSet {
         ids
     }
 
+    /// A bundle's font bytes may change without any change to the CSS
+    /// `@font-face` declarations. Retire the old loaded blob and request state
+    /// so the unchanged descriptor can be loaded from its new revision.
+    pub fn invalidate_sources_under(&mut self, prefix: &str) -> Vec<FaceId> {
+        let mut changed = Vec::new();
+        for face in &mut self.faces {
+            let matches = face.rule.sources.iter().any(|source| match source {
+                FaceSourceSpec::Url {
+                    reference, base, ..
+                } => {
+                    reference.starts_with(prefix)
+                        || base
+                            .join(reference)
+                            .ok()
+                            .is_some_and(|u| u.as_str().starts_with(prefix))
+                }
+                FaceSourceSpec::Local(_) => false,
+            });
+            if matches {
+                face.state = FaceState::Unloaded;
+                face.failures.clear();
+                face.requested = false;
+                changed.push(face.id);
+            }
+        }
+        changed
+    }
+
     pub fn get(&self, id: FaceId) -> Option<&Face> {
         self.faces.iter().find(|f| f.id == id)
     }

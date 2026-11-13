@@ -1,0 +1,4 @@
+host 235015 /home/toor/.cargo/bin/ui4me-host run --app /home/toor/.local/share/ui4me-core1-reference/app.toml  | backend /usr/bin/python3 /home/toor/.local/share/ui4me-core1-reference/renderer_demo.py 
+static idle, unfocused: 60 s host 0.25% backend 0.48% | host PSS 88.7 MiB backend 10.8 MiB
+focused, no text field: 30 s host 0.23% backend 0.53% | host PSS 88.7 MiB backend 10.8 MiB
+caret blinking in a field: 30 s host 1.17% backend 0.50% | host PSS 90.1 MiB backend 10.8 MiB

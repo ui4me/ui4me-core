@@ -1,0 +1,20 @@
+=== py313-manylinux (Python 3.13.5) ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl
+No broken requirements found.
+import 1.0.0 1.0.0 /home/toor/ui4me-wheel-test/py313-manylinux/lib/python3.13/site-packages/ui4me_core/_bin/ui4me-host
+ui4me-host 1.0.0
+PASS installed Python wheel and native host: /home/toor/ui4me-wheel-test/py313-manylinux/lib/python3.13/site-packages/ui4me_core/_bin/ui4me-host ui4me-host 1.0.0
+=== py312-manylinux (Python 3.12.16) ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl
+No broken requirements found.
+import 1.0.0 1.0.0 /home/toor/ui4me-wheel-test/py312-manylinux/lib/python3.12/site-packages/ui4me_core/_bin/ui4me-host
+ui4me-host 1.0.0
+PASS installed Python wheel and native host: /home/toor/ui4me-wheel-test/py312-manylinux/lib/python3.12/site-packages/ui4me_core/_bin/ui4me-host ui4me-host 1.0.0
+=== py310-manylinux (Python 3.10.22) ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl
+No broken requirements found.
+import 1.0.0 1.0.0 /home/toor/ui4me-wheel-test/py310-manylinux/lib/python3.10/site-packages/ui4me_core/_bin/ui4me-host
+ui4me-host 1.0.0
+PASS installed Python wheel and native host: /home/toor/ui4me-wheel-test/py310-manylinux/lib/python3.10/site-packages/ui4me_core/_bin/ui4me-host ui4me-host 1.0.0
+=== py313-local (Python 3.13.5) ui4me_core-1.0.0-py3-none-linux_x86_64.whl
+No broken requirements found.
+import 1.0.0 1.0.0 /home/toor/ui4me-wheel-test/py313-local/lib/python3.13/site-packages/ui4me_core/_bin/ui4me-host
+ui4me-host 1.0.0
+PASS installed Python wheel and native host: /home/toor/ui4me-wheel-test/py313-local/lib/python3.13/site-packages/ui4me_core/_bin/ui4me-host ui4me-host 1.0.0

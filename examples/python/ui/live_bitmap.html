@@ -1,0 +1,23 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Live bitmap preview</title>
+<style>
+:root { color-scheme: dark; font-family: system-ui, sans-serif; }
+* { box-sizing: border-box; }
+html, body { padding:0; margin:0; background:#172437; color:#e7f2ff; }
+.title { height:46px; background:#0e1828; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #415167; }
+.drag { flex:1; padding:14px; user-select:none; font-weight:bold; }
+.action { min-width:44px; height:36px; border:0; border-radius:4px; background:#2b4464; color:#f8fbff; margin:3px; }
+.content { padding:25px; }
+h2 { margin: 0 0 10px; font-size:21px; }
+p { color:#b8c8dc; margin-bottom:20px; }
+.preview { display:block; width:320px; height:200px; border:2px solid #617a99; image-rendering:pixelated; }
+.edge { position:absolute; height:7px; bottom:0; right:0; width:26px; background:#7b95b5; }
+</style>
+<body>
+<header class="title"><div class="drag" data-ui4me-drag="true">Live graphics • drag me</div>
+<button class="action" id="minimize" aria-label="Minimize">−</button>
+<button class="action" id="maximize" aria-label="Maximize">□</button>
+<button class="action" id="close" aria-label="Close">×</button></header>
+<main class="content"><h2>Raw bitmap preview</h2><p>320×200 RGBA pixels, 24 FPS producer, native document-local buffers</p>
+<img class="preview" src="ui4me-bitmap://preview" alt="Continuously updated scientific-style preview"></main>
+<div class="edge" data-ui4me-resize="south-east" aria-hidden="true"></div>
+</body></html>

@@ -1,0 +1,30 @@
+{
+  "check": "N13",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T09:48:02.018916+00:00",
+  "build_identity": {
+    "host": "/home/toor/.cargo/bin/ui4me-host",
+    "host_sha256": "c70346ba412e8348cb6cbbd9fd322128df9bec12accff10d4b26c26fd6dd3146",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "02bf81e422eb060d53abd5e9235fb85f5a23d1ed806d696294e77056ab939aac",
+    "base_commit": "ca348d9",
+    "os": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+    "desktop": "KDE",
+    "session": "wayland",
+    "user": "toor"
+  },
+  "actions": [
+    "uinput drag of \"žluťoučký 日本.txt\" from Dolphin and of selected text from KWrite onto the probe"
+  ],
+  "expected": "File/text drag-and-drop in the native session",
+  "observed": "Probe received dropped_files [\"/home/toor/ui4me-dnd/žluťoučký 日本.txt\"] and dropped_text \"drag this text from kwrite\\n\"; the KWrite source is unchanged",
+  "limitations": [
+    "The first N13 attempt in probe-suite.txt dragged onto a stale duplicate Dolphin window (environment); the clean rerun is recorded"
+  ],
+  "evidence_files_sha256": {
+    "probe-suite-N13-rerun.txt": "73488fe6e9a3bbf7a5fbb7a1e78e9376288849f95d4fdf1c1210e9094f235fdf",
+    "N13-probe-run.log": "3c51baae705c42ccc9a7a6502556b770852c8a763712905ba390d69f951ec0f3",
+    "N13-after-file-drop.png": "e40b8884ce8d4c1a589ef2761a239451d16c6cd8905bdd489cdf39af6a30f31c",
+    "N13-after-text-drop.png": "a4099e1c3ee390628ccd186b23bff678925b5a91dac6ceabe63f6a95e9cfb07e"
+  }
+}

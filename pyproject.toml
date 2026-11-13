@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=77", "wheel>=0.44"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ui4me-core"
+version = "1.0.0"
+description = "Native desktop HTML/CSS runtime with a language-neutral process host"
+readme = "README.md"
+requires-python = ">=3.10"
+# The project's own code is MIT; the packaged host bundles an OFL-1.1 font.
+# Statically linked dependency licenses ship in ui4me_core/_bin/THIRD_PARTY_LICENSES.txt.
+license = "MIT AND OFL-1.1"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "crates/ui4me-host/assets/FONT-LICENSE.txt", "patches/licenses/MPL-2.0.txt"]
+authors = [{name="UI4ME Contributors"}]
+keywords = ["desktop", "html", "css", "rust", "wayland", "gui", "python"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Rust",
+    "Topic :: Software Development :: User Interfaces",
+]
+
+[project.urls]
+Homepage = "https://github.com/ui4me/ui4me-core"
+Source = "https://github.com/ui4me/ui4me-core"
+
+[project.scripts]
+ui4me-host = "ui4me_core.launcher:main"
+ui4me = "ui4me_core.launcher:main"
+
+[tool.setuptools]
+package-dir = {"" = "python"}
+include-package-data = true
+zip-safe = false
+
+[tool.setuptools.packages.find]
+where = ["python"]
+include = ["ui4me_core*"]
+
+[tool.setuptools.package-data]
+ui4me_core = ["_bin/*"]

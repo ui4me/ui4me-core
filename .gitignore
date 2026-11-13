@@ -11,3 +11,6 @@ __pycache__/
 *.secret
 *.credentials.json
 
+/dist-manylinux/
+/build/
+*.egg-info/

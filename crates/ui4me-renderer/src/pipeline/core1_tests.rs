@@ -362,3 +362,158 @@ fn replaced_bundles_and_removed_images_do_not_retain_decoded_rasters() {
         "a removed, purged image keeps no decoded pixels"
     );
 }
+
+/// RC2: a raw bitmap is a retained image source. Fixed dimensions must update
+/// the painted pixels without replacing the document or its layout geometry.
+#[test]
+fn live_bitmap_replaces_pixels_without_replacing_document() {
+    use std::sync::Arc;
+    let mut d = Document::parse_hosted(
+        "<!doctype html><html><body style='margin:0;background:white'>\
+         <img id=plot width=8 height=8 src='ui4me-bitmap://plot'></body></html>",
+        None,
+        400,
+        200,
+    )
+    .unwrap();
+    let mut red = vec![0u8; 8 * 8 * 4];
+    for p in red.as_chunks_mut::<4>().0 {
+        p.copy_from_slice(&[255, 0, 0, 255]);
+    }
+    d.set_live_bitmap("plot", 8, 8, Arc::from(red)).unwrap();
+    let first = settle(&mut d);
+    let node_id = d.id();
+    let geometry = d.element_rect("plot").unwrap().unwrap();
+    let mut green = vec![0u8; 8 * 8 * 4];
+    for p in green.as_chunks_mut::<4>().0 {
+        p.copy_from_slice(&[0, 255, 0, 255]);
+    }
+    d.set_live_bitmap("plot", 8, 8, Arc::from(green)).unwrap();
+    let second = settle(&mut d);
+    assert_ne!(
+        first, second,
+        "bitmap replacement must visibly update pixels"
+    );
+    assert_eq!(d.id(), node_id);
+    let after = d.element_rect("plot").unwrap().unwrap();
+    assert!((after.width - geometry.width).abs() < 0.01);
+    assert!((after.height - geometry.height).abs() < 0.01);
+    assert!(d.remove_live_bitmap("plot").unwrap());
+    let third = settle(&mut d);
+    assert_ne!(second, third);
+}
+
+/// The update records published since `seq`, as the stages each one ran.
+fn stages_since(d: &Document, seq: u64) -> Vec<Vec<ui4me_engine_types::stage::Stage>> {
+    d.pipeline_for_tests()
+        .stores
+        .updates
+        .iter()
+        .filter(|u| u.update_seq > seq)
+        .map(|u| u.stages_run.clone())
+        .collect()
+}
+
+fn last_seq(d: &Document) -> u64 {
+    d.pipeline_for_tests()
+        .stores
+        .updates
+        .iter()
+        .map(|u| u.update_seq)
+        .max()
+        .unwrap_or(0)
+}
+
+/// RC2 final: a same-size live frame is paint-only. It must rebuild the scene
+/// without restyling or relaying out the document; a geometry-changing
+/// replacement (a new bitmap with another size) still lays out.
+#[test]
+fn same_size_live_bitmap_frames_skip_style_and_layout() {
+    use std::sync::Arc;
+    use ui4me_engine_types::stage::Stage;
+    let mut d = Document::parse_hosted(
+        "<!doctype html><html><body style='margin:0'><p id=t>text</p>\
+         <img id=plot src='ui4me-bitmap://plot'></body></html>",
+        None,
+        400,
+        200,
+    )
+    .unwrap();
+    d.set_live_bitmap("plot", 8, 8, Arc::from(vec![255u8; 8 * 8 * 4]))
+        .unwrap();
+    settle(&mut d);
+    for frame in 0..5u8 {
+        let before = last_seq(&d);
+        let pixels = vec![frame.wrapping_mul(40); 8 * 8 * 4];
+        d.set_live_bitmap("plot", 8, 8, Arc::from(pixels)).unwrap();
+        settle(&mut d);
+        let updates = stages_since(&d, before);
+        assert!(!updates.is_empty(), "a frame must publish an update");
+        for stages in &updates {
+            assert!(
+                stages.contains(&Stage::Scene),
+                "frame must repaint: {stages:?}"
+            );
+            for skipped in [Stage::Cascade, Stage::Box, Stage::Text, Stage::Layout] {
+                assert!(
+                    !stages.contains(&skipped),
+                    "pixel-only frame ran {skipped:?}: {stages:?}"
+                );
+            }
+        }
+    }
+    // Removing the surface changes the intrinsic size: layout must run.
+    let before = last_seq(&d);
+    assert!(d.remove_live_bitmap("plot").unwrap());
+    settle(&mut d);
+    assert!(
+        stages_since(&d, before)
+            .iter()
+            .any(|s| s.contains(&Stage::Layout)),
+        "removing a sized image must relayout"
+    );
+}
+
+/// RC2 final: closing a live surface and creating it again under the same ID
+/// (the producer's resize path) must lay the image out at the new intrinsic
+/// size and paint its pixels.
+#[test]
+fn recreated_live_bitmap_is_laid_out_and_painted_again() {
+    use std::sync::Arc;
+    let mut d = Document::parse_hosted(
+        "<!doctype html><html><body style='margin:0;background:white'>\
+         <img id=plot src='ui4me-bitmap://plot'></body></html>",
+        None,
+        400,
+        200,
+    )
+    .unwrap();
+    let solid =
+        |w: u32, h: u32, rgba: [u8; 4]| -> Arc<[u8]> { Arc::from(rgba.repeat((w * h) as usize)) };
+    d.set_live_bitmap("plot", 32, 16, solid(32, 16, [255, 0, 0, 255]))
+        .unwrap();
+    settle(&mut d);
+    let rect = d.element_rect("plot").unwrap().unwrap();
+    assert_eq!((rect.width, rect.height), (32.0, 16.0));
+    assert!(d.remove_live_bitmap("plot").unwrap());
+    settle(&mut d);
+    d.set_live_bitmap("plot", 64, 48, solid(64, 48, [0, 0, 255, 255]))
+        .unwrap();
+    let px = settle(&mut d);
+    let rect = d.element_rect("plot").unwrap().unwrap();
+    assert_eq!(
+        (rect.width, rect.height),
+        (64.0, 48.0),
+        "the recreated surface must be laid out at its new size"
+    );
+    let blue = px[(10 * 400 + 10) as usize];
+    let frame = solid(64, 48, [0, 255, 0, 255]);
+    d.set_live_bitmap("plot", 64, 48, frame).unwrap();
+    let px2 = settle(&mut d);
+    assert_ne!(blue, px2[(10 * 400 + 10) as usize], "new frame must paint");
+    assert_ne!(
+        blue,
+        px[(150 * 400 + 300) as usize],
+        "image painted inside its box only"
+    );
+}

@@ -460,6 +460,7 @@ impl Host {
             else {
                 return Ok(());
             };
+            let frame_started = Instant::now();
             if u64::from(size.width) * u64::from(size.height) > 64 * 1024 * 1024 {
                 anyhow::bail!("Surface exceeds the 64 megapixel probe safety limit");
             }
@@ -492,6 +493,23 @@ impl Host {
             }
             native.window.pre_present_notify();
             buffer.present().map_err(|e| anyhow::anyhow!("{e}"))?;
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                // Opt-in measurement (`RUST_LOG=ui4me_host=debug`): render +
+                // present time and, after a compositor resize, the latency
+                // from the resize event to the first frame of the new size.
+                let resize_to_present_ms = native
+                    .resized_at
+                    .take()
+                    .map(|at| at.elapsed().as_secs_f64() * 1000.0);
+                tracing::debug!(
+                    window = id,
+                    width = size.width,
+                    height = size.height,
+                    frame_ms = frame_started.elapsed().as_secs_f64() * 1000.0,
+                    resize_to_present_ms,
+                    "frame presented"
+                );
+            }
             if !native.presented {
                 native.presented = true;
                 tracing::info!(
@@ -501,11 +519,16 @@ impl Host {
                 );
             }
             if let Some(document) = &mut record.document {
-                let tree = document.engine.accessibility_tree_titled(&record.title)?;
-                native
-                    .accessibility
-                    .update_document(&document.id, ui4me_renderer::a11y::full_update(&tree));
-                document.a11y = Some(tree);
+                // A refresh may already have computed and published the exact
+                // semantic tree for this committed layout. Do not repeat an
+                // O(document-size) tree construction after every repaint.
+                if document.native_refresh_pending || document.a11y.is_none() {
+                    let tree = document.engine.accessibility_tree_titled(&record.title)?;
+                    native
+                        .accessibility
+                        .update_document(&document.id, ui4me_renderer::a11y::full_update(&tree));
+                    document.a11y = Some(tree);
+                }
                 document.native_refresh_pending = false;
                 super::document_native::update_ime(&document.engine, native);
             } else {
@@ -634,6 +657,9 @@ impl ApplicationHandler for Host {
                 if let Some(record) = self.windows.get_mut(&id) {
                     record.width = (f64::from(size.width) / scale) as u32;
                     record.height = (f64::from(size.height) / scale) as u32;
+                    if let Some(native) = record.native.as_mut() {
+                        native.resized_at.get_or_insert_with(Instant::now);
+                    }
                 }
                 self.window_event_message(&id, "resized", json!({"physical_width":size.width,"physical_height":size.height,"scale_factor":scale}));
                 self.refresh(&id);

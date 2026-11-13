@@ -113,6 +113,8 @@ struct CreateWindow {
     visible: bool,
     #[serde(default = "yes")]
     resizable: bool,
+    #[serde(default = "yes")]
+    decorations: bool,
     min_width: Option<u32>,
     min_height: Option<u32>,
     max_width: Option<u32>,
@@ -132,6 +134,7 @@ struct SetWindow {
     height: Option<u32>,
     visible: Option<bool>,
     resizable: Option<bool>,
+    decorations: Option<bool>,
     minimized: Option<bool>,
     maximized: Option<bool>,
     fullscreen: Option<bool>,
@@ -220,6 +223,9 @@ impl Host {
             ));
         }
         let value = match method {
+            "bitmap.create" | "bitmap.present" | "bitmap.close" => {
+                self.dispatch_bitmap(method, params, event_loop)?
+            }
             "document.load" | "document.get" | "document.unload" | "document.command" => {
                 let window_id = params
                     .get("window_id")
@@ -448,6 +454,7 @@ impl Host {
                 .with_window_icon(Some(self.icon.clone()))
                 .with_surface_size(LogicalSize::new(request.width, request.height))
                 .with_resizable(request.resizable)
+                .with_decorations(request.decorations)
                 .with_visible(false);
             if let Some((w, h)) = limits.min {
                 attributes = attributes.with_min_surface_size(LogicalSize::new(w, h));
@@ -500,7 +507,9 @@ impl Host {
                 ime_enabled: false,
                 drag_selecting: false,
                 presented: false,
+                resized_at: None,
                 pointer: (0.0, 0.0),
+                last_titlebar_press: None,
                 document_epoch: None,
                 composing: false,
                 ime_resets: 0,
@@ -522,6 +531,7 @@ impl Host {
                 height: request.height,
                 visible: request.visible,
                 resizable: request.resizable,
+                decorations: request.decorations,
                 limits,
                 native,
                 probe,
@@ -544,6 +554,7 @@ impl Host {
             "maximized":native.map(|n|n.window.is_maximized()),
             "fullscreen":native.map(|n|n.window.fullscreen().is_some()),
             "resizable":native.map(|n|n.window.is_resizable()),
+            "decorations":native.map(|n|n.window.is_decorated()),
             "visible":native.and_then(|n|n.window.is_visible()),
             "theme":native.and_then(|n|n.window.theme()).map(|t|if t==winit::window::Theme::Dark {"dark"}else{"light"}),
             "position":native.and_then(|n|n.window.outer_position().ok()).map(|p|json!({"x":p.x,"y":p.y,"unit":"physical_pixels"})),
@@ -552,7 +563,7 @@ impl Host {
             json!({"window_id":id,"title":record.title,"width":record.width,"height":record.height,
             "visible":record.visible,"native":native.is_some(),"scale_factor":native.map_or(1.0, |n| n.window.scale_factor()),
             "physical_size":native.map(|n| {let s=n.window.surface_size(); json!({"width":s.width,"height":s.height})}),
-            "requested":{"visible":record.visible,"resizable":record.resizable,"size_constraints":record.limits.value()},
+            "requested":{"visible":record.visible,"resizable":record.resizable,"decorations":record.decorations,"size_constraints":record.limits.value()},
             "observed":observed,"closing":record.closing}),
         )
     }
@@ -630,6 +641,9 @@ impl Host {
             if let Some(resizable) = request.resizable {
                 native.window.set_resizable(resizable);
             }
+            if let Some(decorations) = request.decorations {
+                native.window.set_decorations(decorations);
+            }
             if let Some(minimized) = request.minimized {
                 native.window.set_minimized(minimized);
             }
@@ -660,6 +674,9 @@ impl Host {
         window.limits = limits;
         if let Some(resizable) = request.resizable {
             window.resizable = resizable;
+        }
+        if let Some(decorations) = request.decorations {
+            window.decorations = decorations;
         }
         if let Some(visible) = request.visible {
             window.visible = visible;

@@ -207,3 +207,44 @@ fn password_runs_are_masked_and_rtl_runs_measure_from_the_right() {
         run.positions
     );
 }
+
+/// An assistive ScrollIntoView on a static-text object (a DOM text node) must
+/// scroll its element into view, as it does for the element itself.
+#[test]
+fn scroll_into_view_on_static_text_scrolls_its_element() {
+    let mut d = Document::parse(
+        "<!doctype html><style>body{margin:0;font:16px sans-serif}#s{height:60px;overflow:auto}#far{margin-top:400px}</style>\
+         <div id=s><p>top</p><p id=far>Far away paragraph</p></div>",
+    )
+    .unwrap();
+    d.render(400, 200, 1.0).unwrap();
+    let before = d.element_rect("far").unwrap().unwrap();
+    assert!(before.y > 60.0, "fixture starts scrolled out: {before:?}");
+    let t = d.accessibility_tree().unwrap();
+    let leaf = t
+        .nodes
+        .values()
+        .find(|n| n.html_id.is_none() && n.name.contains("Far away"))
+        .expect("static text object");
+    let target = crate::a11y::node_of_key(leaf.id);
+    assert!(
+        target.is_some_and(|n| d
+            .pipeline
+            .document()
+            .arena()
+            .get(n)
+            .is_some_and(|x| x.as_element().is_none())),
+        "the static-text object maps to a text node"
+    );
+    d.accessibility_request(&A11yRequest {
+        target,
+        kind: A11yRequestKind::ScrollIntoView,
+    })
+    .unwrap();
+    d.render(400, 200, 1.0).unwrap();
+    let after = d.element_rect("far").unwrap().unwrap();
+    assert!(
+        after.y < before.y && after.y + after.height <= 60.5,
+        "scrolled into view: {before:?} -> {after:?}"
+    );
+}

@@ -171,7 +171,10 @@ impl DocumentPipeline {
     /// completion batch): `FONT_EPOCH`. Font-metric dependants are restyled and text reshaped.
     pub fn note_font_epoch_changed(&mut self, families: Vec<String>) -> Result<(), Status> {
         self.check_open()?;
-        self.env_pending = true; // a fresh font context over the same sources
+        // A fresh font context over the same sources: loaded faces change the
+        // text collection, which an in-place environment update keeps.
+        self.env_pending = true;
+        self.font_context_pending = true;
         self.note_input_reason(Reason::FontEpoch, Subject::FontFamilies(families));
         Ok(())
     }
@@ -187,6 +190,24 @@ impl DocumentPipeline {
         for id in resource_ids {
             self.dirty
                 .note(Reason::ResourceEpoch, Subject::Resource(*id));
+        }
+        self.note_input();
+        Ok(())
+    }
+
+    /// A decoded image replacement with unchanged natural dimensions needs a
+    /// new scene and raster, but must not invalidate the CSS or layout stages.
+    pub fn apply_resource_pixels(&mut self, ids: &[u64]) -> Result<(), Status> {
+        self.check_open()?;
+        if ids.is_empty() {
+            return Ok(());
+        }
+        self.resource_epoch += 1;
+        for &id in ids {
+            self.dirty.note(
+                crate::pipeline::reasons::Reason::ResourcePixels,
+                crate::pipeline::reasons::Subject::Resource(id),
+            );
         }
         self.note_input();
         Ok(())

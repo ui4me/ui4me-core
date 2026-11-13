@@ -34,7 +34,11 @@ fn item(role: Role) -> bool {
     )
 }
 
-pub(super) fn decorate(d: &Document, nodes: &mut BTreeMap<u64, A11yNode>) {
+pub(super) fn decorate(
+    d: &Document,
+    nodes: &mut BTreeMap<u64, A11yNode>,
+    ids: &std::collections::HashMap<String, ui4me_engine_types::ids::NodeId>,
+) {
     let exposed: BTreeSet<_> = nodes.keys().copied().collect();
     let mut parents = BTreeMap::new();
     for (&id, node) in nodes.iter() {
@@ -45,7 +49,7 @@ pub(super) fn decorate(d: &Document, nodes: &mut BTreeMap<u64, A11yNode>) {
     let refs = |value: Option<&str>, self_id: u64| -> Vec<u64> {
         let mut found = Vec::new();
         for id in value.unwrap_or("").split_ascii_whitespace() {
-            if let Some(n) = d.element_by_id(id) {
+            if let Some(&n) = ids.get(id) {
                 let key = node_key(n);
                 if key != self_id && exposed.contains(&key) && !found.contains(&key) {
                     found.push(key);

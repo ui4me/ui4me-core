@@ -127,7 +127,7 @@ impl Document {
             .ok_or_else(|| arg("Document resources are unavailable"))?;
         let change = resources.register_bundle(name, entries)?;
         if change.affected.contains(&self.id()) {
-            self.pipeline.apply_bundle_change()?;
+            self.pipeline.apply_bundle_change(change.impact)?;
             self.repaint = true;
         }
         Ok(json!({"name":name,"replaced":change.existed}))
@@ -140,11 +140,50 @@ impl Document {
             .ok_or_else(|| arg("Document resources are unavailable"))?;
         let change = resources.unregister_bundle(name)?;
         if change.affected.contains(&self.id()) {
-            self.pipeline.apply_bundle_change()?;
+            self.pipeline.apply_bundle_change(change.impact)?;
             self.repaint = true;
         }
         Ok(json!({"name":name,"removed":change.existed}))
     }
+    /// Inject an uncompressed image into the existing document's image source.
+    /// The host owns frame transfer and bounds; only a new scene is needed
+    /// when the dimensions stay fixed.
+    pub fn set_live_bitmap(
+        &mut self,
+        name: &str,
+        width: u32,
+        height: u32,
+        premultiplied_rgba: Arc<[u8]>,
+    ) -> Result<()> {
+        let resources = self
+            .pipeline
+            .resources
+            .as_ref()
+            .ok_or_else(|| arg("Resources unavailable"))?;
+        let replaced = resources.set_live_bitmap(name, width, height, premultiplied_rgba)?;
+        if replaced {
+            self.pipeline.apply_resource_pixels(&[0])?;
+        } else {
+            self.pipeline.apply_resource_completions(&[0])?;
+        }
+        self.repaint = true;
+        Ok(())
+    }
+
+    pub fn remove_live_bitmap(&mut self, name: &str) -> Result<bool> {
+        let resources = self
+            .pipeline
+            .resources
+            .as_ref()
+            .ok_or_else(|| arg("Resources unavailable"))?;
+        let removed = resources.remove_live_bitmap(name);
+        if removed {
+            self.pipeline.apply_resource_completions(&[0])?;
+            self.repaint = true;
+        }
+        Ok(removed)
+    }
+
     pub fn resource_stats(&self) -> Result<Value> {
         let stats = self
             .pipeline
@@ -203,6 +242,62 @@ impl Document {
 
     fn node_identity(&self, n: NodeId) -> Value {
         json!({"node":public_dom::node_ref(self.id(), n),"element":self.pipeline.document().get_attribute(n,"id").ok().flatten().filter(|id| !id.is_empty())})
+    }
+
+    /// Synchronous native title-bar/resize hit test. The native drag API must
+    /// run in the pointer-press dispatch, never after an asynchronous Python
+    /// callback. Mark regions in HTML with `data-ui4me-drag` or
+    /// `data-ui4me-resize="north-west"`; interactive controls are never drag
+    /// regions and `data-ui4me-no-drag` excludes a subtree.
+    pub fn native_chrome_hit(&mut self, x: f64, y: f64) -> Option<&'static str> {
+        if x < 0.0 || y < 0.0 || !x.is_finite() || !y.is_finite() {
+            return None;
+        }
+        let id = self.id();
+        let mut node = crate::interaction::dispatch::DispatchHost::hit_test(self, id, x, y)
+            .ok()
+            .flatten()?;
+        let doc = self.pipeline.document();
+        loop {
+            if doc
+                .get_attribute(node, "data-ui4me-no-drag")
+                .ok()
+                .flatten()
+                .is_some()
+            {
+                return None;
+            }
+            if doc.local_name(node).ok().is_some_and(|name| {
+                matches!(
+                    name,
+                    "input" | "textarea" | "select" | "button" | "a" | "summary"
+                )
+            }) {
+                return None;
+            }
+            if let Ok(Some(value)) = doc.get_attribute(node, "data-ui4me-resize") {
+                return match value.trim().to_ascii_lowercase().as_str() {
+                    "n" | "north" => Some("north"),
+                    "s" | "south" => Some("south"),
+                    "e" | "east" => Some("east"),
+                    "w" | "west" => Some("west"),
+                    "ne" | "north-east" => Some("north-east"),
+                    "nw" | "north-west" => Some("north-west"),
+                    "se" | "south-east" => Some("south-east"),
+                    "sw" | "south-west" => Some("south-west"),
+                    _ => None,
+                };
+            }
+            if doc
+                .get_attribute(node, "data-ui4me-drag")
+                .ok()
+                .flatten()
+                .is_some()
+            {
+                return Some("move");
+            }
+            node = doc.parent(node).ok().flatten()?;
+        }
     }
 
     /// Coordinates are viewport CSS pixels, with native hit-test ordering and pointer-events rules.

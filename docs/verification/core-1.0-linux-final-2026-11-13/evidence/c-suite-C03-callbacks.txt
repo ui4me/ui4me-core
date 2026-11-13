@@ -1,0 +1,4 @@
+## C03 callbacks on a fresh document {'main': {'window_id': 'w1', 'document_id': 'd1'}}
+nested RPC from click callback -> {'text': 'nested RPC at 1794563690.724; focus={"element": "nested-rpc", "node": "node:1:31:1"}'}
+self-removing callback: [{'ok': True}] | click deliveries to self-remove: 1 | recreated button ['Recreated']
+no duplicate delivery to the replacement: 1

@@ -185,7 +185,7 @@ pub fn build(input: &BuildInput<'_>) -> A11yTree {
         }
     }
     b.nodes.retain(|id, _| reachable.contains(id));
-    super::metadata::decorate(d, &mut b.nodes);
+    super::metadata::decorate(d, &mut b.nodes, &b.ids);
     let focus = input
         .focused
         .map(node_key)

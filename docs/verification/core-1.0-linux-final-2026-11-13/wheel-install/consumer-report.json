@@ -1,0 +1,32 @@
+{
+ "ui4me_core": "1.0.0",
+ "module": "/home/toor/ui4me-wheel-test/py312-manylinux/lib/python3.12/site-packages/ui4me_core/__init__.py",
+ "host_binary": "/home/toor/ui4me-wheel-test/py312-manylinux/lib/python3.12/site-packages/ui4me_core/_bin/ui4me-host",
+ "python": "3.12.16",
+ "frames": 120,
+ "status": "presented 120 frames",
+ "state": {
+  "decorations": false,
+  "focused": true,
+  "fullscreen": false,
+  "maximized": false,
+  "minimized": null,
+  "position": null,
+  "resizable": true,
+  "theme": null,
+  "visible": null
+ },
+ "capabilities": [
+  "accessibility",
+  "clipboard_text",
+  "drag_drop",
+  "external_open",
+  "file_dialogs",
+  "html_css",
+  "ime",
+  "native",
+  "probe",
+  "windows"
+ ],
+ "result": "PASS"
+}

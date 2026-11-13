@@ -1,0 +1,38 @@
+## R09 updates covered/minimized
+covered 45 s: host CPU 2.66% UPDATE [] -> ['200'] status ['Background document update 39; native input remains independent.'] -> ['Background document update 220; native input remains independent.']
+minimized 45 s: host CPU 2.03% UPDATE ['200'] -> ['400'] status ['Background document update 235; native input remains independent.'] -> ['Background document update 414; native input remains independent.']
+restored status ['Background document update 424; native input remains independent.']
+typing after restore 'A useful desktop tool ok'
+Ctrl+Shift+Q while covered: exit after 0.05 s
+## R09 hold callback
+HOLD marker True
+typing while blocked 'typed while python is blocked'
+close while blocked: exit after 0.0 s
+## R09 crash after ready
+window after crash UI4ME — Desktop workspace | failure UI expected
+failure UI Quit: exit after 0.0 s
+## R07 broken assets
+typing 'A useful desktop tool still usable'
+10 window cycles: windows ['UI4ME — Desktop workspace']
+Quit exit after 0.32 s
+render diagnostics codes ['DECODE_FAILED', 'FILE_NOT_FOUND']
+## N09/N10 fault fixtures (native)
+veto-close rc 0
+veto-quit rc 0
+freeze-close rc 0
+freeze-quit rc 0
+log-flood rc 0
+managed-tree rc 0
+managed-tree --kill-host rc 0 descendants [{'kind': 'worker', 'pid': 227764, 'creation_stamp': '1380436', 'alive_after_host_exit': False}, {'kind': 'leaf', 'pid': 227765, 'creation_stamp': '1380440', 'alive_after_host_exit': False}]
+crash-after-ready rc 0
+## N11 external app survives host exit
+quit after F8 kate [('227917', 'xdg-desktop-portal.service')]
+quit : host alive False | kate [('227917', 'xdg-desktop-portal.service')] | probe backends 0
+kill after F8 kate [('228036', 'xdg-desktop-portal.service')]
+kill : host alive False | kate [('228036', 'xdg-desktop-portal.service')] | probe backends 0
+## N14 nested realm
+both realms: [('228114', '228110', 'WAYLAND_DISPLAY=ui4me-nested', 'ui4me-host-228107-1794562088934.service'), ('228142', '228138', 'WAYLAND_DISPLAY=wayland-0', 'ui4me-host-228135-1794562093937.service')]
+main-realm windows ['UI4ME host — Python reference', 'UI4ME — Unicode ✓']
+after main-realm Ctrl+Q: main exit 0 | remaining [('228114', '228110', 'WAYLAND_DISPLAY=ui4me-nested', 'ui4me-host-228107-1794562088934.service')]
+after nested compositor terminated: nested host exit 1 | remaining []
+DONE

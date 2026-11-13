@@ -316,6 +316,7 @@ impl DocumentPipeline {
                     r.reason,
                     crate::pipeline::reasons::Reason::Scroll
                         | crate::pipeline::reasons::Reason::CaretSelectionPaint
+                        | crate::pipeline::reasons::Reason::ResourcePixels
                 )
             });
         // An animation tick (006 re-samples the animated values) may be paint-only too: the style
@@ -442,9 +443,10 @@ impl DocumentPipeline {
         stages_run: &mut Vec<Stage>,
         anim_paint: bool,
     ) -> Result<Draft, Status> {
-        let rebuild = mode == UpdateMode::Cold || self.env_pending;
+        let rebuild = mode == UpdateMode::Cold || self.font_context_pending;
         if rebuild {
-            // Cold (or a changed environment): a fresh stylist and font context over the same sources; nothing reused.
+            // A failed pass or changed font sources genuinely needs a fresh text
+            // collection. Normal viewport/media changes do not.
             let (style, text) = fresh_stages(
                 self.doc.id(),
                 &self.config,
@@ -457,6 +459,22 @@ impl DocumentPipeline {
             let mut old = std::mem::replace(&mut self.style, style);
             self.style.adopt_animations_from(&mut old);
             self.text = text;
+        } else if self.env_pending {
+            // Keep all expensive font/shaping services and the stylesheet/sidecar
+            // state across ordinary window resize and desktop-theme changes.
+            let mut env = crate::style::device::StyleEnvironment::new(
+                self.config.viewport_width as f32,
+                self.config.viewport_height as f32,
+                self.config.scale as f32,
+            );
+            env.reduced_motion = self.reduced_motion;
+            env.color_scheme = if self.dark {
+                crate::style::device::ColorScheme::Dark
+            } else {
+                crate::style::device::ColorScheme::Light
+            };
+            self.style.update_environment(env, &self.text);
+            self.text.set_device_scale(self.config.scale as f32);
         }
         // Document animation time for this update: constant within it (FR-065).
         self.clock.ensure_sampled();
@@ -890,6 +908,7 @@ impl DocumentPipeline {
             diagnostics: draft.diagnostics,
         }));
         self.env_pending = false;
+        self.font_context_pending = false;
         let _ = self.machine.on(if draft_non_convergence {
             Event::Bound
         } else {
@@ -1173,7 +1192,7 @@ pub(crate) fn layout_stage(
     };
     // 007's natural-size view of `<img>` elements (FR-070; D-LRESr3-12). An image first requested by
     // the scene stage is pending here; its completion batch dirties layout, so the next pass sizes it.
-    let natural = |n: NodeId| resources.and_then(|r| r.image_element_state(n));
+    let natural = |n: NodeId| resources.and_then(|r| r.image_element_state_in(doc, n));
     let css_natural =
         |n: NodeId, property: &str| resources.and_then(|r| r.css_image_state(n, property));
     let src = StyleBridgeSource::new_cached(doc, style, cache)

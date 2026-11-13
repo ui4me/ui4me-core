@@ -503,8 +503,15 @@ impl VelloRaster {
         let (list, fonts, images) = (&scene.display_list, &scene.fonts, &scene.images);
         let (w, h) = (width as u16, height as u16);
         let ctx = match &mut self.ctx {
-            Some(c) if c.width() == w && c.height() == h => {
-                c.reset();
+            Some(c) => {
+                // Vello CPU supports resizing the existing context. Rebuilding
+                // it on every mouse-move/window-size event discards reusable
+                // allocations and makes the compositor's resize feel sticky.
+                if c.width() != w || c.height() != h {
+                    c.reset_and_resize(w, h);
+                } else {
+                    c.reset();
+                }
                 c
             }
             slot => slot.insert(RenderContext::new_with(

@@ -1,0 +1,6 @@
+Checking 
+/tmp/claude-1000/-home-toor-projects-ui4me-core/d6bab0d7-7bb7-4a6c-b84c-a5812ece
+b36c/scratchpad/vdir/ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl: [32mPASSED[0m
+Checking 
+/tmp/claude-1000/-home-toor-projects-ui4me-core/d6bab0d7-7bb7-4a6c-b84c-a5812ece
+b36c/scratchpad/vdir/ui4me_core-1.0.0.tar.gz: [32mPASSED[0m

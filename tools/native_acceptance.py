@@ -86,10 +86,14 @@ def interactive_context():
 def source_identity():
     """Stable identity of executable inputs; exclude reports and build outputs."""
     digest = hashlib.sha256()
-    excluded = {"target", ".git", "verification", "__pycache__", ".venv", ".local", "dist"}
+    # Build outputs (Cargo, setuptools, wheel builds) are not source inputs;
+    # including them made the identity change while a wheel was being built.
+    excluded = {"target", ".git", "verification", "__pycache__", ".venv", ".local", "dist",
+                "dist-manylinux", "build", "wheelhouse"}
     paths = []
     for directory, folders, files in os.walk(ROOT):
-        folders[:] = [name for name in folders if name not in excluded and not (Path(directory) == ROOT and name == "docs")]
+        folders[:] = [name for name in folders if name not in excluded and not name.endswith(".egg-info")
+                      and not (Path(directory) == ROOT and name == "docs")]
         for name in files:
             path = Path(directory) / name
             if path.suffix not in {".pyc", ".log"}:

@@ -1,0 +1,32 @@
+{
+  "check": "R09",
+  "status": "PASS",
+  "recorded_utc": "2026-11-13T09:28:53.541207+00:00",
+  "build_identity": {
+    "host": "/home/toor/.cargo/bin/ui4me-host",
+    "host_sha256": "c70346ba412e8348cb6cbbd9fd322128df9bec12accff10d4b26c26fd6dd3146",
+    "host_version": "ui4me-host 1.0.0",
+    "source_sha256": "02bf81e422eb060d53abd5e9235fb85f5a23d1ed806d696294e77056ab939aac",
+    "base_commit": "ca348d9",
+    "os": "Linux-6.12.116+deb13-amd64-x86_64-with-glibc2.41",
+    "desktop": "KDE",
+    "session": "wayland",
+    "user": "toor"
+  },
+  "actions": [
+    "run_renderer.py --updates 0.25 (installed host): fully covered by keep-above Konsole 45 s, minimized 45 s, restore, type, Ctrl+Shift+Q while covered; --hold-callback: Add row, type/scroll, compositor close; --crash-after-ready 4: failure UI Quit"
+  ],
+  "expected": "Covered/minimized updates, pending callback, backend failure and emergency quit remain responsive",
+  "observed": "Updates continued covered (UPDATE ->200, status 39->220, host 2.7% CPU) and minimized (200->400, status 235->414, 2.0%); restored window shows the latest state, typing works; Ctrl+Shift+Q exited at once; native typing/scroll worked while the Python callback was blocked and close exited; after the backend crash the native failure UI (\"Backend connection lost: peer disconnected\") appeared and Quit closed the host",
+  "limitations": [],
+  "evidence_files_sha256": {
+    "group2.txt": "deed9598eac9c390662cde9f56597cd00690e493a45c494bf6cfc31c7c365b1f",
+    "R09-updates-run.log": "de09ab637d3d81456f4becb898ba7d7a284fe4e0395ac12c233c68e439cbbd47",
+    "R09-hold-run.log": "9774dfe19eb4c9d239e3d7ebf5fc79a1a6fdd0ee5f813873ae351d5639842788",
+    "R09-crash-run.log": "dfe5e725db326a1950833f4690bc1b41c375b69bcf7c11d107b6c561dd373958",
+    "R09-main-fully-covered.png": "c22acaeb6571c9ce715d71a47d04e0918e3250740237f9a5420473e695136130",
+    "R09-restored.png": "67dbd8381aed9185809e82f6034bd66f27fb32e7446d3ebfbc0a5b378245a693",
+    "R09-hold-typing.png": "5044241af1c42fb73428480a4ae2f9c89c97a5c36e47af0b6c0361334f17ed93",
+    "R09-crash-failure-ui.png": "23eac508747e5410507ba495b5f12ceebd4436090ffaaacf165b855519193582"
+  }
+}

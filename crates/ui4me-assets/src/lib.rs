@@ -1096,8 +1096,9 @@ impl ResourceManager {
             ));
         }
         let existed = self.bundles.contains(name);
+        let impact = self.bundles.impact(name, Some(&entries));
         self.bundles.register(name, entries)?;
-        Ok(self.bundle_changed(name, existed))
+        Ok(self.bundle_changed(name, existed, impact))
     }
 
     /// `bundle_register` from a directory tree read now (an immutable snapshot, see `bundles::read_dir`).
@@ -1119,15 +1120,30 @@ impl ResourceManager {
     /// `bundle_unregister`: idempotent. Documents that referenced the bundle are reported as for
     /// a replacement (their images and sheets from it become `FILE_NOT_FOUND`).
     pub fn bundle_unregister(&mut self, name: &str) -> bundles::BundleChange {
+        let impact = self.bundles.impact(name, None);
         let existed = self.bundles.unregister(name);
         if existed {
-            self.bundle_changed(name, true)
+            self.bundle_changed(name, true, impact)
         } else {
             bundles::BundleChange::default()
         }
     }
 
-    fn bundle_changed(&mut self, name: &str, existed: bool) -> bundles::BundleChange {
+    fn bundle_changed(
+        &mut self,
+        name: &str,
+        existed: bool,
+        impact: bundles::BundleImpact,
+    ) -> bundles::BundleChange {
+        if impact.is_empty() {
+            // Byte-identical re-registration: every consumer already holds
+            // exactly these bytes, so keep cached decodes and notify nobody.
+            return bundles::BundleChange {
+                affected: Vec::new(),
+                existed,
+                impact,
+            };
+        }
         let prefix = bundles::url_prefix(name);
         self.cache
             .lock()
@@ -1140,7 +1156,27 @@ impl ResourceManager {
             .map(|(id, _)| *id)
             .collect();
         ids.sort();
+        // A source-only font/stylesheet change must not redownload images.
+        let mut font_changed = false;
         for id in &ids {
+            if impact.fonts || impact.unknown {
+                let entry = self.docs.get_mut(id).expect("live document was listed");
+                let invalidated = entry.faces.invalidate_sources_under(&prefix);
+                if !invalidated.is_empty() {
+                    let invalidated: std::collections::HashSet<u64> =
+                        invalidated.into_iter().map(|f| f.0).collect();
+                    let mut cache = self.cache.lock().unwrap_or_else(|p| p.into_inner());
+                    entry.table.retain_requesters(
+                        |r| !matches!(r, Requester::FontFace(fid) if invalidated.contains(fid)),
+                        &mut cache,
+                    );
+                    self.font_dirty.insert(*id);
+                    font_changed = true;
+                }
+            }
+            if !(impact.images || impact.unknown) {
+                continue;
+            }
             let (policy, again) = {
                 let e = &self.docs[id];
                 (e.policy.clone(), e.table.image_requests_under(&prefix))
@@ -1173,9 +1209,13 @@ impl ResourceManager {
                 }
             }
         }
+        if font_changed {
+            self.fonts.bump_for_faces();
+        }
         bundles::BundleChange {
             affected: ids,
             existed,
+            impact,
         }
     }
 

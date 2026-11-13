@@ -1,0 +1,48 @@
+host 236041 c70346ba412e8348cb6cbbd9fd322128df9bec12accff10d4b26c26fd6dd3146
+
+### 1000 displayed bundle PNG replacements (same size)
+{"replacements": 0, "host_pss_kib": 55890, "decoded_cache": 80000, "cache_entries": 1}
+{"replacements": 200, "host_pss_kib": 55938, "decoded_cache": 80000, "cache_entries": 1}
+{"replacements": 400, "host_pss_kib": 55994, "decoded_cache": 80000, "cache_entries": 1}
+{"replacements": 600, "host_pss_kib": 56114, "decoded_cache": 80000, "cache_entries": 1}
+{"replacements": 800, "host_pss_kib": 56146, "decoded_cache": 80000, "cache_entries": 1}
+{"replacements": 1000, "host_pss_kib": 56374, "decoded_cache": 80000, "cache_entries": 1}
+{"replacements": 1000, "host_pss_kib": 56374, "decoded_cache": 80000, "cache_entries": 1}
+PSS slope after warmup: 387 bytes/replacement; total 484 KiB over 1000; decoded cache constant {80000}
+
+### intrinsic-size change and visible refresh
+red-200x100 -> (439, 93, 200, 100)
+blue-200x100 -> (439, 93, 200, 100)
+green-300x40 -> (439, 93, 300, 40)
+yellow-120x160 -> (439, 93, 120, 160)
+
+### same-URL bundled font replacement
+text box width mono/serif-bold/mono: 101.0 122.0 119.0 | mono vs serif differ: True | mono restored identical: False
+
+### close veto (HTML button, compositor close, Alt+F4)
+× button with veto: still open True 1
+compositor close with veto: still open True 1
+Alt+F4 with veto: still open True 0
+
+### scale 1.5 / 2 / 1 with streaming bitmap
+scale 1.5: scale_factor 1.5 physical {'height': 900, 'width': 1320} | pad click [('pad', 112, 112)] | title drag (100, 56) | SE resize (-100, -50)
+scale 2: scale_factor 2.0 physical {'height': 800, 'width': 1200} | pad click [('pad', 112, 112)] | title drag (100, 60) | SE resize (-100, -50)
+scale 1: scale_factor 1.0 physical {'height': 640, 'width': 900} | pad click [('pad', 112, 112)] | title drag (100, 60) | SE resize (-100, -50)
+frames during scale checks 971
+scale restored 1
+
+### resize-to-present latency and cost: static / CSS animation / 60 fps bitmap; idle return
+{"tag": "static idle", "host_cpu_pct": 0.2, "frames": 0}
+{"tag": "resize: static", "frames": 259, "distinct_sizes": 241, "resize_to_present_ms": {"p50": 2.56, "p95": 6.33, "max": 18.67}, "frame_ms": {"p50": 2.24, "p95": 2.91}, "host_cpu_pct": 7.3}
+{"tag": "CSS animation running", "host_cpu_pct": 18.7, "frames": 600}
+{"tag": "resize: CSS animation", "frames": 702, "distinct_sizes": 241, "resize_to_present_ms": {"p50": 4.88, "p95": 15.04, "max": 17.4}, "frame_ms": {"p50": 1.76, "p95": 2.69}, "host_cpu_pct": 20.7}
+{"tag": "after animation removed", "host_cpu_pct": 0.27, "frames": 0}
+{"tag": "60 fps 320x200 bitmap", "host_cpu_pct": 15.9, "frames": 601}
+{"tag": "resize: 60 fps bitmap", "frames": 702, "distinct_sizes": 239, "resize_to_present_ms": {"p50": 8.05, "p95": 14.5, "max": 18.31}, "frame_ms": {"p50": 1.96, "p95": 2.58}, "host_cpu_pct": 18.8}
+{"tag": "60 fps bitmap, AT-SPI IsEnabled=false", "host_cpu_pct": 16.1, "frames": 601}
+{"tag": "60 fps bitmap, AT-SPI IsEnabled=true", "host_cpu_pct": 16.1, "frames": 601}
+{"tag": "after bitmap closed", "host_cpu_pct": 0.27, "frames": 0}
+
+### same-URL font replacement, measured after a 2.5 s settle (supersedes the line above)
+widths mono/serif/mono/serif: 119.0 122.0 119.0 122.0 | mono==mono True | serif==serif True | mono!=serif True
+lab closed via its close button: True
