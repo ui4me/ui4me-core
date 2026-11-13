@@ -20,6 +20,13 @@ ROOT = Path(__file__).resolve().parent
 class BuildWithHost(build_py):
     def run(self):
         super().run()
+        # Bundle the same coding skill that ships in the source repository.
+        skill_source = ROOT / "skills" / "ui4me-python"
+        if not (skill_source / "SKILL.md").is_file():
+            raise RuntimeError("The canonical UI4ME Python skill is missing")
+        shutil.copytree(skill_source,
+                        Path(self.build_lib) / "ui4me_core" / "_skills" / "ui4me-python",
+                        dirs_exist_ok=True)
         if sys.platform not in ("linux", "win32"):
             raise RuntimeError("The v1.0 wheel build supports Linux and Windows only.")
         exe = "ui4me-host.exe" if sys.platform == "win32" else "ui4me-host"

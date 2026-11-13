@@ -4,7 +4,7 @@
 
 Build an actual Linux-native Rust host embedded inside a CPython-independent Python client wheel. This is a pure-Python client plus ELF executable, **not** a Python C extension. The wheel is platform-specific, not universal. Rust is a build-time requirement only; installing the verified wheel must not invoke Cargo. This product does not include a Python interpreter for the user's own application.
 
-**Linux first:** Debian 13 with KDE Plasma 6.3 native Wayland is the release-test system. Windows code remains in source but is not part of this milestone. Do not build or test Windows now.
+**Qualified platforms:** Linux was first qualified on Debian 13/KDE Plasma 6.3 native Wayland; Windows was later qualified on Windows Server 2022 in an interactive normal-user RDP session. The manual [publishing workflow](PUBLISHING.md) now builds **both platform wheels from the same sdist**. Ordinary pushes and tags do not publish.
 
 ## Dependencies
 
@@ -61,7 +61,7 @@ Then install and launch a complete example from a directory outside the reposito
 
 ## Publication decision
 
-This repository does **not** include an automatic upload step. If the owner later chooses to publish, inspect `dist/` or the downloaded manylinux CI artifacts and verify their SHA256 hashes, license notices, `twine check`, source/ABI compatibility, clean installation and native tests first. Configure PyPI trusted publishing in its UI or use an approved upload command; do not embed credentials. Only after explicit user authorization, publish the exact verified wheel and source distribution.
+The repository includes a **manual-only** `.github/workflows/publish.yaml` using the already registered GitHub/PyPI trusted-publisher identity (`ui4me/ui4me-core`, workflow `publish.yaml`, environment `pypi`). It builds the sdist and both Linux and Windows wheels together from the same source commit, verifies SHA-256, publishes via OIDC, then creates the GitHub release. See [PUBLISHING.md](PUBLISHING.md). Do not upload the local `linux_x86_64` wheel or publish during ordinary CI pushes.
 
 ## Using the installed package from an application manifest
 

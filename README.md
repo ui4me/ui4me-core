@@ -1,183 +1,155 @@
-# UI4ME Core 1.0.0 — Native HTML/CSS desktop applications
+# UI4ME Core
 
-Python programs control normal local HTML/CSS desktop windows through a separate
-Rust-owned native host. **Release 1.0.0 is qualified for Linux (Debian 13, KDE
-Plasma 6.3, native Wayland) and Windows (Windows Server 2022 desktop, x64, in an
-interactive RDP session)**, as installed release binaries and as Python wheels.
-The qualification record, measurements and remaining limits are in
-[docs/STATUS.md](docs/STATUS.md). Nothing is published automatically.
+**Build native desktop applications with HTML, CSS and Python—without bundling a browser.**
 
-## Install the Python package
+[![CI](https://github.com/ui4me/ui4me-core/actions/workflows/ci.yml/badge.svg)](https://github.com/ui4me/ui4me-core/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/ui4me-core?label=PyPI)](https://pypi.org/project/ui4me-core/)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)](https://pypi.org/project/ui4me-core/)
+[![License: MIT](https://img.shields.io/badge/UI4ME-MIT-blue)](https://github.com/ui4me/ui4me-core/blob/main/LICENSE)
 
-The wheels contain the pure-Python client (`ui4me_core`) and the compiled
-`ui4me-host` executable; installing one needs no Rust toolchain. They have no
-CPython extension module, so one wheel serves every Python 3.10+ on its platform:
-`py3-none-manylinux_2_34_x86_64` (glibc 2.34+) and `py3-none-win_amd64`.
+UI4ME gives Python a familiar HTML/CSS user interface while **Rust owns the real desktop window, input, rendering, accessibility and lifecycle**. Application code runs in a separate, supervised Python process over private local IPC. There is **no Chromium, WebKit, Electron, Qt, embedded webview, JavaScript engine or HTTP server**. It is a focused native HTML/CSS desktop renderer, **not a complete browser**.
 
-```sh
-python3 -m venv ~/.venvs/ui4me && ~/.venvs/ui4me/bin/pip install ui4me_core-1.0.0-*.whl
-~/.venvs/ui4me/bin/ui4me-host --version
-~/.venvs/ui4me/bin/ui4me-host doctor
+![UI4ME desktop application running natively on KDE Wayland](https://raw.githubusercontent.com/ui4me/ui4me-core/main/docs/images/desktop-workspace.png)
+
+*An actual UI4ME window from the Linux native acceptance run. [Live bitmap / custom titlebar screenshot](https://github.com/ui4me/ui4me-core/blob/main/docs/images/live-bitmap.png).*
+
+## Install
+
+Requires **Python 3.10+**, on Linux x86-64 with **glibc 2.34+** or Windows x86-64. The wheels include the native Rust host, so **Rust is not required to install or run** UI4ME.
+
+**Linux** (use a virtual environment):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install ui4me-core
+ui4me-host --version
 ```
+
+**Windows PowerShell** (same Python API):
 
 ```powershell
-py -m venv $env:LOCALAPPDATA\ui4me-venv
-& $env:LOCALAPPDATA\ui4me-venv\Scripts\pip install ui4me_core-1.0.0-py3-none-win_amd64.whl
-& $env:LOCALAPPDATA\ui4me-venv\Scripts\ui4me-host --version
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install ui4me-core
+ui4me-host --version
 ```
 
-```python
-from ui4me_core import Application
+The published package name is **`ui4me-core`**; the Python import is **`ui4me_core`**. If the release is not yet on PyPI, install its platform wheel from the [GitHub release](https://github.com/ui4me/ui4me-core/releases) instead. The first publication is performed manually, never by a push.
+
+## First application (HTML, CSS and Python)
+
+Create a project with four ordinary files and a manifest:
+
+```bash
+ui4me-new hello-ui --name "Hello UI4ME"
+ui4me-host run --app hello-ui/app.toml
 ```
 
-Build the artifacts as described in
-[docs/release/BUILDING_LINUX.md](docs/release/BUILDING_LINUX.md) and
-[docs/release/BUILDING_WINDOWS.md](docs/release/BUILDING_WINDOWS.md).
+The generator creates `index.html`, `style.css`, `app.py` and `app.toml` using your active Python interpreter. **Start the host with `ui4me-host run`**; do not launch `app.py` directly, because the host supplies the private authenticated connection.
 
-## Live pixels and custom title bars
-
-* `<img src="ui4me-bitmap://NAME">` displays a live RGBA8 surface created with
-  `document.create_bitmap(NAME, width, height)`; `present()`/`try_present()`
-  hand over whole frames through a private, bounded, host-owned mapping (no
-  JSON pixels, no image encoding). Same-size frames repaint without style or
-  layout. See [examples/python/live_bitmap_demo.py](examples/python/live_bitmap_demo.py).
-* `decorations=False` windows mark HTML regions with `data-ui4me-drag` (native
-  move, double-click maximize/restore) and `data-ui4me-resize="n|s|e|w|ne|nw|se|sw"`
-  (native resize). Interactive controls inside a drag region stay ordinary controls.
-
-## Build and run
-
-Prerequisites are Python 3.11+, the Rust toolchain pinned in
-`rust-toolchain.toml`, and native build tools. The scripts pin the selected
-Python interpreter in generated application manifests.
-
-### Debian / KDE Plasma, native Wayland
-
-```sh
-bash tools/bootstrap_linux.sh --install-system
-python3 tools/run_renderer.py
-```
-
-Omit `--install-system` if prerequisites are installed. Run as the logged-in
-user with that desktop's D-Bus and portal services. Linux supervision uses a
-systemd user service. There is no automatic X11 fallback.
-
-### Windows (x64)
-
-```powershell
-powershell -ExecutionPolicy Bypass -File tools\bootstrap_windows.ps1
-python tools\run_renderer.py
-```
-
-Run as the logged-on desktop user (an interactive or RDP session). The host
-supervises the backend in a Windows Job Object, authenticates it over a private
-named pipe, integrates with UI Automation, the Text Services Framework/IMM input
-methods, OLE drag-and-drop and the Shell, and registers per-user Start Menu
-shortcuts through `tools/create_launcher.py`. No administrative rights are needed.
-
-### Install a standalone app
-
-Choose a **new or empty** application destination:
-
-```sh
-python3 tools/install.py --example-dir ~/.local/share/ui4me-core1-reference
-python3 tools/create_launcher.py install --app ~/.local/share/ui4me-core1-reference/app.toml
-ui4me-host run --app ~/.local/share/ui4me-core1-reference/app.toml
-```
-
-On Windows use, for example, `--example-dir %LOCALAPPDATA%\ui4me-renderer-reference`
-and `--host %USERPROFILE%\.cargo\bin\ui4me-host.exe` for the launcher.
-
-The installer builds the release host and copies the complete HTML/CSS/Python
-example. This package is complete source, not prebuilt platform binaries or an
-offline mirror of every dependency. Setup downloads pinned dependencies.
-
-## Application code
+An application callback is regular Python:
 
 ```python
 from pathlib import Path
-from application import Application
+from ui4me_core import Application
+
+HERE = Path(__file__).resolve().parent
 
 with Application.from_environment() as app:
-    window = app.open_file(Path(__file__).with_name("index.html"),
-                           title="My app", width=900, height=600,
-                           min_width=320, min_height=240)
+    window = app.open_file(HERE / "index.html", title="My first native app")
     doc = window.document
-    doc.on("click", lambda _: doc.set_text("status", "Saved"), element="save")
+
+    doc.on("click", lambda event: doc.set_text("status", "Saved!"), element="save")
     app.run()
 ```
 
-For development you may copy `client.py` and `application.py` alongside an app. The publishable Python package instead provides `from ui4me_core import Application`. Launch through an application manifest. The reference app also uses `completion_checks.py`
-for automated verification; the installer copies it.
+In your HTML, use `<button id="save">Save</button><p id="status">Ready</p>` and link a local CSS file. **No JavaScript or `onclick=` is necessary.**
 
-The facade covers editing/selection/undo, forms/validity, stable node handles,
-stylesheets, scrolling, dialogs/popovers, resources and OS services.
-`Document.command()` exposes every typed operation. See
-[Python examples](examples/python/README.md), the
-[document protocol](docs/PROTOCOL_DOCUMENTS.md), and
-[Core 1.0 additions](docs/CORE_1.0_PROTOCOL.md).
+Generate HTML in Python without an HTML file when you want:
 
-## What this completion adds
-
-- Anonymous node queries and atomic mutations with stale-generation protection.
-- Focus/blur/hit-testing, UTF-16 selection/range editing and edit-menu commands.
-- Ordered form data, reset/request-submit, custom validity and selected-file labels.
-- More useful events, opt-in incoming drop policy, Unicode segmentation and
-  improved accessibility semantics and assistive scrolling.
-- Window constraints, observed state, attention, desktop preferences, IME hints,
-  parent-aware handoff and manifest accessibility identity.
-- Selected CSS/text fixes, bitmap glyphs, optional hinting/precision diagnostics,
-  bounded resource bundles and cache statistics/purge.
-- A static idle reference app, Python helpers, new unit/IPC fixtures, C01–C12
-  completion scenarios, and independent Windows UIA diagnostics.
-
-Existing controls, complex shaping, flex/grid/table layout, local images, static
-SVG, CPU effects, multiple windows, native clipboard/file pickers, supervision,
-launchers and failure recovery remain.
-
-## Defined limits
-
-This is a desktop HTML/CSS subset. It does not claim complete browser parity.
-All 125 audit rows have dispositions in [CAPABILITY_SCOPE](docs/CAPABILITY_SCOPE.md),
-including excluded extensions and application-layer responsibilities. They are
-not an endless future-version plan.
-
-Linux and Windows share a contract with honest availability. The current
-Wayland backend cannot implement window visibility/focus/position requests, so
-those operations return errors there and unknown observations stay null; Windows
-implements them. Attention depends on the window manager. Windows field-purpose
-IME hints are unavailable through the pinned backend. High contrast is observable
-without a complete forced-colors CSS palette. On Windows, external opening hands
-data to its associated application and refuses executable file types.
-
-Printing/PDF, browser networking/JavaScript, full SVG text/cascade, animated
-images, rich editing, native menus/tray/global shortcuts, media and a component
-framework are outside this core. macOS, X11, Windows client editions/ARM64 and
-physical-hardware qualification are outside the current tested environments.
-
-## Verification
-
-```sh
-python3 tools/verify.py --jobs 2
-cargo clippy --locked --workspace --all-targets -j 2 -- -D warnings
+```python
+window = app.open_html('<button id="run">Run</button><p id="out">Ready</p>')
+window.document.on('click', lambda _: window.document.set_text('out', 'Done'), element='run')
 ```
 
-Perform the installed-release desktop scenarios in
-[CORE_1.0_ACCEPTANCE](docs/CORE_1.0_ACCEPTANCE.md) using host N01–N15, renderer
-R01–R12 and completion C01–C12 ledgers. Build/headless results cannot replace
-desktop observations. Historical reports remain in `docs/verification/` and
-`BASELINE_0.1_STATUS.md` / `BASELINE_0.2_STATUS.md`.
+You can also replace a loaded document with `window.load_file(...)` or `window.load_html(...)`, update individual elements without reloading, and group changes with `doc.batch([...])`. Old document/node handles are invalid after replacement.
 
-Optional glyph hinting: `UI4ME_GLYPH_HINTING=1`. Higher precision diagnostics
-require the `diagnostic-raster-quality` Cargo feature and
-`UI4ME_RASTER_QUALITY=high`; default builds keep the normal CPU path.
+**[5-minute quickstart](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/quickstart.md)** · **[Python API reference](https://github.com/ui4me/ui4me-core/blob/main/docs/reference/python-api.md)** · **[Examples](https://github.com/ui4me/ui4me-core/blob/main/examples/python/README.md)**
 
-## Dependencies and provenance
+## Make your coding agent understand UI4ME
 
-The lockfile pins dependencies. Source patches remain under `third_party/` and
-`patches/` with license and change records. See
-[THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md),
-[third_party/README](third_party/README.md), and
-[source provenance](docs/SOURCE_PROVENANCE.json).
-Preserve patched dependencies during qualification.
-`tools/verify_package.py` checks the source manifest before local changes.
+The distribution includes the **`ui4me-python` Agent Skill**. It documents loading HTML from files and strings, callbacks, document changes, stylesheet updates, forms, native dialogs, live bitmaps and the correct host launch model. Install it in user-level skill folders for your agents with **one Python command**:
+
+**Linux:**
+
+```bash
+python3 -m ui4me_core.skills install --agents all
+```
+
+**Windows PowerShell:**
+
+```powershell
+py -m ui4me_core.skills install --agents all
+```
+
+That installs into the appropriate per-user locations for Claude Code, Codex, OpenCode, GitHub Copilot, Cursor and Gemini CLI. No administrator privileges are needed; no other skills are overwritten. To inspect the destinations first:
+
+```bash
+ui4me-skill install --agents all --dry-run
+ui4me-skill status --agents all
+```
+
+There is no universal skill directory supported by every agent; the installer handles agent-specific locations. [Agent Skills guide](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/agent-skills.md) · [Skill source](https://github.com/ui4me/ui4me-core/blob/main/skills/ui4me-python/SKILL.md).
+
+## Why UI4ME?
+
+| Feature | What it enables |
+| --- | --- |
+| **Native windows** | Normal taskbar, focus, desktop dialogs, clipboard, drag-and-drop, DPI, keyboard and IME integration. |
+| **Real HTML/CSS** | Local files, common CSS selectors, variables, fonts, flex/grid/tables, scrolling, controls, responsive layout and styled content. |
+| **Python callbacks** | Handle events, mutate text/attributes/classes, use atomic batches and control forms without JavaScript. |
+| **Custom chrome** | Frameless windows with HTML/CSS titlebars, native dragging, edge resize and custom minimize/maximize/close buttons. |
+| **Live image surfaces** | Present RGBA frames for generated graphics, previews and visualizations using bounded shared buffers. |
+| **Independent app logic** | Slow Python work does not own or block the native event loop; the host supervises the backend process. |
+| **Installable binary wheels** | One `py3-none` wheel per supported platform, with the Rust executable included. |
+
+![UI4ME frameless window with a live RGBA bitmap](https://raw.githubusercontent.com/ui4me/ui4me-core/main/docs/images/live-bitmap.png)
+
+*The same native engine displaying continuously updated pixels through a mapped bitmap surface.*
+
+## Platform support and limits
+
+| Platform | Qualification |
+| --- | --- |
+| **Linux x86-64, glibc 2.34+** | Tested on Debian 13 / KDE Plasma 6.3 / native Wayland |
+| **Windows x86-64** | Tested on Windows Server 2022 Desktop Experience in an interactive RDP session |
+| macOS, X11, ARM64, additional Windows configurations | Not qualified for 1.0.0 |
+
+UI4ME deliberately supports a finite desktop HTML/CSS profile. **It is not a browser:** no page JavaScript, fetch/network navigation, browser extensions, HTML media, full interactive SVG, PDF/printing engine or full rich-text editor. Some native window requests differ between Wayland and Windows; the API reports unsupported operations rather than claiming success. [Read platform limitations](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/platforms.md) and the [capability audit](https://github.com/ui4me/ui4me-core/blob/main/docs/CAPABILITY_SCOPE.md).
+
+## More ways to use it
+
+- **Atomic updates:** `doc.batch([{"op": "set_text", "element": "status", "text": "Ready"}, ...])`.
+- **Native dialogs:** `window.open_files()`, `window.save_file()` and `window.choose_folder()`.
+- **Generated resources:** `doc.register_resources("icons", {"ok.png": image_bytes})` for `ui4me-res://icons/ok.png`.
+- **Live pixels:** `<img src="ui4me-bitmap://preview">` with `doc.create_bitmap("preview", 320, 200)` and `bitmap.try_present(raw_rgba)`.
+- **Multiple windows:** `app.open_file(...)`, `app.open_html(...)` and `window.load_html(...)`.
+- **Native window control:** `app.create_window(decorations=False)` with `data-ui4me-drag` and `data-ui4me-resize` in HTML.
+
+[Patterns and recipes](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/patterns.md) · [Technical protocol](https://github.com/ui4me/ui4me-core/blob/main/docs/PROTOCOL_DOCUMENTS.md) · [Core architecture](https://github.com/ui4me/ui4me-core/blob/main/docs/CORE_1.0_SPEC.md).
+
+## Development and releases
+
+Run the source checks (requires Rust and native development dependencies):
+
+```bash
+python3 tools/verify.py
+cargo clippy --locked --workspace --all-targets -- -D warnings
+```
+
+The project includes installed-release acceptance scenarios for Linux and Windows. CI checks builds/contracts; the native KDE/Windows qualification records are in [docs/STATUS.md](https://github.com/ui4me/ui4me-core/blob/main/docs/STATUS.md).
+
+**Publishing is manual and intentional.** [`.github/workflows/publish.yaml`](https://github.com/ui4me/ui4me-core/blob/main/.github/workflows/publish.yaml) assembles the sdist, manylinux wheel and Windows wheel from one commit, validates them, publishes using PyPI Trusted Publishing, then creates the GitHub release. A regular push or tag does **not** publish. [Release instructions](https://github.com/ui4me/ui4me-core/blob/main/docs/release/PUBLISHING.md).
+
+[Documentation index](https://github.com/ui4me/ui4me-core/blob/main/docs/index.md) · [Contributing](https://github.com/ui4me/ui4me-core/blob/main/CONTRIBUTING.md) · [Third-party notices](https://github.com/ui4me/ui4me-core/blob/main/THIRD_PARTY_NOTICES.md) · [License](https://github.com/ui4me/ui4me-core/blob/main/LICENSE)

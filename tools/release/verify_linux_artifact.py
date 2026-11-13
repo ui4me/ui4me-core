@@ -55,6 +55,13 @@ def validate_wheel(path: Path) -> dict:
             if not any(x.endswith('.dist-info/licenses/'+name) or (x.endswith('/'+name) and '.dist-info/licenses/' in x) for x in entries):
                 raise ValueError(f'Wheel metadata lacks license file {name}')
         check_distributable(entries)
+        for needed in (
+            'ui4me_core/skills.py', 'ui4me_core/scaffold.py',
+            'ui4me_core/_skills/ui4me-python/SKILL.md',
+            'ui4me_core/_skills/ui4me-python/references/python-api.md',
+        ):
+            if needed not in entries:
+                raise ValueError(f'Wheel is missing the coding skill or developer CLI: {needed}')
         for needed in ('ui4me_core/application.py','ui4me_core/client.py','ui4me_core/live_bitmap.py','ui4me_core/launcher.py'):
             if needed not in entries: raise ValueError(f'Missing module {needed}')
         return {'filename':path.name,'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),
@@ -74,7 +81,14 @@ def validate_sdist(path: Path) -> dict:
                     'patches/stylo/stylo/style/stylist.rs',
                     # Extensionless build inputs (build scripts read them).
                     'crates/ui4me-assets/assets/last-resort/SHA256SUMS',
-                    'tools/release/collect_licenses.py']
+                    'tools/release/collect_licenses.py',
+                    'tools/release/verify_publish_dist.py',
+                    'python/ui4me_core/skills.py',
+                    'python/ui4me_core/scaffold.py',
+                    'skills/ui4me-python/SKILL.md',
+                    'skills/ui4me-python/references/python-api.md',
+                    'docs/guides/quickstart.md',
+                    'docs/images/desktop-workspace.png']
         for part in essentials:
             if not any(n.endswith('/'+part) for n in names):
                 raise ValueError(f'Sdist is missing {part}')

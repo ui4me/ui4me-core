@@ -1,0 +1,319 @@
+# One intentional click/gh workflow run. Never triggered by push or tags.
+# PyPI trusted publisher: owner ui4me, repository ui4me-core,
+# workflow publish.yaml, environment pypi.
+name: Publish UI4ME Core to PyPI and GitHub
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version already qualified in Cargo and pyproject.toml'
+        required: true
+        type: string
+        default: '1.0.0'
+      confirmation:
+        description: 'Type publish-1.0.0 (adjust for the chosen version)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui4me-publish-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    # This workflow will not publish from another branch or unconfirmed input.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate version and explicit operator confirmation
+        id: source
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, tomllib
+          from pathlib import Path
+          version=os.environ['REQUESTED_VERSION']
+          assert version == '1.0.0', 'This workflow is the reviewed UI4ME 1.0.0 release; update it for future releases'
+          assert os.environ['CONFIRMATION'] == 'publish-' + version, 'Confirmation phrase does not match'
+          assert tomllib.loads(Path('pyproject.toml').read_text())['project']['version'] == version
+          assert tomllib.loads(Path('Cargo.toml').read_text())['workspace']['package']['version'] == version
+          PY
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Validate source and prevent duplicate version upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/release/verify_source.py
+          python tools/verify_package.py
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "GitHub release v$VERSION already exists; do not republish" >&2
+            exit 1
+          fi
+          python - <<'PY'
+          import os, urllib.error, urllib.request
+          version=os.environ['VERSION']
+          url=f'https://pypi.org/pypi/ui4me-core/{version}/json'
+          try:
+              with urllib.request.urlopen(url,timeout=20):
+                  raise SystemExit(f'PyPI already has ui4me-core {version}; refusing duplicate upload')
+          except urllib.error.HTTPError as exc:
+              if exc.code != 404: raise
+          PY
+
+  source:
+    needs: preflight
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Create and validate the canonical source distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install 'build>=1.2' 'twine>=6'
+          python -m build --sdist --outdir dist
+          python -m twine check dist/*.tar.gz
+          python - <<'PY'
+          from pathlib import Path
+          from tools.release.verify_linux_artifact import validate_sdist
+          files=list(Path('dist').glob('ui4me_core-1.0.0.tar.gz'))
+          assert len(files)==1
+          print(validate_sdist(files[0]))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui4me-sdist
+          path: dist/ui4me_core-1.0.0.tar.gz
+          if-no-files-found: error
+
+  linux-wheel:
+    needs: [preflight, source]
+    runs-on: ubuntu-24.04
+    env:
+      CIBW_BUILD: 'cp312-manylinux_x86_64'
+      CIBW_ARCHS_LINUX: 'x86_64'
+      CIBW_MANYLINUX_X86_64_IMAGE: 'manylinux_2_34'
+      CIBW_BEFORE_ALL_LINUX: >-
+        dnf install -y wayland-devel libxkbcommon-devel dbus-devel pkgconf-pkg-config curl
+        && curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.99.1
+        && . $HOME/.cargo/env
+        && rustup component add clippy rustfmt
+      CIBW_ENVIRONMENT_LINUX: 'PATH="$HOME/.cargo/bin:$PATH" CARGO_BUILD_JOBS=2'
+      CIBW_REPAIR_WHEEL_COMMAND_LINUX: 'auditwheel repair -w {dest_dir} {wheel}'
+      CIBW_TEST_COMMAND_LINUX: 'python {project}/tools/release/smoke_installed_wheel.py'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui4me-sdist
+          path: source-dist
+      - name: Build manylinux wheel FROM the canonical source distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install 'cibuildwheel>=2.21' 'twine>=6'
+          python -m cibuildwheel --platform linux --output-dir dist source-dist/ui4me_core-1.0.0.tar.gz
+          python -m twine check dist/*.whl
+          python - <<'PY'
+          from pathlib import Path
+          from tools.release.verify_linux_artifact import validate_wheel
+          files=list(Path('dist').glob('ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl'))
+          assert len(files)==1,files
+          print(validate_wheel(files[0]))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui4me-linux-wheel
+          path: dist/*.whl
+          if-no-files-found: error
+
+  windows-wheel:
+    needs: [preflight, source]
+    runs-on: windows-2022
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui4me-sdist
+          path: source-dist
+      - name: Build Windows wheel FROM the same source distribution
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m pip install 'build>=1.2' 'twine>=6' 'wheel>=0.44'
+          New-Item -ItemType Directory -Force source-tree | Out-Null
+          tar -xzf source-dist/ui4me_core-1.0.0.tar.gz -C source-tree
+          $source = (Get-ChildItem source-tree -Directory -Filter 'ui4me_core-1.0.0').FullName
+          if (-not $source) { throw 'Source distribution did not extract correctly' }
+          # Avoid Cargo reusing build-script products from a previous sdist path.
+          $env:CARGO_TARGET_DIR = Join-Path $env:RUNNER_TEMP 'ui4me-cargo-publish'
+          python -m build --wheel --outdir dist $source
+          if ($LASTEXITCODE -ne 0) { throw 'Windows wheel build failed' }
+          $files = @(Get-ChildItem dist -Filter 'ui4me_core-1.0.0-py3-none-win_amd64.whl')
+          if ($files.Count -ne 1) { throw 'Expected exactly one Windows wheel' }
+          python -m twine check $files[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Twine check failed' }
+          python -c 'import pathlib,sys;sys.path.insert(0,"tools/release");from verify_windows_artifact import validate_wheel;print(validate_wheel(pathlib.Path(sys.argv[1])))' $files[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Windows artifact verification failed' }
+      - name: Smoke install Windows wheel without Rust
+        shell: pwsh
+        run: |
+          python -m venv smoke
+          $wheel = (Get-ChildItem dist -Filter '*win_amd64.whl').FullName
+          & smoke/Scripts/python -m pip install --no-index --only-binary :all: $wheel
+          if ($LASTEXITCODE -ne 0) { throw 'Wheel install failed' }
+          & smoke/Scripts/python tools/release/smoke_installed_wheel.py
+          if ($LASTEXITCODE -ne 0) { throw 'Installed wheel smoke failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui4me-windows-wheel
+          path: dist/*.whl
+          if-no-files-found: error
+
+  assemble:
+    needs: [preflight, source, linux-wheel, windows-wheel]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui4me-sdist
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui4me-linux-wheel
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui4me-windows-wheel
+          path: dist
+      - name: Verify exact distribution set and write SHA-256 manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install 'twine>=6'
+          python tools/release/verify_publish_dist.py dist --write-hashes dist/SHA256SUMS
+          python -m twine check dist/*.whl dist/*.tar.gz
+          git rev-parse HEAD > dist/SOURCE_COMMIT.txt
+          test "$(cat dist/SOURCE_COMMIT.txt)" = '${{ needs.preflight.outputs.source_sha }}'
+          mkdir publish
+          cp dist/*.whl dist/*.tar.gz publish/
+          test "$(find publish -maxdepth 1 -type f | wc -l)" -eq 3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui4me-publishable-dist
+          path: publish/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui4me-provenance
+          path: |
+            dist/SHA256SUMS
+            dist/SOURCE_COMMIT.txt
+          if-no-files-found: error
+
+  pypi:
+    # The PyPI pending publisher requires exactly publish.yaml and pypi.
+    needs: assemble
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/ui4me-core/${{ inputs.version }}/
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui4me-publishable-dist
+          path: dist
+      - name: Publish using PyPI Trusted Publishing (no API key)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          attestations: true
+
+  github-release:
+    needs: [preflight, pypi]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui4me-publishable-dist
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui4me-provenance
+          path: dist
+      - name: Verify source ref and create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(cat dist/SOURCE_COMMIT.txt)" = "$SOURCE_SHA"
+          (cd dist && sha256sum -c SHA256SUMS)
+          tag="v$RELEASE_VERSION"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists, refusing to overwrite it" >&2
+            exit 1
+          fi
+          existing=$(git ls-remote --tags origin "refs/tags/$tag" | awk '{print $1}')
+          if [[ -n "$existing" && "$existing" != "$SOURCE_SHA" ]]; then
+            # An annotated tag may point to a tag object; compare peeled ref.
+            peeled=$(git ls-remote --tags origin "refs/tags/$tag^{}" | awk '{print $1}')
+            if [[ "$peeled" != "$SOURCE_SHA" ]]; then
+              echo "Tag $tag exists at another commit" >&2
+              exit 1
+            fi
+          fi
+          gh release create "$tag" \
+            dist/*.whl dist/*.tar.gz dist/SHA256SUMS dist/SOURCE_COMMIT.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+            --title "UI4ME Core $RELEASE_VERSION" \
+            --notes-file docs/release/RELEASE_NOTES_1.0.0.md --latest

@@ -142,6 +142,10 @@ Diagnostics added: `tools/windows/uia_com_probe.py` (native COM client) and `--c
 * Wheel-from-sdist builds must use a fresh Cargo target directory (see
   [BUILDING_WINDOWS](release/BUILDING_WINDOWS.md)).
 
+## Final documentation and publishing preparation
+
+The professional README, public Python documentation, real screenshots, `ui4me-new` project generator, `ui4me-python` Agent Skill and **manual-only** publishing workflow were prepared as a subsequent documentation/distribution change. The previous native qualification remains attached to its original source identity. **This does not claim that the new source or rebuilt wheels have been republished or independently requalified.** The release owner or local agent must run the new Python tests, rebuild both wheels, validate their skill payload and actual installer, update the source manifest, and operate the guarded workflow intentionally. See [manual release procedure](release/PUBLISHING.md).
+
 ## Can the owner publish?
 
 Yes, if they choose to: upload exactly `ui4me_core-1.0.0.tar.gz`,

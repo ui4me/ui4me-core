@@ -68,6 +68,13 @@ def validate_wheel(path: Path) -> dict:
             if not any('.dist-info/licenses/' in x and x.endswith('/' + license_name) for x in entries):
                 raise ValueError(f'Wheel metadata lacks license file {license_name}')
         check_distributable(entries)
+        for needed in (
+            'ui4me_core/skills.py', 'ui4me_core/scaffold.py',
+            'ui4me_core/_skills/ui4me-python/SKILL.md',
+            'ui4me_core/_skills/ui4me-python/references/python-api.md',
+        ):
+            if needed not in entries:
+                raise ValueError(f'Wheel is missing the coding skill or developer CLI: {needed}')
         for needed in ('ui4me_core/application.py', 'ui4me_core/client.py',
                        'ui4me_core/live_bitmap.py', 'ui4me_core/launcher.py'):
             if needed not in entries:

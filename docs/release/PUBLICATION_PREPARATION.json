@@ -1,0 +1,20 @@
+{
+  "source_baseline_commit": "4f9f4bde452880655d646a510f7795d4aa6bfc2c",
+  "baseline_verification": "User-provided qualified Linux and Windows 1.0.0 evidence in docs/STATUS.md",
+  "scope": "Public README and screenshots, documentation navigation and API guide, manual PyPI/GitHub workflow, coding-agent skill, cross-platform skill installer, project generator and release tests",
+  "not_started": [
+    "GitHub repository write/push",
+    "Manual publish workflow dispatch",
+    "Publishing to PyPI",
+    "Creating a GitHub Release"
+  ],
+  "qualifications_required": [
+    "Local Rust build/lint and source checks after import",
+    "Actual Linux and Windows binary wheel build from the same source distribution",
+    "Clean installed-wheel smoke and skill discovery on both platforms",
+    "Manual publishing with exact trusted publisher and protected environment",
+    "Publishing status and hashes recorded only after success"
+  ],
+  "publishing_workflow": ".github/workflows/publish.yaml",
+  "pypi_identity": {"owner": "ui4me", "repository": "ui4me-core", "workflow": "publish.yaml", "environment": "pypi"}
+}

@@ -1,8 +1,6 @@
 name: Build Windows source and wheel (not published)
 on:
   workflow_dispatch:
-  push:
-    tags: ['v1.0.0']
 permissions:
   contents: read
 jobs:

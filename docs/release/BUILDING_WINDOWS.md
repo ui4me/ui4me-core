@@ -39,7 +39,7 @@ each wheel built from an sdist: every build extracts the sdist to a new
 temporary path with the archive's original timestamps, so Cargo may consider an
 old build-script binary of a path crate fresh and run it with the previous
 extraction path baked in (`assets/last-resort/SHA256SUMS is missing`). The same steps run in
-`.github/workflows/release-windows.yml` (manual or tag trigger; uploads CI
+`.github/workflows/release-windows.yml` (manual dispatch only; uploads CI
 artifacts only).
 
 ## Install and check without Rust

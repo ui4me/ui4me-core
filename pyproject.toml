@@ -35,6 +35,8 @@ Source = "https://github.com/ui4me/ui4me-core"
 [project.scripts]
 ui4me-host = "ui4me_core.launcher:main"
 ui4me = "ui4me_core.launcher:main"
+ui4me-skill = "ui4me_core.skills:main"
+ui4me-new = "ui4me_core.scaffold:main"
 
 [tool.setuptools]
 package-dir = {"" = "python"}
@@ -46,4 +48,4 @@ where = ["python"]
 include = ["ui4me_core*"]
 
 [tool.setuptools.package-data]
-ui4me_core = ["_bin/*"]
+ui4me_core = ["_bin/*", "_skills/ui4me-python/*", "_skills/ui4me-python/references/*", "_skills/ui4me-python/examples/*"]
