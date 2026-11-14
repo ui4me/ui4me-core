@@ -208,6 +208,7 @@ pub struct Host {
     exit_code: Arc<AtomicI32>,
     /// Set when a supervising launcher process has exited.
     launcher_gone: Option<Arc<AtomicBool>>,
+    dropped_notifications: u64,
     /// Shared native presentation context, created with the first window.
     presentation: Option<softbuffer::Context<OwnedDisplayHandle>>,
     preferences: platform::preferences::PreferenceWatch,
@@ -431,6 +432,7 @@ impl Host {
             deferred_clipboard_reads: Vec::new(),
             exit_code,
             launcher_gone,
+            dropped_notifications: 0,
             presentation: None,
             preferences,
             preference_revision: 0,
@@ -473,7 +475,30 @@ impl Host {
             }
             #[cfg(test)]
             self.observed_notifications.push(message.clone());
-            self.send(client, message);
+            // Notifications are droppable: a burst (for example transition* events of
+            // every control after a colour-scheme switch) must not disconnect a backend
+            // that is reading. A backend that stops reading is ended by the transport's
+            // write timeout; responses still use `send`, which disconnects on failure.
+            if let Some(server) = &self.server {
+                match server.offer(client, message) {
+                    Ok(transport::Offer::Queued) => {}
+                    Ok(transport::Offer::Saturated(reason)) => {
+                        self.dropped_notifications += 1;
+                        if self.dropped_notifications.is_power_of_two() {
+                            tracing::warn!(
+                                method,
+                                reason,
+                                dropped = self.dropped_notifications,
+                                "host notification dropped: backend queue saturated"
+                            );
+                        }
+                    }
+                    Err(error) => {
+                        tracing::warn!(%error, "peer cannot receive bounded output");
+                        server.disconnect(client);
+                    }
+                }
+            }
         }
     }
     fn window_event_message(&mut self, id: &str, kind: &str, data: Value) {
@@ -1257,6 +1282,7 @@ mod tests {
             deferred_clipboard_reads: Vec::new(),
             exit_code: Arc::new(AtomicI32::new(0)),
             launcher_gone: None,
+            dropped_notifications: 0,
             presentation: None,
             preferences: platform::preferences::PreferenceWatch::new(false, Arc::new(|| {})),
             preference_revision: 0,
