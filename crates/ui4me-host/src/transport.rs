@@ -18,6 +18,14 @@ const MAX_OUTBOUND_MESSAGES: usize = 128;
 const MAX_OUTBOUND_BYTES: usize = 8 * 1024 * 1024;
 const MAX_INBOUND_BYTES: usize = 8 * 1024 * 1024;
 
+/// Result of queueing an outgoing message that the caller may choose to drop.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Offer {
+    Queued,
+    /// The peer's bounded queue (message count or bytes) is full right now.
+    Saturated(&'static str),
+}
+
 #[derive(Debug)]
 pub enum TransportEvent {
     Connected(u64),
@@ -192,7 +200,23 @@ impl Server {
     }
 
     /// Queue without waiting for the client to read. The GUI can call this.
+    /// A response that cannot be queued is an error: the caller disconnects.
     pub fn reply(&self, connection: u64, value: Value) -> Result<()> {
+        match self.enqueue(connection, value)? {
+            Offer::Queued => Ok(()),
+            Offer::Saturated(reason) => Err(anyhow::anyhow!("{reason}")),
+        }
+    }
+
+    /// Queue a droppable message (a host notification) without waiting. A peer
+    /// whose bounded queue is momentarily full is still healthy: the message is
+    /// reported as [`Offer::Saturated`] and the connection stays open. A peer
+    /// that stops reading entirely is still ended by the writer's write timeout.
+    pub fn offer(&self, connection: u64, value: Value) -> Result<Offer> {
+        self.enqueue(connection, value)
+    }
+
+    fn enqueue(&self, connection: u64, value: Value) -> Result<Offer> {
         let bytes = serde_json::to_vec(&value)?;
         if bytes.len() > MAX_FRAME_BYTES {
             bail!("outgoing frame exceeds limit");
@@ -210,15 +234,21 @@ impl Server {
         let previous = peer.queued_bytes.fetch_add(length, Ordering::AcqRel);
         if previous + length > MAX_OUTBOUND_BYTES {
             peer.queued_bytes.fetch_sub(length, Ordering::AcqRel);
-            bail!("connection outgoing byte limit exceeded");
+            return Ok(Offer::Saturated("connection outgoing byte limit exceeded"));
         }
-        if let Err(error) = peer.outgoing.try_send(bytes) {
-            peer.queued_bytes.fetch_sub(length, Ordering::AcqRel);
-            return Err(anyhow::anyhow!(
-                "connection outgoing queue unavailable: {error}"
-            ));
+        match peer.outgoing.try_send(bytes) {
+            Ok(()) => Ok(Offer::Queued),
+            Err(TrySendError::Full(_)) => {
+                peer.queued_bytes.fetch_sub(length, Ordering::AcqRel);
+                Ok(Offer::Saturated(
+                    "connection outgoing queue unavailable: sending on a full channel",
+                ))
+            }
+            Err(TrySendError::Disconnected(_)) => {
+                peer.queued_bytes.fetch_sub(length, Ordering::AcqRel);
+                bail!("connection outgoing queue unavailable: sending on a closed channel")
+            }
         }
-        Ok(())
     }
 
     pub fn disconnect(&self, connection: u64) {
@@ -590,6 +620,42 @@ mod tests {
                 break;
             }
         }
+        server.close();
+    }
+
+    #[test]
+    fn saturated_notifications_do_not_end_a_healthy_connection() {
+        let app = format!("org.ui4me.transport.offer.{}", std::process::id());
+        let lock = crate::platform::InstanceLock::acquire(&app).unwrap();
+        let mut server = Server::bind(&app, &lock.instance_key, Arc::new(|| {})).unwrap();
+        // Connected but not reading yet: the writer can drain at most what the OS pipe buffers.
+        let client = NativeStream::connect(&server.endpoint, Duration::from_secs(2)).unwrap();
+        let connection = match server
+            .incoming
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+        {
+            TransportEvent::Connected(id) => id,
+            other => panic!("unexpected {other:?}"),
+        };
+        let event = serde_json::json!({"jsonrpc":"2.0","method":"document.event",
+            "params":{"event":{"type":"transitionend","padding":"x".repeat(32 * 1024)}}});
+        let mut saturated = 0;
+        for _ in 0..(MAX_OUTBOUND_MESSAGES * 8) {
+            match server.offer(connection, event.clone()).unwrap() {
+                Offer::Queued => {}
+                Offer::Saturated(_) => saturated += 1,
+            }
+        }
+        assert!(
+            saturated > 0,
+            "a burst larger than the queue must saturate it"
+        );
+        assert!(
+            server.is_connected(connection),
+            "saturation must not disconnect"
+        );
+        drop(client);
         server.close();
     }
 
