@@ -22,14 +22,14 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from run_example import locate_host  # noqa: E402
+from run_example import checkout_environment, locate_host  # noqa: E402
 from native_acceptance import source_identity  # noqa: E402
 
 
 # --------------------------------------------------------------------------- backend
 def backend(args):
-    sys.path.insert(0, str(ROOT / "examples/python"))
-    from client import RpcClient
+    sys.path.insert(0, str(ROOT / "python"))
+    from ui4me_core import RpcClient
     events = Path(args.events)
 
     def emit(event, **detail):
@@ -224,7 +224,8 @@ def run_once(host, folder, index, idle, cycles, sample_every, *, renderer=False,
         f"cwd = {q(str(folder))}", "", "[host]", 'instance = "multiple"', "startup_timeout_ms = 30000", ""]), encoding="utf-8")
     with log_path.open("wb") as log:
         started = time.time()
-        process = subprocess.Popen([host, "run", "--app", str(app)], stdout=log, stderr=subprocess.STDOUT)
+        process = subprocess.Popen([host, "run", "--app", str(app)], stdout=log, stderr=subprocess.STDOUT,
+                                   env=checkout_environment())
         try:
             ready = wait_event(events, "ready", time.monotonic() + 30)
             result = {"startup_to_ready_ms": round((ready["t"] - started) * 1000, 1)}

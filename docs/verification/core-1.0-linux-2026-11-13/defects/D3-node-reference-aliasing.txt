@@ -1,6 +1,0 @@
-Before fix (host 531e51d7..., KDE, C-lab via real IPC):
-> rawdoc window w1 document d2 node_batch set_text node:23:1 (handle minted by replaced document d1)
-{"ok": true, "result": {"updated": true}}      <- old handle modified the replacement document
-After fix (host 714cfec9... and final fc422be5...):
-{"ok": false, "code": -32004, "error": "-32004: batch operation 0: Stale node reference: node:1:23:1 belongs to another document"}
-new doc first li: node:2:23:1

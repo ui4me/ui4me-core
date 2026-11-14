@@ -1,4 +1,4 @@
-"""Stage a cross-platform UI4ME.Core PSGallery module from qualified 1.0.0 wheels.
+"""Stage a cross-platform UI4ME.Core PSGallery module from qualified 1.0.1 wheels.
 
 No recompilation, no publication. The packaged native hosts are the exact
 Linux/Windows host binaries taken from the same published Python release.
@@ -18,7 +18,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 MOD = ROOT / 'powershell' / 'UI4ME.Core'
-VERSION = '1.0.0'
+VERSION = '1.0.1'
 HOSTS = {
     'linux': ('linux-x64', 'ui4me_core/_bin/ui4me-host', b'\x7fELF', 'manylinux_2_34_x86_64'),
     'windows': ('win-x64', 'ui4me_core/_bin/ui4me-host.exe', b'MZ', 'win_amd64'),
@@ -93,8 +93,10 @@ def build(linux: Path, windows: Path, output: Path, source_identity: str='') -> 
     shutil.copytree(ROOT/'skills'/'ui4me-powershell',dest/'skills'/'ui4me-powershell')
     # User documentation travels with the module; repository links become absolute.
     from sync_powershell_docs import standalone
+    (dest/'README.md').write_text(standalone(MOD/'README.md'),encoding='utf-8',newline='\n')
     (dest/'docs').mkdir()
-    for doc in ('docs/guides/powershell.md','docs/reference/powershell-api.md'):
+    for doc in ('docs/guides/install-powershell.md','docs/guides/quickstart-powershell.md',
+                'docs/reference/powershell-api.md','docs/guides/troubleshooting.md'):
         source=ROOT/doc
         (dest/'docs'/source.name).write_text(standalone(source),encoding='utf-8',newline='\n')
     reports={'version':VERSION,'python_runtime_required':False,'source_identity':source_identity,
@@ -105,7 +107,7 @@ def build(linux: Path, windows: Path, output: Path, source_identity: str='') -> 
         for p in sorted(dest.rglob('*')) if p.is_file()
     }
     (dest/'HOST-SOURCE-MANIFEST.json').write_text(json.dumps(reports,indent=2,sort_keys=True)+'\n',encoding='utf-8')
-    archive=output/'UI4ME.Core-1.0.0.zip'
+    archive=output/'UI4ME.Core-1.0.1.zip'
     with zipfile.ZipFile(archive,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as z:
         for path in sorted(dest.rglob('*')):
             if path.is_file():z.write(path,path.relative_to(output).as_posix())

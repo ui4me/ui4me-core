@@ -4,7 +4,7 @@ exclude = ["patches", "third_party"]
 resolver = "3"
 
 [workspace.package]
-version = "1.0.0"
+version = "1.0.1"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT AND OFL-1.1"

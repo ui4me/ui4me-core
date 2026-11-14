@@ -1,7 +1,0 @@
-Before fix (host 2f43478898e9..., 256x256 PNG bundle replaced every 0.25 s while displayed):
-10 entries 1 bytes 2658304 referenced 2658304 host PSS kB 74058
-20 entries 1 bytes 5279744 referenced 5279744 host PSS kB 76618
-30 entries 1 bytes 7901184 referenced 7901184 host PSS kB 79178
-40 entries 1 bytes 10522624 referenced 10522624 host PSS kB 81738
-50 entries 1 bytes 13144064 referenced 13144064 host PSS kB 84302
-60 entries 1 bytes 15765504 referenced 15765504 host PSS kB 86862

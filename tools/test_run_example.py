@@ -11,7 +11,7 @@ class ManifestVersionTests(unittest.TestCase):
             expected = tomllib.load(stream)["workspace"]["package"]["version"]
         app = tomllib.loads(run_example.manifest([]))["app"]
         self.assertEqual(app["version"], expected)
-        self.assertEqual(expected, "1.0.0")
+        self.assertEqual(expected, "1.0.1")
 
     def test_explicit_version_is_kept(self):
         app = tomllib.loads(run_example.manifest([], app_version="2.3.4"))["app"]

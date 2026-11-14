@@ -1,7 +1,9 @@
 """Packaging, source identity, cross-check and visual comparison regressions."""
 import importlib.util
 import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import tomllib
@@ -22,12 +24,20 @@ class PackageTests(unittest.TestCase):
             manifest = tomllib.loads(app.read_text(encoding="utf-8"))
             self.assertEqual(manifest["app"]["id"], "org.ui4me.RendererReference")
             self.assertEqual(manifest["backend"]["program"], sys.executable)
-            for name in ("client.py", "application.py", "renderer_demo.py", "completion_checks.py", "ui/index.html", "ui/details.html",
+            for name in ("ui4me_core/__init__.py", "ui4me_core/client.py", "ui4me_core/application.py",
+                         "renderer_demo.py", "completion_checks.py", "ui/index.html", "ui/details.html",
                          "ui/style.css", "ui/mark.svg", "ui/landscape.png", "ui/fonts/NotoSans-Regular.ttf",
                          "ui/fonts/FONT-LICENSE.txt", "ui4me.png"):
                 self.assertTrue((destination / name).is_file(), name)
             self.assertNotIn("--headless", str(manifest))
             self.assertFalse((destination / "demo.py").exists())
+            self.assertFalse((destination / "ui4me_core" / "_bin").exists())
+            # The standalone copy imports the client package placed beside it.
+            probe = subprocess.run([sys.executable, "-I", "-X", "utf8", "-c",
+                "import sys; sys.path.insert(0, sys.argv[1]); import completion_checks, ui4me_core; "
+                "print(ui4me_core.__file__)", str(destination)], capture_output=True, text=True, encoding="utf-8", check=False)
+            self.assertEqual(probe.returncode, 0, probe.stderr)
+            self.assertTrue(Path(probe.stdout.strip()).is_relative_to(destination), probe.stdout)
 
     def test_copy_never_overwrites_existing_app(self):
         with tempfile.TemporaryDirectory() as temporary:

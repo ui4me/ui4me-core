@@ -1,3 +1,0 @@
-## N13 drag and drop
-drops ['window.event {"data": {"paths": ["/home/toor/ui4me-dnd/žluťoučký 日本.txt"]}, "type": "dropped_files", "window_id": "w1"}', 'window.event {"data": {"text": "drag this text from kwrite\\n"}, "type": "dropped_text", "window_id": "w1"}'] | KWrite source 'drag this text from kwrite\n'
-DONE

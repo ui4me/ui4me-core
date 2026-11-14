@@ -1,5 +1,0 @@
-Environment: UI4ME_RASTER_QUALITY=high; default build without optional feature
-$ target/debug/ui4me-host render --html examples/python/ui/index.html --output <temporary image> --width 400 --height 300 --scale 1
-Observed exit code: 1 (expected unsupported feature)
-
-ui4me-host: UNSUPPORTED_FEATURE: UI4ME_RASTER_QUALITY=high requires the diagnostic-raster-quality build feature

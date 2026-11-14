@@ -1,4 +1,0 @@
-AT-SPI window-cycle growth attribution (release build of the final tree, KDE, measure_resources --renderer --cycles 400)
-org.a11y.Status IsEnabled=true: host PSS KiB by cycle [(50, 57909), (100, 59557), (150, 60389), (200, 61209), (250, 62413), (300, 63233), (350, 64045), (400, 64849)]
-org.a11y.Status IsEnabled=false: host PSS KiB by cycle [(50, 54346), (100, 55366), (150, 55870), (200, 55870), (250, 55906), (300, 55906), (350, 55906), (400, 57290)]
-Probe (about 10 accessible objects) on the same desktop: 3.27 KiB/cycle (the known 0.1 zbus residue). Renderer document (~100 objects): 18.6-19.8 KiB/cycle with the bus active; plateau when inactive.

@@ -1,7 +1,0 @@
-start menu entry [183.0, 381.0, 'Independent UI4ME Consumer']
-window Independent UI4ME consumer Window Class pid 1484
-  proc {'pid': 1484, 'ppid': 3492, 'exe': 'C:\\Users\\ui4me_test\\AppData\\Local\\ui4me-wheel-3.12\\Lib\\site-packages\\ui4me_core\\_bin\\ui4me-host.exe', 'name': 'ui4me-host.exe', 'parent': 'explorer.exe'}
-  proc {'pid': 8124, 'ppid': 1484, 'exe': 'C:\\Users\\ui4me_test\\AppData\\Local\\ui4me-wheel-3.12\\Scripts\\python.exe', 'name': 'python.exe', 'parent': 'ui4me-host.exe'}
-console windows in app tree []
-taskbar ['Independent UI4ME Consumer - 1 running window']
-report {'python': '3.12.16 (main, Oct 26 2026, 14:10:56) [MSC v.1944 64 bit (AMD64)]', 'executable': '\\\\?\\C:\\Users\\ui4me_test\\AppData\\Local\\ui4me-wheel-3.12\\Scripts\\python.exe', 'ui4me_core': '\\\\?\\C:\\Users\\ui4me_test\\AppData\\Local\\ui4me-wheel-3.12\\Lib\\site-packages\\ui4me_core\\__init__.py', 'host': '\\\\?\\C:\\Users\\ui4me_test\\AppData\\Local\\ui4me-wheel-3.12\\Lib\\site-packages\\ui4me_core\\_bin\\ui4me-host.exe', 'ppid': 8124, 'frames_presented': 120, 'window_state': {'decorations': True, 'focused': True, 'fullscreen': False, 'maximized': False, 'minimized': False, 'position': {'unit': 'physical_pixels', 'x': 78, 'y': 78}, 'resizable': True, 'theme': 'light', 'visible': True}}

@@ -14,7 +14,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[2]
-MANIFEST = ROOT / 'docs' / 'SOURCE_FILES.sha256'
+MANIFEST = ROOT / 'tools' / 'release' / 'SOURCE_FILES.sha256'
 EXCLUDED_DIRS = {'.git', '.venv', '__pycache__', '.pytest_cache',
                  'node_modules', '.mypy_cache', '.ruff_cache'}
 EXCLUDED_TOP_LEVEL = {'.local', 'target', 'build', 'dist', 'dist-manylinux', 'verification'}
@@ -51,7 +51,7 @@ def included_source_files(root: Path = ROOT):
         if not path.is_file() and not path.is_symlink():
             continue
         rel = path.relative_to(root)
-        if rel.as_posix() == 'docs/SOURCE_FILES.sha256':
+        if rel.as_posix() == 'tools/release/SOURCE_FILES.sha256':
             continue
         if visible is not None and rel.as_posix() not in visible:
             continue
@@ -71,7 +71,7 @@ def included_source_files(root: Path = ROOT):
 
 
 def build_manifest(root: Path = ROOT):
-    rows = ['# UI4ME Core 1.0.0 public release source. This manifest excludes itself.']
+    rows = ['# UI4ME Core 1.0.1 public release source. This manifest excludes itself.']
     for file in included_source_files(root):
         rows.append(f'{hashlib.sha256(file.read_bytes()).hexdigest()}  {file.relative_to(root).as_posix()}')
     return '\n'.join(rows) + '\n'

@@ -1,5 +1,5 @@
 //! UI4ME's native desktop host and hosted HTML/CSS document boundary. Native validation is tracked separately
-//! from protocol and lifecycle verification; see docs/STATUS.md.
+//! from protocol and lifecycle verification; see docs/concepts/architecture.md.
 pub mod accessibility;
 pub mod backend;
 pub mod config;

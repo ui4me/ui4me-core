@@ -1,7 +1,0 @@
-host sha256: fc422be508059785022d3937d277e51d14e80be4f3731a47fdfff6828bdecc33
-renderer-system: reduced_motion=system ready ms [788.2, 633.7, 534.1, 569.1, 551.3] median 569.1; first frame median 116.7 ms; idle 57.0 s CPU host 0.222% backend 0.277%; PSS host+backend 59.6 MB; window-cycle host PSS slope 20.9 KiB/cycle (cycles 50-400)
-   DOM cycles host PSS kB: [62852, 62852, 62852, 62856, 62860, 62888, 62888, 62888]
-renderer-reduce: reduced_motion=reduce ready ms [739.5, 576.5, 553.2, 550.1, 541.9] median 553.2; first frame median 117.9 ms; idle 57.0 s CPU host 0.238% backend 0.282%; PSS host+backend 59.4 MB; window-cycle host PSS slope 18.3 KiB/cycle (cycles 50-400)
-   DOM cycles host PSS kB: [64512, 64512, 64512, 64512, 64516, 64576, 64576, 64576]
-probe: reduced_motion=None ready ms [126.9, 137.7, 131.3, 138.4, 130.6] median 131.3; first frame median 130.5 ms; idle 57.0 s CPU host 0.229% backend 0.285%; PSS host+backend 33.2 MB; window-cycle host PSS slope 3.3 KiB/cycle (cycles 50-400)
-0.2 comparison (BASELINE_0.2_STATUS): Linux 0.23% host idle CPU, 60.1 MB host+backend, 527 ms median readiness; AT-SPI ~19 KiB/window

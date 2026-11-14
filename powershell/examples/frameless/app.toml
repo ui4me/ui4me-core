@@ -1,7 +1,7 @@
 [app]
 id = "org.ui4me.PowerShellFrameless"
 name = "PowerShell Frameless Window"
-version = "1.0.0"
+version = "1.0.1"
 
 [backend]
 program = "pwsh"

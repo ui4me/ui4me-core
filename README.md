@@ -1,179 +1,227 @@
 # UI4ME Core
 
-**Build native desktop applications with HTML, CSS and Python—without bundling a browser.**
+**Native desktop apps from local HTML and CSS, with your logic in plain Python or PowerShell.**
 
 [![CI](https://github.com/ui4me/ui4me-core/actions/workflows/ci.yml/badge.svg)](https://github.com/ui4me/ui4me-core/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/ui4me-core?label=PyPI)](https://pypi.org/project/ui4me-core/)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)](https://pypi.org/project/ui4me-core/)
-[![License: MIT](https://img.shields.io/badge/UI4ME-MIT-blue)](https://github.com/ui4me/ui4me-core/blob/main/LICENSE)
+[![PowerShell Gallery](https://img.shields.io/powershellgallery/v/UI4ME.Core?label=PowerShell%20Gallery)](https://www.powershellgallery.com/packages/UI4ME.Core)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-UI4ME gives Python a familiar HTML/CSS user interface while **Rust owns the real desktop window, input, rendering, accessibility and lifecycle**. Application code runs in a separate, supervised Python process over private local IPC. There is **no Chromium, WebKit, Electron, Qt, embedded webview, JavaScript engine or HTTP server**. It is a focused native HTML/CSS desktop renderer, **not a complete browser**.
+[Documentation](docs/index.md) · [Python quickstart](docs/guides/quickstart-python.md) · [PowerShell quickstart](docs/guides/quickstart-powershell.md) · [Python API](docs/reference/python-api.md) · [PowerShell commands](docs/reference/powershell-api.md) · [Releases](https://github.com/ui4me/ui4me-core/releases)
 
-![UI4ME desktop application running natively on KDE Wayland](https://raw.githubusercontent.com/ui4me/ui4me-core/main/docs/images/desktop-workspace.png)
+<details>
+<summary><b>Install for Python on Linux</b></summary>
 
-*An actual UI4ME window from the Linux native acceptance run. [Live bitmap / custom titlebar screenshot](https://github.com/ui4me/ui4me-core/blob/main/docs/images/live-bitmap.png).*
-
-## Install
-
-Requires **Python 3.10+**, on Linux x86-64 with **glibc 2.34+** or Windows x86-64. The wheels include the native Rust host, so **Rust is not required to install or run** UI4ME.
-
-**Linux** (use a virtual environment):
+Python 3.10+ on Linux x86-64 (glibc 2.34+) with a Wayland desktop session.
 
 ```bash
+# With uv (recommended)
+uv init --bare my-app && cd my-app
+uv add ui4me-core
+
+# Or with pip in a virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install ui4me-core
-ui4me-host --version
 ```
 
-**Windows PowerShell** (same Python API):
+The wheel contains the native host, so you do not need Rust. Check it with `ui4me-host --version`.
+
+</details>
+
+<details>
+<summary><b>Install for Python on Windows</b></summary>
+
+Python 3.10+ on Windows x64, in PowerShell or Command Prompt.
 
 ```powershell
+# With uv (recommended)
+uv init --bare my-app; cd my-app
+uv add ui4me-core
+
+# Or with pip in a virtual environment
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install ui4me-core
-ui4me-host --version
 ```
 
-The published package name is **`ui4me-core`**; the Python import is **`ui4me_core`**. The same sdist and wheels, with `SHA256SUMS`, are attached to the [GitHub release](https://github.com/ui4me/ui4me-core/releases/tag/v1.0.0). Releases are published by a manually dispatched workflow, never by a push.
+The wheel contains the native host, so you do not need Rust. Check it with `ui4me-host --version`.
 
-## First application (HTML, CSS and Python)
+</details>
 
-Create a project with four ordinary files and a manifest:
+<details>
+<summary><b>Install for PowerShell</b></summary>
 
-```bash
-ui4me-new hello-ui --name "Hello UI4ME"
-ui4me-host run --app hello-ui/app.toml
-```
-
-The generator creates `index.html`, `style.css`, `app.py` and `app.toml` using your active Python interpreter. **Start the host with `ui4me-host run`**; do not launch `app.py` directly, because the host supplies the private authenticated connection.
-
-An application callback is regular Python:
-
-```python
-from pathlib import Path
-from ui4me_core import Application
-
-HERE = Path(__file__).resolve().parent
-
-with Application.from_environment() as app:
-    window = app.open_file(HERE / "index.html", title="My first native app")
-    doc = window.document
-
-    doc.on("click", lambda event: doc.set_text("status", "Saved!"), element="save")
-    app.run()
-```
-
-In your HTML, use `<button id="save">Save</button><p id="status">Ready</p>` and link a local CSS file. **No JavaScript or `onclick=` is necessary.**
-
-Generate HTML in Python without an HTML file when you want:
-
-```python
-window = app.open_html('<button id="run">Run</button><p id="out">Ready</p>')
-window.document.on('click', lambda _: window.document.set_text('out', 'Done'), element='run')
-```
-
-You can also replace a loaded document with `window.load_file(...)` or `window.load_html(...)`, update individual elements without reloading, and group changes with `doc.batch([...])`. Old document/node handles are invalid after replacement.
-
-**[5-minute quickstart](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/quickstart.md)** · **[Python API reference](https://github.com/ui4me/ui4me-core/blob/main/docs/reference/python-api.md)** · **[Examples](https://github.com/ui4me/ui4me-core/blob/main/examples/python/README.md)**
-
-## Make your coding agent understand UI4ME
-
-The distribution includes the **`ui4me-python` Agent Skill**. It documents loading HTML from files and strings, callbacks, document changes, stylesheet updates, forms, native dialogs, live bitmaps and the correct host launch model. Install it in user-level skill folders for your agents with **one Python command**:
-
-**Linux:**
-
-```bash
-python3 -m ui4me_core.skills install --agents all
-```
-
-**Windows PowerShell:**
-
-```powershell
-py -m ui4me_core.skills install --agents all
-```
-
-That installs into the appropriate per-user locations for Claude Code, Codex, OpenCode, GitHub Copilot, Cursor and Gemini CLI. No administrator privileges are needed; no other skills are overwritten. To inspect the destinations first:
-
-```bash
-ui4me-skill install --agents all --dry-run
-ui4me-skill status --agents all
-```
-
-There is no universal skill directory supported by every agent; the installer handles agent-specific locations. [Agent Skills guide](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/agent-skills.md) · [Skill source](https://github.com/ui4me/ui4me-core/blob/main/skills/ui4me-python/SKILL.md).
-
-## PowerShell support
-
-The same native host also runs desktop apps whose logic is **PowerShell** instead of Python. Install the **`UI4ME.Core`** module from the [PowerShell Gallery](https://www.powershellgallery.com/packages/UI4ME.Core); it includes the native hosts from the 1.0.0 wheels, so neither Python nor Rust is needed:
+PowerShell 7.2+ on Linux x64 or Windows x64, or Windows PowerShell 5.1. The module bundles the native hosts and does not need Python or Rust.
 
 ```powershell
 Install-Module UI4ME.Core -Scope CurrentUser
-New-UI4MEProject -Path ./my-app -Name 'My Application' -AppId org.example.MyApplication
-Start-UI4MEHost -Manifest ./my-app/app.toml
+Import-Module UI4ME.Core
+& (Get-UI4MEHostPath) --version
+```
+
+</details>
+
+<details>
+<summary><b>Documentation map</b></summary>
+
+| Topic | Read |
+| --- | --- |
+| First steps | [Install for Python](docs/guides/install-python.md) · [Install for PowerShell](docs/guides/install-powershell.md) · [Python quickstart](docs/guides/quickstart-python.md) · [PowerShell quickstart](docs/guides/quickstart-powershell.md) |
+| Building apps | [Python recipes](docs/guides/patterns.md) · [Lifecycle and events](docs/concepts/lifecycle.md) · [HTML and CSS support](docs/concepts/html-css-scope.md) · [Platforms](docs/guides/platforms.md) |
+| Reference | [Python API](docs/reference/python-api.md) · [PowerShell commands](docs/reference/powershell-api.md) · [`ui4me-host` and app.toml](docs/reference/host-cli.md) · [IPC protocol](docs/reference/protocol.md) |
+| When something goes wrong | [Troubleshooting](docs/guides/troubleshooting.md) · [Architecture](docs/concepts/architecture.md) |
+| Contributing and releases | [Development](docs/guides/development.md) · [Building](docs/release/building.md) · [Publishing](docs/release/publishing.md) · [Release notes](docs/release/RELEASE_NOTES_1.0.1.md) |
+
+</details>
+
+<details>
+<summary><b>Teach your coding agent UI4ME</b></summary>
+
+Both packages ship an agent skill for Claude Code, Codex, OpenCode, GitHub Copilot, Cursor and Gemini CLI. The installers write to per-user skill folders, need no administrator rights and never overwrite skills they did not install.
+
+```bash
+# Python package
+ui4me-skill install --agents all
+ui4me-skill status --agents all
 ```
 
 ```powershell
-$doc = Open-UI4MEFile -Window $window -Path (Join-Path $PSScriptRoot 'index.html')
-$null = Register-UI4MEDocumentEvent -Document $doc -Type click -Element save -Callback {
-    Set-UI4MEDocumentText -Document $doc -Element status -Text 'Saved'
-}
+# PowerShell module
+Install-UI4MESkill -Agents all -Scope user
 ```
 
-| Backend | Platforms |
+See [Agent skills](docs/guides/agent-skills.md) for project-scoped installs and the exact folders.
+
+</details>
+
+<a href="docs/images/desktop-workspace.png"><img src="docs/images/desktop-workspace.png" width="520" alt="A UI4ME window on KDE Plasma (Wayland) showing a styled workspace with a sidebar, form controls and a table"></a>
+
+*A real UI4ME window on KDE Plasma (Wayland). Click for full size, or see the [live bitmap example](docs/images/live-bitmap.png).*
+
+## What UI4ME does
+
+You describe the interface with ordinary HTML and CSS files, and handle buttons, forms and other events with ordinary Python functions or PowerShell script blocks. UI4ME's native host, written in Rust, opens real desktop windows and does the layout, rendering, text editing, input methods, accessibility and native dialogs itself.
+
+**No browser or JavaScript engine is involved.** There is no Chromium, WebKit, Electron, embedded webview, Qt or local web server. Your code runs in its own process and talks to the host over a private, authenticated local connection. In practice:
+
+- **Small and self-contained:** `pip install` or `Install-Module` is all it takes. There is no browser runtime to download or keep patched.
+- **Your language, all the way down:** event handlers are Python or PowerShell, not JavaScript glue. Use your normal libraries, debugger and tests.
+- **Responsive by design:** the window keeps painting, scrolling and editing while your code is busy, because the event loop belongs to the host.
+- **Nothing exposed to the network:** documents load from local files and strings only, and there is no HTTP listener.
+
+UI4ME implements a focused desktop profile of HTML and CSS. It is not a general web browser, so it doesn't run web pages or `<script>`. See [HTML and CSS support](docs/concepts/html-css-scope.md).
+
+## Capabilities
+
+| | |
 | --- | --- |
-| PowerShell 7.2+ (`pwsh`) | Linux x86-64 (glibc 2.34+), Windows x64 |
-| Windows PowerShell 5.1 | Windows x64 |
+| **Layout and styling** | Local HTML and CSS files, selectors, custom properties, web fonts, flexbox, grid, tables, scrolling, `prefers-color-scheme` |
+| **Controls and forms** | Buttons, text inputs and text areas, checkboxes, radios, selects, form data, validation, focus and selection |
+| **Live updates** | Change text, attributes, classes and HTML fragments; apply several changes as one batch; replace whole documents |
+| **Desktop integration** | Multiple windows, native file and folder dialogs, clipboard, opening files and URLs, attention requests, desktop preferences |
+| **Custom windows** | Frameless windows with HTML title bars, native dragging and resizing, live RGBA image surfaces |
+| **Accessibility** | Native screen-reader trees on both platforms (AT-SPI on Linux, UI Automation on Windows) |
 
-File-based and generated HTML, callbacks, forms, native dialogs, clipboard, custom title bars and live pixel buffers all work from PowerShell. Coding agents get a separate skill: `Install-UI4MESkill -Agents all -Scope user`. [PowerShell guide](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/powershell.md) · [Command reference](https://github.com/ui4me/ui4me-core/blob/main/docs/reference/powershell-api.md) · [Skill](https://github.com/ui4me/ui4me-core/blob/main/skills/ui4me-powershell/SKILL.md).
+| Platform | Python package `ui4me-core` | PowerShell module `UI4ME.Core` |
+| --- | --- | --- |
+| Linux x86-64 (glibc 2.34+), Wayland desktop | Python 3.10–3.14 | PowerShell 7.2+ |
+| Windows x64 | Python 3.10–3.14 | PowerShell 7.2+ and Windows PowerShell 5.1 |
 
-## Why UI4ME?
+Qualified on Debian 13 with KDE Plasma 6 (Wayland) and Windows Server 2022. macOS, X11 sessions and ARM64 are not supported. Platform differences are described in [Platforms](docs/guides/platforms.md).
 
-| Feature | What it enables |
-| --- | --- |
-| **Native windows** | Normal taskbar, focus, desktop dialogs, clipboard, drag-and-drop, DPI, keyboard and IME integration. |
-| **Real HTML/CSS** | Local files, common CSS selectors, variables, fonts, flex/grid/tables, scrolling, controls, responsive layout and styled content. |
-| **Python callbacks** | Handle events, mutate text/attributes/classes, use atomic batches and control forms without JavaScript. |
-| **Custom chrome** | Frameless windows with HTML/CSS titlebars, native dragging, edge resize and custom minimize/maximize/close buttons. |
-| **Live image surfaces** | Present RGBA frames for generated graphics, previews and visualizations using bounded shared buffers. |
-| **Independent app logic** | Slow Python work does not own or block the native event loop; the host supervises the backend process. |
-| **Installable binary wheels** | One `py3-none` wheel per supported platform, with the Rust executable included. |
+## Your first Python app
 
-![UI4ME frameless window with a live RGBA bitmap](https://raw.githubusercontent.com/ui4me/ui4me-core/main/docs/images/live-bitmap.png)
+Save this as `app.py`:
 
-*The same native engine displaying continuously updated pixels through a mapped bitmap surface.*
+```python
+from ui4me_core import Application
 
-## Platform support and limits
+PAGE = """
+<main style="font-family: sans-serif; padding: 24px">
+  <h1>Hello from Python</h1>
+  <label for="name">Your name</label>
+  <input id="name" type="text">
+  <button id="greet">Greet me</button>
+  <p id="message">Type your name and press the button.</p>
+</main>
+"""
 
-| Platform | Qualification |
-| --- | --- |
-| **Linux x86-64, glibc 2.34+** | Tested on Debian 13 / KDE Plasma 6.3 / native Wayland |
-| **Windows x86-64** | Tested on Windows Server 2022 Desktop Experience in an interactive RDP session |
-| macOS, X11, ARM64, additional Windows configurations | Not qualified for 1.0.0 |
 
-UI4ME deliberately supports a finite desktop HTML/CSS profile. **It is not a browser:** no page JavaScript, fetch/network navigation, browser extensions, HTML media, full interactive SVG, PDF/printing engine or full rich-text editor. Some native window requests differ between Wayland and Windows; the API reports unsupported operations rather than claiming success. [Read platform limitations](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/platforms.md) and the [capability audit](https://github.com/ui4me/ui4me-core/blob/main/docs/CAPABILITY_SCOPE.md).
+def main():
+    with Application.start(name="Hello UI4ME") as app:
+        window = app.open_html(PAGE, title="Hello UI4ME", width=520, height=320)
+        document = window.document
 
-## More ways to use it
+        def greet(event):
+            name = document.get_value("name").strip() or "world"
+            document.set_text("message", f"Hello, {name}!")
 
-- **Atomic updates:** `doc.batch([{"op": "set_text", "element": "status", "text": "Ready"}, ...])`.
-- **Native dialogs:** `window.open_files()`, `window.save_file()` and `window.choose_folder()`.
-- **Generated resources:** `doc.register_resources("icons", {"ok.png": image_bytes})` for `ui4me-res://icons/ok.png`.
-- **Live pixels:** `<img src="ui4me-bitmap://preview">` with `doc.create_bitmap("preview", 320, 200)` and `bitmap.try_present(raw_rgba)`.
-- **Multiple windows:** `app.open_file(...)`, `app.open_html(...)` and `window.load_html(...)`.
-- **Native window control:** `app.create_window(decorations=False)` with `data-ui4me-drag` and `data-ui4me-resize` in HTML.
+        document.on("click", greet, element="greet")
+        app.run()
 
-[Patterns and recipes](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/patterns.md) · [Technical protocol](https://github.com/ui4me/ui4me-core/blob/main/docs/PROTOCOL_DOCUMENTS.md) · [Core architecture](https://github.com/ui4me/ui4me-core/blob/main/docs/CORE_1.0_SPEC.md).
 
-## Development and releases
+if __name__ == "__main__":
+    main()
+```
 
-Run the source checks (requires Rust and native development dependencies):
+Run it like any other script:
 
 ```bash
-python3 tools/verify.py
-cargo clippy --locked --workspace --all-targets -- -D warnings
+python app.py
+# or, in a uv project
+uv run app.py
 ```
 
-The project includes installed-release acceptance scenarios for Linux and Windows. CI checks builds/contracts; the native KDE/Windows qualification records are in [docs/STATUS.md](https://github.com/ui4me/ui4me-core/blob/main/docs/STATUS.md).
+`Application.start()` launches the native host, which starts your script a second time as the connected app. Code above `Application.start()` therefore runs twice, so keep your setup inside `main()`. To start from a ready-made project with separate HTML and CSS files, run `ui4me-new my-app`.
 
-**Publishing is manual and intentional.** [`.github/workflows/publish.yaml`](https://github.com/ui4me/ui4me-core/blob/main/.github/workflows/publish.yaml) assembles the sdist, manylinux wheel and Windows wheel from one commit, validates them, publishes using PyPI Trusted Publishing, then creates the GitHub release. A regular push or tag does **not** publish. [Release instructions](https://github.com/ui4me/ui4me-core/blob/main/docs/release/PUBLISHING.md).
+## Your first PowerShell app
 
-[Documentation index](https://github.com/ui4me/ui4me-core/blob/main/docs/index.md) · [Contributing](https://github.com/ui4me/ui4me-core/blob/main/CONTRIBUTING.md) · [Third-party notices](https://github.com/ui4me/ui4me-core/blob/main/THIRD_PARTY_NOTICES.md) · [License](https://github.com/ui4me/ui4me-core/blob/main/LICENSE)
+Save this as `app.ps1`:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+Import-Module UI4ME.Core
+
+$app = Start-UI4MEScript -Name 'Hello UI4ME'
+
+$window = New-UI4MEWindow -Application $app -Title 'Hello UI4ME' -Width 520 -Height 320
+$doc = Open-UI4MEHtml -Window $window -Html @'
+<main style="font-family: sans-serif; padding: 24px">
+  <h1>Hello from PowerShell</h1>
+  <label for="name">Your name</label>
+  <input id="name" type="text">
+  <button id="greet">Greet me</button>
+  <p id="message">Type your name and press the button.</p>
+</main>
+'@
+
+$null = Register-UI4MEDocumentEvent -Document $doc -Type click -Element greet -Callback {
+    $name = (Get-UI4MEValue -Document $doc -Element name).Trim()
+    if (-not $name) { $name = 'world' }
+    Set-UI4MEDocumentText -Document $doc -Element message -Text "Hello, $name!"
+}
+
+Set-UI4MEReady -Application $app
+Wait-UI4ME -Application $app -UntilShutdown
+Close-UI4ME -Application $app
+```
+
+Run it:
+
+```powershell
+pwsh -File ./app.ps1
+# Windows PowerShell 5.1
+powershell.exe -NoProfile -File .\app.ps1
+```
+
+`Start-UI4MEScript` works like `Application.start()`: it starts the host, which runs the script again as the connected app. `New-UI4MEProject -Path ./my-app` creates a project with separate HTML and CSS files.
+
+## Next steps
+
+- [Python recipes](docs/guides/patterns.md): HTML files and CSS, forms, dialogs, multiple windows, frameless windows and live bitmaps
+- [Python examples](examples/python/README.md) and [PowerShell examples](powershell/examples/README.md)
+- [Lifecycle and events](docs/concepts/lifecycle.md): callbacks, closing and quitting, and replacing documents
+- [`ui4me-host` and app.toml](docs/reference/host-cli.md): explicit host launch for installers and deployments
+
+UI4ME Core is MIT licensed; bundled third-party components keep their own licenses ([notices](THIRD_PARTY_NOTICES.md)). Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).

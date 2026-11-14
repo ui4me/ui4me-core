@@ -1,9 +1,0 @@
-{
-  "status": "BLOCKED",
-  "exception": "PermissionError",
-  "errno": 1,
-  "reason": "[Errno 1] Operation not permitted",
-  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
-  "time_utc": "2026-11-12T07:41:43.326135+00:00",
-  "scope": "AF_UNIX endpoint creation only; no native desktop qualification"
-}

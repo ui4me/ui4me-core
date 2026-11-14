@@ -1,7 +1,7 @@
 [app]
 id = "org.ui4me.PowerShellCounter"
 name = "PowerShell Counter"
-version = "1.0.0"
+version = "1.0.1"
 
 [backend]
 program = "pwsh"

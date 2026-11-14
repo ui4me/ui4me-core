@@ -1,2 +1,0 @@
-example window UI4ME — Live bitmap & custom title bar | host exe /home/toor/ui4me-wheel-test/py312-manylinux/lib/python3.12/site-packages/ui4me_core/_bin/ui4me-host
-closed True

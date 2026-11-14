@@ -15,7 +15,7 @@ import threading
 import time
 import traceback
 
-from client import RpcClient, RpcError
+from ui4me_core import RpcClient, RpcError
 
 
 def window_id(value):

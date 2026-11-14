@@ -8,8 +8,9 @@ import subprocess
 import sys
 import tempfile
 
-from run_example import ROOT, locate_host, manifest
+from run_example import ROOT, checkout_environment, locate_host, manifest
 
+sys.path.insert(0, str(ROOT / "python"))
 sys.path.insert(0, str(ROOT / "examples/python"))
 from renderer_demo import REQUIRED_CHECKS
 
@@ -62,7 +63,7 @@ def main():
             command.append("--headless")
         if args.allow_unsupervised:
             command.append("--allow-unsupervised")
-        env = os.environ.copy()
+        env = checkout_environment()
         if args.headless:
             env["UI4ME_TEST_MODE"] = "1"
         print("Launching", " ".join(command), flush=True)

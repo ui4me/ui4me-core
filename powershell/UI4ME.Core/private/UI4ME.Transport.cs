@@ -730,4 +730,169 @@ namespace UI4ME {
             if (file != null) { file.Dispose(); file = null; }
         }
     }
+
+    /// <summary>
+    /// Runs the native host for Start-UI4MEScript. Host log records on stderr
+    /// are relayed as plain text: backend output to the matching console stream,
+    /// host warnings/errors summarized (all records when verbose). The host's
+    /// lifetime is bound to this process: a kill-on-close job on Windows; on
+    /// Linux the caller starts it through setpriv --pdeathsig when available.
+    /// </summary>
+    public sealed class HostProcess : IDisposable {
+        private readonly System.Diagnostics.Process process;
+        private readonly Thread relay;
+        private readonly bool verbose;
+        private IntPtr job = IntPtr.Zero;
+
+        public HostProcess(string fileName, string[] arguments, string workingDirectory, bool verbose) {
+            if (string.IsNullOrEmpty(fileName)) throw new ArgumentException("fileName");
+            this.verbose = verbose;
+            System.Diagnostics.ProcessStartInfo info = new System.Diagnostics.ProcessStartInfo();
+            info.FileName = fileName;
+            info.UseShellExecute = false;
+            info.RedirectStandardError = true;
+            info.StandardErrorEncoding = new UTF8Encoding(false);
+            info.WorkingDirectory = workingDirectory;
+#if UI4ME_NETFX
+            StringBuilder line = new StringBuilder();
+            foreach (string argument in arguments) {
+                if (line.Length > 0) line.Append(' ');
+                line.Append(QuoteWindowsArgument(argument));
+            }
+            info.Arguments = line.ToString();
+#else
+            foreach (string argument in arguments) info.ArgumentList.Add(argument);
+#endif
+            process = System.Diagnostics.Process.Start(info);
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT) job = BindToThisProcess(process);
+            relay = new Thread(Relay);
+            relay.IsBackground = true;
+            relay.Name = "ui4me-host-output";
+            relay.Start();
+        }
+
+        public int Id { get { return process.Id; } }
+        public bool HasExited { get { return process.HasExited; } }
+
+        /// <summary>True when the host exited (and its output was relayed) within the timeout.</summary>
+        public bool WaitForExit(int milliseconds) {
+            if (!process.WaitForExit(milliseconds)) return false;
+            relay.Join(2000);
+            return true;
+        }
+        public int ExitCode { get { return process.ExitCode; } }
+
+        public void Stop() {
+            try { if (!process.HasExited) process.Kill(); } catch (InvalidOperationException) { }
+            process.WaitForExit(10000);
+            relay.Join(2000);
+        }
+
+        public void Dispose() {
+            process.Dispose();
+            if (job != IntPtr.Zero) { CloseHandle(job); job = IntPtr.Zero; }
+        }
+
+        private void Relay() {
+            try {
+                string line;
+                while ((line = process.StandardError.ReadLine()) != null) RelayLine(line, verbose, Console.Out, Console.Error);
+            } catch (IOException) { } catch (ObjectDisposedException) { }
+        }
+
+        public static void RelayLine(string line, bool verbose, TextWriter output, TextWriter error) {
+            object record = null;
+            try { if (line.StartsWith("{", StringComparison.Ordinal)) record = Json.Parse(line); } catch (Exception) { record = null; }
+            object fields = Json.IsObject(record) ? Json.Field(record, "fields") : null;
+            if (!Json.IsObject(fields)) {
+                if (line.Length > 0) Write(error, line);
+                return;
+            }
+            string text = Json.Field(fields, "text") as string;
+            if ("backend".Equals(Json.Field(fields, "source")) && text != null) {
+                Write("stdout".Equals(Json.Field(fields, "stream")) ? output : error, text);
+                return;
+            }
+            string level = (Json.Field(record, "level") as string ?? "INFO").ToUpperInvariant();
+            if (!verbose && level != "WARN" && level != "ERROR") return;
+            StringBuilder extra = new StringBuilder();
+            PSObject wrapped = fields as PSObject;
+            if (wrapped != null) {
+                foreach (PSPropertyInfo property in wrapped.Properties) {
+                    if (property.Name == "message") continue;
+                    if (extra.Length > 0) extra.Append(", ");
+                    extra.Append(property.Name).Append('=').Append(Convert.ToString(property.Value, CultureInfo.InvariantCulture));
+                }
+            }
+            string message = Convert.ToString(Json.Field(fields, "message"), CultureInfo.InvariantCulture);
+            Write(error, "ui4me-host " + level.ToLowerInvariant() + ": " + message + (extra.Length > 0 ? " (" + extra + ")" : ""));
+        }
+
+        private static void Write(TextWriter writer, string text) {
+            try { lock (writer) { writer.WriteLine(text); writer.Flush(); } } catch (IOException) { } catch (ObjectDisposedException) { }
+        }
+
+        /// <summary>CommandLineToArgvW quoting, for .NET Framework's single argument string.</summary>
+        public static string QuoteWindowsArgument(string argument) {
+            if (argument == null) throw new ArgumentNullException("argument");
+            if (argument.Length > 0 && argument.IndexOfAny(new char[] { ' ', '\t', '\n', '\v', '"' }) < 0) return argument;
+            StringBuilder quoted = new StringBuilder("\"");
+            int slashes = 0;
+            foreach (char c in argument) {
+                if (c == '\\') { slashes++; continue; }
+                if (c == '"') quoted.Append('\\', slashes * 2 + 1);
+                else quoted.Append('\\', slashes);
+                slashes = 0;
+                quoted.Append(c);
+            }
+            quoted.Append('\\', slashes * 2);
+            return quoted.Append('"').ToString();
+        }
+
+        // Kill-on-close job: if this PowerShell process ends for any reason,
+        // Windows terminates the host, whose own job ends the backend. Processes
+        // the host opens for the user break away silently and stay open.
+        private static IntPtr BindToThisProcess(System.Diagnostics.Process child) {
+            IntPtr handle = CreateJobObject(IntPtr.Zero, null);
+            if (handle == IntPtr.Zero) return IntPtr.Zero;
+            ExtendedLimits limits = new ExtendedLimits();
+            limits.BasicLimitInformation.LimitFlags = 0x2000 | 0x1000; // KILL_ON_JOB_CLOSE | SILENT_BREAKAWAY_OK
+            int size = System.Runtime.InteropServices.Marshal.SizeOf(typeof(ExtendedLimits));
+            IntPtr buffer = System.Runtime.InteropServices.Marshal.AllocHGlobal(size);
+            try {
+                System.Runtime.InteropServices.Marshal.StructureToPtr(limits, buffer, false);
+                if (SetInformationJobObject(handle, 9, buffer, (uint)size) && AssignProcessToJobObject(handle, child.Handle)) return handle;
+            } finally {
+                System.Runtime.InteropServices.Marshal.FreeHGlobal(buffer);
+            }
+            CloseHandle(handle);
+            return IntPtr.Zero;
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct BasicLimits {
+            public long PerProcessUserTimeLimit; public long PerJobUserTimeLimit; public uint LimitFlags;
+            public UIntPtr MinimumWorkingSetSize; public UIntPtr MaximumWorkingSetSize; public uint ActiveProcessLimit;
+            public UIntPtr Affinity; public uint PriorityClass; public uint SchedulingClass;
+        }
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct IoCounters {
+            public ulong ReadOperationCount; public ulong WriteOperationCount; public ulong OtherOperationCount;
+            public ulong ReadTransferCount; public ulong WriteTransferCount; public ulong OtherTransferCount;
+        }
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct ExtendedLimits {
+            public BasicLimits BasicLimitInformation; public IoCounters IoInfo;
+            public UIntPtr ProcessMemoryLimit; public UIntPtr JobMemoryLimit;
+            public UIntPtr PeakProcessMemoryUsed; public UIntPtr PeakJobMemoryUsed;
+        }
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr CreateJobObject(IntPtr attributes, string name);
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool SetInformationJobObject(IntPtr job, int infoClass, IntPtr info, uint length);
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr handle);
+    }
 }

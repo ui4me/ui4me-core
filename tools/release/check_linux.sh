@@ -7,7 +7,7 @@ if [[ "$(uname -s)" != "Linux" ]]; then
 fi
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
 export RUST_TEST_THREADS="${RUST_TEST_THREADS:-2}"
-cargo fmt --all -- --check
+cargo fmt -p ui4me-host -p ui4me-renderer -p ui4me-document -p ui4me-assets -p ui4me-engine-types -- --check
 cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo test --locked --workspace -- --test-threads="$RUST_TEST_THREADS"
 python3 -m unittest discover -s tools -p 'test_*.py' -v

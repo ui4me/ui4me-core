@@ -15,13 +15,25 @@ class ScaffoldTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             dest = Path(d) / 'My-Workspace'
             files=scaffold.create_project(dest, name='My Workspace', python='/custom/.venv/bin/python')
-            self.assertEqual(len(files), 4)
+            self.assertEqual(sorted(f.name for f in files),
+                             ['app.py', 'app.toml', 'index.html', 'pyproject.toml', 'style.css'])
             manifest=tomllib.loads((dest/'app.toml').read_text())
             self.assertEqual(manifest['app']['id'], 'org.ui4me.examples.my_workspace')
             self.assertEqual(manifest['backend']['program'], '/custom/.venv/bin/python')
             self.assertEqual(manifest['backend']['args'], ['{app_dir}/app.py'])
-            ast.parse((dest/'app.py').read_text())
-            self.assertIn('ui4me_core import Application',(dest/'app.py').read_text())
+            code=(dest/'app.py').read_text()
+            tree=ast.parse(code)
+            self.assertIn('ui4me_core import Application', code)
+            # Runs directly with python/uv; both launch paths share one identity.
+            self.assertIn('Application.start(name=APP_NAME, app_id=APP_ID)', code)
+            self.assertNotIn('from_environment', code)
+            self.assertNotIn('lambda', code)
+            ids=[n.value.value for n in tree.body if isinstance(n, ast.Assign)
+                 and getattr(n.targets[0], 'id', '')=='APP_ID']
+            self.assertEqual(ids, [manifest['app']['id']])
+            project=tomllib.loads((dest/'pyproject.toml').read_text())['project']
+            self.assertEqual(project['name'], 'my-workspace')
+            self.assertEqual(project['dependencies'], ['ui4me-core>=1.0.1'])
             self.assertIn('id="add-item"',(dest/'index.html').read_text())
             with self.assertRaises(FileExistsError):
                 scaffold.create_project(dest, name='again')
@@ -48,6 +60,7 @@ class ScaffoldTests(unittest.TestCase):
                         and getattr(n.targets[0], 'id', '')=='APP_NAME']
                 self.assertEqual(consts,[name])
                 self.assertEqual(tomllib.loads(files['app.toml'])['app']['name'], name)
+                tomllib.loads(files['pyproject.toml'])
                 self.assertNotIn('<b>', files['index.html'])
         self.assertEqual(scaffold.app_slug('Café Ünïcode'), 'cafe-unicode')
         self.assertTrue(scaffold.app_slug('日本語アプリ').startswith('app-'))

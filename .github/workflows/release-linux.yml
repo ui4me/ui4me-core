@@ -30,7 +30,7 @@ jobs:
         run: python -m build --sdist --outdir wheelhouse
       - name: Build and repair manylinux wheel from the source archive
         # Building from the sdist proves it is a complete build input.
-        run: python -m cibuildwheel --platform linux --output-dir wheelhouse wheelhouse/ui4me_core-1.0.0.tar.gz
+        run: python -m cibuildwheel --platform linux --output-dir wheelhouse wheelhouse/ui4me_core-1.0.1.tar.gz
       - name: Validate source and repaired wheel
         run: |
           python -m twine check wheelhouse/*
@@ -38,6 +38,6 @@ jobs:
       - name: Upload artifacts for explicit manual publishing
         uses: actions/upload-artifact@v4
         with:
-          name: ui4me-core-linux-1.0.0
+          name: ui4me-core-linux-1.0.1
           path: wheelhouse/*
           if-no-files-found: error

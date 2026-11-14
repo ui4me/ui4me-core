@@ -28,8 +28,8 @@ live DOM updates, native picker, HTML dialog/popover and a second document.
 
 `run_example.py` retains the v0.1 fixed host probe for regression testing. Its
 hotkeys/fault helpers remain useful; the product example is now the renderer app.
-The source Python facade is `examples/python/application.py`. Its full protocol
-contract is in [PROTOCOL_DOCUMENTS.md](../docs/PROTOCOL_DOCUMENTS.md).
+The examples import the `ui4me_core` package from `python/` (the runners put it on
+`PYTHONPATH`). The protocol is described in [protocol.md](../docs/reference/protocol.md).
 
 Install the executable with:
 
@@ -281,12 +281,14 @@ subset into full qualification. The clipboard check restores only the previous
 *plain text*: a non-text clipboard (an image copied elsewhere) is replaced. Save
 it first if it matters.
 
-The renderer ledger adds R01–R12 from
-[RENDERER_ACCEPTANCE.md](../docs/RENDERER_ACCEPTANCE.md), separately from N01–N15.
+The renderer ledger adds R01–R12, separately from N01–N15. The check lists are
+defined in `native_acceptance.py` and `renderer_acceptance.py`; the 1.0.0
+step-by-step procedures remain in Git history
+(`git show v1.0.0:docs/RENDERER_ACCEPTANCE.md`).
 Both new ledgers bind evidence to the current executable source/asset/dependency
 hash and refuse a changed source or different check set in the same output.
-Use a new milestone directory after an executable change. Historical v0.1
-reports remain under `docs/verification/` and are not reused as current PASSes.
+Use a new milestone directory after an executable change. Earlier milestone
+reports are in Git history only and are never reused as current PASSes.
 
 Record a completed native observation by referencing an existing evidence file:
 
@@ -400,34 +402,28 @@ checks. Preserve completed output on the Linux workstation between milestones.
 Do not mark interrupted work PASS or repeatedly overload the VM with parallel
 full builds.
 
-## Preparation-time checks
-
-Use [STATUS.md](../docs/STATUS.md) and its linked Core 1.0 preparation reports for
-the checks actually completed on this source. The retained v0.1/v0.2 reports
-describe their original revisions and environments. They do not qualify this
-completion candidate. A Windows source check is not
-Windows execution, a socket-pair test is not the real named-pipe test, and a
-headless PNG is not native presentation/input evidence.
-
-## Core 1.0 completion qualification
+## Release qualification
 
 Start with `python3 tools/verify_package.py` before changing the delivered source.
-Follow [LOCAL_FINISH_PROMPT.md](../LOCAL_FINISH_PROMPT.md) for the complete
-Linux/Python qualification, commit and push, Windows qualification, commit and
-push, then final common-source stabilization. Preserve the existing Git history.
+A Windows source check is not Windows execution, a socket-pair test is not the real
+named-pipe test, and a headless PNG is not native presentation or input evidence.
 
-The added C01–C12 ledger complements the retained N01–N15 and R01–R12 ledgers:
+The C01–C12 completion ledger complements the N01–N15 and R01–R12 ledgers:
 
 ```sh
 python3 tools/verify.py --stage completion-native
 python3 tools/completion_acceptance.py --help
 ```
 
-Read the concrete procedures in
-[CORE_1.0_ACCEPTANCE.md](../docs/CORE_1.0_ACCEPTANCE.md). An unobserved desktop
-behavior stays BLOCKED; creating a ledger is not a completed test. The renderer
-backend now also includes `completion_checks.py`, which exercises the new Python
-facade through real IPC during the renderer verifier stage.
+The 1.0.0 procedures are in Git history (`git show v1.0.0:docs/CORE_1.0_ACCEPTANCE.md`).
+An unobserved desktop behavior stays BLOCKED; creating a ledger is not a completed
+test. The renderer backend also runs `completion_checks.py`, which exercises the
+Python API through real IPC during the renderer verifier stage. The release gates
+for direct startup are listed in [building.md](../docs/release/building.md).
+
+`lab/` holds the KDE Wayland helpers used by the native PowerShell harness
+(`powershell/tests/native/drive_linux.py`): `inputd.py` is a root uinput daemon
+for real pointer and keyboard input, and `lab.py` drives KWin and screenshots.
 
 `tools/windows/uia_probe_matrix.py` runs the independent Windows UI Automation
 diagnostic with per-operation logs and hard process deadlines. Use `--pid` and

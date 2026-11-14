@@ -43,7 +43,7 @@ def main():
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--manifest", type=Path)
     args = parser.parse_args()
-    manifest = args.manifest or args.root / "docs/SOURCE_FILES.sha256"
+    manifest = args.manifest or args.root / "tools/release/SOURCE_FILES.sha256"
     try:
         files, failures = verify(args.root, manifest)
     except OSError as error:

@@ -1,6 +1,0 @@
-host 2368315 sha=fc422be508059785
-static 20 s: 0.228%
-infinite animation enabled, 20 s: 35.488%
-stylesheet removed, 20 s: 0.229%
-re-enabled then sheet replaced, 20 s: 0.219%
-class-driven animation enabled then class removed, 20 s: 0.231%

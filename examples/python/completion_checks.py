@@ -5,8 +5,8 @@ checks do not claim native accessibility, compositor or screen-reader results.
 """
 import threading
 
-from application import StaleDocumentError
-from client import RpcError
+from ui4me_core import StaleDocumentError
+from ui4me_core import RpcError
 
 REQUIRED_CHECKS = {
     "completion_window_contract", "completion_anonymous_nodes",

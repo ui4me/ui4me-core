@@ -1,31 +1,28 @@
 # UI4ME Core documentation
 
-Build native desktop applications from local HTML/CSS with Python or PowerShell logic, without a browser runtime or JavaScript. Choose a starting point:
+**Build native desktop windows from local HTML and CSS, and control them with Python or PowerShell.** The UI runs in Rust rather than a browser. You do not need JavaScript, Electron, Qt, WebKit, a web server or a Rust toolchain to use the published packages.
 
-| Audience | Read first | Then |
+## Start here
+
+| I want to… | Start with | Next |
 | --- | --- | --- |
-| **New developer** | [5-minute quickstart](guides/quickstart.md) | [Python API reference](reference/python-api.md), [recipes](guides/patterns.md) |
-| **PowerShell developer** | [PowerShell guide](guides/powershell.md) | [PowerShell command reference](reference/powershell-api.md) |
-| **Coding agent** | [Install Agent Skill](guides/agent-skills.md) | [Python skill](../skills/ui4me-python/SKILL.md), [PowerShell skill](../skills/ui4me-powershell/SKILL.md) |
-| **Desktop integrator** | [Platform behavior](guides/platforms.md) | [Architecture](CORE_1.0_SPEC.md), [wire protocol](PROTOCOL.md) |
-| **Maintainer** | [Building and testing](guides/development.md) | [Capability scope](CAPABILITY_SCOPE.md), [release policy](release/PUBLISHING.md) |
+| Build a Python desktop app | [Install for Python](guides/install-python.md) | [Your first Python window](guides/quickstart-python.md) |
+| Build a PowerShell desktop app | [Install for PowerShell](guides/install-powershell.md) | [Your first PowerShell window](guides/quickstart-powershell.md) |
+| Use a coding assistant | [Install agent skills](guides/agent-skills.md) | [Python API](reference/python-api.md) or [PowerShell commands](reference/powershell-api.md) |
+| Understand capabilities | [What UI4ME supports](guides/platforms.md) | [HTML/CSS scope](concepts/html-css-scope.md) |
+| Solve an installation or launch issue | [Troubleshooting](guides/troubleshooting.md) | [Runtime architecture](concepts/architecture.md) |
+| Integrate, develop or release Core | [Development](guides/development.md) | [Release procedure](release/publishing.md) |
 
-## API and conceptual references
+## Learn by building
 
-- [Python API](reference/python-api.md) — application/window/document handles, callbacks, forms, resources, native services.
-- [PowerShell commands](reference/powershell-api.md) — the `UI4ME.Core` module, with a Python parity table.
-- [Patterns](guides/patterns.md) — generated HTML, updates, styles, native chrome, live bitmaps.
-- [Platform support](guides/platforms.md) — qualified environments, packaging constraints, native limitations.
-- [Technical Core contract](CORE_1.0_PROTOCOL.md) and [document commands](PROTOCOL_DOCUMENTS.md).
-- [Supported feature decisions](CAPABILITY_SCOPE.md) and [release status](STATUS.md).
+[Python recipes](guides/patterns.md) explain events, forms, document replacement, styling, dialogs, and native image buffers. [Python API reference](reference/python-api.md) covers the public `Application`, `Window`, `Document`, and `Node` objects. [PowerShell reference](reference/powershell-api.md) organizes the equivalent commands.
 
-## Release engineering
+## How it works
 
-- [Manually publish to PyPI/GitHub](release/PUBLISHING.md)
-- [Manually publish UI4ME.Core to the PowerShell Gallery](release/POWERSHELL_GALLERY.md)
-- [Linux builds](release/BUILDING_LINUX.md) / [Windows builds](release/BUILDING_WINDOWS.md)
-- [Release notes](release/RELEASE_NOTES_1.0.0.md)
+[Architecture](concepts/architecture.md) explains the native host, supervised language process, authenticated local IPC and what happens when you run a Python or PowerShell script directly. [Lifecycle](concepts/lifecycle.md) explains callbacks, safe shutdown and document generations. [HTML/CSS scope](concepts/html-css-scope.md) sets realistic expectations: this is not a full browser. For lower-level integrators, see the [native host CLI](reference/host-cli.md) and [private IPC protocol](reference/protocol.md).
 
-## Historical engineering records
+## Maintainers
 
-The `docs/verification/`, `BASELINE_*.md`, `SPEC.md`, and older release notes are retained as **historical qualification evidence**, not beginner setup instructions. Preserve the evidence chain rather than discarding data used to qualify 1.0.0.
+Read [building and testing](guides/development.md), [release and publishing](release/publishing.md), [Linux and Windows build notes](release/building.md), and the [1.0.1 change notes](release/RELEASE_NOTES_1.0.1.md). Both PyPI and the PowerShell Gallery are manually published; no automatic publishing from a push.
+
+**Source:** [UI4ME Core on GitHub](https://github.com/ui4me/ui4me-core) · [PyPI](https://pypi.org/project/ui4me-core/) · [PowerShell Gallery](https://www.powershellgallery.com/packages/UI4ME.Core)

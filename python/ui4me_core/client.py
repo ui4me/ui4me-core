@@ -1,7 +1,7 @@
-"""Reference UI4ME host client, using only the Python standard library.
+"""UI4ME host IPC client, using only the Python standard library.
 
-This is executable protocol documentation and test material, not a packaged SDK.
-The reader and writer never run application callbacks. Callbacks may therefore
+Most applications use ``ui4me_core.Application``; this module is the transport
+underneath it. The reader and writer never run application callbacks. Callbacks may therefore
 await host RPCs. Both directions use the same length-prefixed JSON-RPC profile.
 """
 
@@ -18,6 +18,8 @@ import sys
 import threading
 import time
 from typing import Any, Callable
+
+CLIENT_VERSION = "1.0.1"  # Kept equal to ui4me_core.__version__ (checked by tests).
 
 MAX_FRAME_BYTES = 2 * 1024 * 1024
 MAX_PENDING = 128
@@ -327,7 +329,7 @@ class RpcClient:
         try:
             client.hello = client.call("host.hello", {
                 "token": os.environ["UI4ME_TOKEN"], "protocol_version": 1,
-                "client": {"name": "ui4me-python-reference", "version": "0.2.0"},
+                "client": {"name": "ui4me-python", "version": CLIENT_VERSION},
             })
             return client
         except BaseException:

@@ -10,7 +10,7 @@ import unittest
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from run_faults import ROOT, process_identity, terminate_owned
+from run_faults import ROOT, checkout_environment, process_identity, terminate_owned
 
 
 class ProcessIdentityTests(unittest.TestCase):
@@ -23,7 +23,8 @@ class ProcessIdentityTests(unittest.TestCase):
             output = Path(folder)
             try:
                 process = subprocess.Popen([sys.executable, str(ROOT / "examples/python/faults.py"),
-                    "--tree-worker", "--run-id", run_id, "--evidence", str(output / "events.jsonl")])
+                    "--tree-worker", "--run-id", run_id, "--evidence", str(output / "events.jsonl")],
+                    env=checkout_environment())
                 deadline = time.monotonic() + 5
                 while not all((output / f"tree-{kind}.json").is_file() for kind in ("worker", "leaf")):
                     if time.monotonic() > deadline:

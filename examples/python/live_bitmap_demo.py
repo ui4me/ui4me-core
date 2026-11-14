@@ -1,20 +1,21 @@
 """Native live bitmap example: streaming pixels, no encoded image or browser.
 
-Use as a manifest backend. This example exercises two-slot ownership,
+Run it directly (python live_bitmap_demo.py) or through live-bitmap.toml.
+This example exercises two-slot ownership,
 coalescing, document epochs, ordinary button events, and graceful shutdown.
 """
 from __future__ import annotations
 from pathlib import Path
 from threading import Event, Thread
 import time
-from application import Application
+from ui4me_core import Application
 
 UI = Path(__file__).resolve().parent / 'ui' / 'live_bitmap.html'
 
 
 def main() -> None:
     stopping = Event()
-    with Application.from_environment() as app:
+    with Application.start(name="UI4ME Live Graphics", app_id="org.ui4me.LiveBitmapDemo") as app:
         window = app.open_file(UI, title='UI4ME — Live bitmap & custom title bar',
                                width=700, height=510, decorations=False)
         document = window.document

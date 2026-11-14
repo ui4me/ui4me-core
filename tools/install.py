@@ -13,9 +13,13 @@ def copy_reference(destination: Path, *, probe: bool = False) -> Path:
     if destination.exists() and (not destination.is_dir() or any(destination.iterdir())):
         raise ValueError("The reference destination must be new or empty")
     destination.mkdir(parents=True, exist_ok=True)
-    names = ("client.py", "demo.py") if probe else ("client.py", "application.py", "renderer_demo.py", "completion_checks.py")
+    names = ("demo.py",) if probe else ("renderer_demo.py", "completion_checks.py")
     for name in names:
         shutil.copy2(ROOT / "examples/python" / name, destination / name)
+    # The backend imports the pure-Python client package; the copy beside it
+    # is found first because Python puts the script directory on sys.path.
+    shutil.copytree(ROOT / "python/ui4me_core", destination / "ui4me_core",
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "_bin", "_skills"))
     if not probe:
         shutil.copytree(ROOT / "examples/python/ui", destination / "ui",
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))

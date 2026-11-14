@@ -12,7 +12,7 @@
 # notifications until the callback returns.
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
-$script:UI4MEVersion = '1.0.0'
+$script:UI4MEVersion = '1.0.1'
 $script:UI4MEHelperLoaded = $false
 $script:UI4MEIsWindows = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
 $script:MaximumDeferred = 128
@@ -31,7 +31,7 @@ function Initialize-UI4MEHelper {
         Add-Type -TypeDefinition $source -Language CSharp -ErrorAction Stop
         $existing = 'UI4ME.Transport' -as [type]
     }
-    if ($null -eq $existing -or $null -eq $existing.GetMethod('Register') -or $null -eq ('UI4ME.MappedBitmap' -as [type])) {
+    if ($null -eq $existing -or $null -eq $existing.GetMethod('Register') -or $null -eq ('UI4ME.MappedBitmap' -as [type]) -or $null -eq ('UI4ME.HostProcess' -as [type])) {
         throw 'An incompatible UI4ME helper is already loaded in this process. Start a new PowerShell process.'
     }
     $script:UI4MEHelperLoaded = $true
@@ -310,7 +310,7 @@ function Connect-UI4ME {
         [ValidateRange(1, 120000)][int]$ConnectTimeoutMilliseconds = 15000
     )
     if ([string]::IsNullOrWhiteSpace($Endpoint) -or [string]::IsNullOrWhiteSpace($Token)) {
-        throw 'UI4ME_ENDPOINT and UI4ME_TOKEN come from the native host. Start the app with Start-UI4MEHost or ui4me-host run --app app.toml.'
+        throw 'UI4ME_ENDPOINT and UI4ME_TOKEN come from the native host. To run a script directly, use $app = Start-UI4MEScript instead of Connect-UI4ME; or start it with Start-UI4MEHost -Manifest app.toml.'
     }
     Initialize-UI4MEHelper
     $transport = New-Object -TypeName 'UI4ME.Transport' -ArgumentList @($Endpoint, $ConnectTimeoutMilliseconds)
@@ -333,6 +333,7 @@ function Connect-UI4ME {
         BeforeClose = @{}
         Notifications = @{}
         DroppedNotifications = [long]0
+        DirectStart = $false
     }
     $app.PSObject.TypeNames.Insert(0, 'UI4ME.Application')
     try {
@@ -466,8 +467,9 @@ function Wait-UI4ME {
     .DESCRIPTION
     Waits up to -TimeoutMilliseconds for the first message, then drains up to 64
     queued messages and returns how many were handled. -UntilShutdown pumps until
-    the host requests shutdown and throws UI4ME.DisconnectedException if the host
-    disappears first. -Once handles at most one message.
+    the host requests shutdown, returns no output, and throws
+    UI4ME.DisconnectedException if the host disappears first. -Once handles at
+    most one message.
     #>
     [CmdletBinding(DefaultParameterSetName = 'Pump')]
     param([Parameter(Mandatory)]$Application,
@@ -475,8 +477,9 @@ function Wait-UI4ME {
           [Parameter(ParameterSetName = 'Pump')][switch]$Once,
           [Parameter(ParameterSetName = 'Run')][switch]$UntilShutdown)
     if (-not (Test-UI4METype $Application 'UI4ME.Application')) { throw 'Expected a UI4ME.Application from Connect-UI4ME' }
-    if ($Application.Closed) { return 0 }
     if ($UntilShutdown) {
+        # No output: a script's last statement must not print a stray value.
+        if ($Application.Closed) { return }
         while (-not $Application.ShutdownRequested) {
             try { [void](Invoke-UI4MEPump $Application 1000) }
             catch [UI4ME.DisconnectedException] {
@@ -484,8 +487,9 @@ function Wait-UI4ME {
                 throw
             }
         }
-        return 0
+        return
     }
+    if ($Application.Closed) { return 0 }
     $processed = 0
     try {
         if (Invoke-UI4MEPump $Application $TimeoutMilliseconds) {
@@ -509,6 +513,12 @@ function Close-UI4ME {
         if ($null -ne $win.Document) { Remove-UI4MEDocumentState $win.Document }
     }
     $Application.Windows.Clear(); $Application.Pending.Clear(); $Application.Replies.Clear(); $Application.Deferred.Clear()
+    if ($Application.DirectStart -and -not $Application.ShutdownRequested -and -not $Application.Disconnected) {
+        # A Start-UI4MEScript backend is a dedicated pwsh -File process that ends with the script.
+        # Closing early (an error is usually unwinding through a finally block) would make the
+        # host stop this process before PowerShell reports that error: process exit closes it.
+        return
+    }
     $Application.Transport.Dispose()
 }
 
@@ -745,7 +755,7 @@ function Unregister-UI4MEDocumentEvent {
 function Invoke-UI4MEDocumentCommand {
     <#
     .SYNOPSIS
-    Runs any document command from the Core protocol (docs/PROTOCOL_DOCUMENTS.md) and returns its result.
+    Runs any document command from the Core protocol (docs/reference/protocol.md) and returns its result.
     .EXAMPLE
     Invoke-UI4MEDocumentCommand -Document $doc -Operation get_html -Parameters @{ element = 'status'; outer = $true }
     #>
@@ -1294,11 +1304,11 @@ function Get-UI4MEHostPath {
         return [IO.Path]::GetFullPath($env:UI4ME_HOST_BINARY)
     }
     $arch = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-    if ($arch -ne [Runtime.InteropServices.Architecture]::X64) { throw "UI4ME.Core 1.0.0 ships x64 hosts only; this system is $arch" }
+    if ($arch -ne [Runtime.InteropServices.Architecture]::X64) { throw "UI4ME.Core 1.0.1 ships x64 hosts only; this system is $arch" }
     if ($script:UI4MEIsWindows) { $relative = 'runtimes/win-x64/ui4me_core/_bin/ui4me-host.exe' }
     elseif ([Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([Runtime.InteropServices.OSPlatform]::Linux)) {
         $relative = 'runtimes/linux-x64/ui4me_core/_bin/ui4me-host'
-    } else { throw 'UI4ME.Core 1.0.0 supports Linux and Windows only' }
+    } else { throw 'UI4ME.Core 1.0.1 supports Linux and Windows only' }
     $found = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot $relative))
     if (-not (Test-Path -LiteralPath $found -PathType Leaf)) {
         throw 'The native UI4ME host is missing. Install UI4ME.Core from the PowerShell Gallery, or set UI4ME_HOST_BINARY.'
@@ -1331,24 +1341,222 @@ function Start-UI4MEHost {
     if ($LASTEXITCODE -ne 0) { throw "UI4ME host exited with code $LASTEXITCODE" }
 }
 
+function ConvertTo-UI4METomlString {
+    # A TOML basic string: escape quotes, backslashes and control characters; keep Unicode literal.
+    param([AllowEmptyString()][string]$Text)
+    if ($Text.IndexOf([char]0) -ge 0) { throw 'Paths and arguments must not contain NUL characters' }
+    $builder = New-Object Text.StringBuilder
+    [void]$builder.Append('"')
+    foreach ($c in $Text.ToCharArray()) {
+        if ($c -eq '"') { [void]$builder.Append('\"') }
+        elseif ($c -eq '\') { [void]$builder.Append('\\') }
+        elseif ([int]$c -lt 32 -or [int]$c -eq 127) { [void]$builder.Append(('\u{0:X4}' -f [int]$c)) }
+        else { [void]$builder.Append($c) }
+    }
+    [void]$builder.Append('"')
+    return $builder.ToString()
+}
+
+function Get-UI4MEDefaultAppId {
+    # Stable per script: a second launch of the same script reaches the running instance.
+    param([string]$ScriptPath, [string]$Label)
+    $identity = if ($script:UI4MEIsWindows) { $ScriptPath.ToLowerInvariant() } else { $ScriptPath }
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { $bytes = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes('script:' + $identity)) } finally { $sha.Dispose() }
+    $digest = (-join ($bytes | ForEach-Object { $_.ToString('x2') })).Substring(0, 12)
+    $folded = $Label.Normalize([Text.NormalizationForm]::FormD)
+    $folded = -join ($folded.ToCharArray() | Where-Object { [int]$_ -lt 128 })
+    $slug = ($folded -replace '[^A-Za-z0-9]+', '-').Trim('-')
+    if ($slug.Length -gt 40) { $slug = $slug.Substring(0, 40).Trim('-') }
+    if (-not $slug) { $slug = 'app' } elseif ($slug -notmatch '^[A-Za-z]') { $slug = 'app-' + $slug }
+    return "local.ui4me.$slug.h$digest"
+}
+
+function Get-UI4MEScriptArguments {
+    # Arguments that followed the script on this process's command line
+    # (pwsh -File app.ps1 a b). A script started from an open prompt has none here.
+    param([string]$ScriptPath)
+    $all = [Environment]::GetCommandLineArgs()
+    $comparison = if ($script:UI4MEIsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    for ($i = 1; $i -lt $all.Count; $i++) {
+        try { $full = [IO.Path]::GetFullPath([IO.Path]::Combine([Environment]::CurrentDirectory, $all[$i])) } catch { continue }
+        if ([string]::Equals($full, $ScriptPath, $comparison)) {
+            if ($i + 1 -ge $all.Count) { return ,@() }
+            return ,@($all[($i + 1)..($all.Count - 1)])
+        }
+    }
+    return ,@()
+}
+
+function Clear-UI4MEStaleStartFolders {
+    # Manifests left behind by a launcher that was killed outright. The host
+    # reads its manifest only while starting, so a day-old one is never in use.
+    $limit = [DateTime]::UtcNow.AddDays(-1)
+    try { $folders = @(Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'ui4me-start-*' -ErrorAction Stop) } catch { return }
+    foreach ($folder in $folders) {
+        if ($folder.LastWriteTimeUtc -lt $limit -and ([int]$folder.Attributes -band [int][IO.FileAttributes]::ReparsePoint) -eq 0) {
+            Remove-Item -LiteralPath $folder.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Start-UI4MEScript {
+    <#
+    .SYNOPSIS
+    Runs a normal .ps1 file as a UI4ME app: starts the native host when needed, returns the connected application.
+    .DESCRIPTION
+    Call it near the top of a script that you run directly (pwsh -File ./app.ps1, or
+    powershell.exe -File .\app.ps1 on Windows PowerShell 5.1):
+
+        $app = Start-UI4MEScript -Name 'My App'
+
+    Run directly, it writes a private temporary manifest, starts the packaged native host and
+    waits. The host runs the same script again, with the same PowerShell edition and arguments,
+    as its supervised backend; the first run then ends with the host's exit code, so the code
+    below this call never runs there. In the second run, Start-UI4MEScript connects to the
+    host and returns the application object (like Connect-UI4ME).
+
+    Everything above this call runs twice: keep side effects below it. Inside a backend started
+    by a manifest (Start-UI4MEHost, ui4me-host run --app) it only connects.
+    .PARAMETER Name
+    Application name (default: the script file name).
+    .PARAMETER AppId
+    Reverse-DNS identity such as org.example.MyApp. Default: a stable ID derived from the script path.
+    .PARAMETER Instance
+    single (default) forwards a second launch to the running app; multiple allows several.
+    .PARAMETER ArgumentList
+    Arguments for the backend run. By default, the arguments that followed the script on the
+    pwsh/powershell.exe command line are reused.
+    .EXAMPLE
+    $app = Start-UI4MEScript -Name 'Hello UI4ME'
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$Name, [string]$AppId, [string]$Version, [string]$Icon,
+        [ValidateSet('single', 'multiple')][string]$Instance = 'single',
+        [ValidateRange(1000, 300000)][int]$StartupTimeoutMilliseconds = 30000,
+        [ValidateRange(100, 120000)][int]$ShutdownTimeoutMilliseconds = 5000,
+        [ValidateRange(1, 64)][int]$MaxWindows = 16,
+        [string[]]$ArgumentList,
+        [string]$ScriptPath
+    )
+    foreach ($pair in @(@('Name', $Name), @('Version', $Version))) {
+        if ($pair[1] -and ($pair[1].Trim().Length -eq 0 -or $pair[1].Length -gt 128 -or $pair[1] -match '[\x00-\x1f\x7f]')) {
+            throw "$($pair[0]) must be 1-128 characters without control characters"
+        }
+    }
+    if ($AppId -and ($AppId.Length -gt 128 -or $AppId -cnotmatch '^[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z][A-Za-z0-9_-]*)+$')) {
+        throw 'AppId must be a dot-separated ASCII identity such as org.example.MyApp'
+    }
+    $endpoint = $env:UI4ME_ENDPOINT
+    $token = $env:UI4ME_TOKEN
+    if ($endpoint -and $token) {
+        # Backend role: started by the native host.
+        if ($script:UI4MEIsWindows) { try { [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false) } catch { } }
+        $app = Connect-UI4ME -Endpoint $endpoint -Token $token
+        $app.DirectStart = $true
+        # Keep the connection secret out of processes this script starts.
+        foreach ($variable in @('UI4ME_ENDPOINT', 'UI4ME_TOKEN', 'UI4ME_APP_ID', 'UI4ME_PROTOCOL_VERSION', 'UI4ME_DIRECT_START')) {
+            [Environment]::SetEnvironmentVariable($variable, $null)
+        }
+        return $app
+    }
+    if ($endpoint -or $token) {
+        throw 'Incomplete UI4ME host environment: UI4ME_ENDPOINT and UI4ME_TOKEN must both be set by the native host. Remove them to run the script directly.'
+    }
+    if ($env:UI4ME_DIRECT_START) {
+        throw 'This backend was started by a UI4ME launcher but received no host connection. Refusing to start a second native host.'
+    }
+
+    # Launcher role.
+    if (-not $ScriptPath) { $ScriptPath = $MyInvocation.PSCommandPath }
+    if (-not $ScriptPath) { throw 'Start-UI4MEScript must be called from a .ps1 script file (for example pwsh -File ./app.ps1).' }
+    $ScriptPath = [IO.Path]::GetFullPath((Resolve-UI4MEPath $ScriptPath))
+    if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) { throw "Script not found: $ScriptPath" }
+    if ($Icon) {
+        $Icon = [IO.Path]::GetFullPath((Resolve-UI4MEPath $Icon))
+        if (-not (Test-Path -LiteralPath $Icon -PathType Leaf)) { throw "Application icon not found: $Icon" }
+    }
+    if (-not $PSBoundParameters.ContainsKey('ArgumentList')) { $ArgumentList = Get-UI4MEScriptArguments $ScriptPath }
+    if ($null -eq $ArgumentList) { $ArgumentList = @() }
+    $label = [IO.Path]::GetFileNameWithoutExtension($ScriptPath)
+    if (-not $Name) { $Name = $label }
+    if (-not $AppId) { $AppId = Get-UI4MEDefaultAppId -ScriptPath $ScriptPath -Label $Name }
+    $edition = if ($PSVersionTable.PSEdition -eq 'Core') { if ($script:UI4MEIsWindows) { 'pwsh.exe' } else { 'pwsh' } } else { 'powershell.exe' }
+    $shell = Join-Path $PSHOME $edition
+    if (-not (Test-Path -LiteralPath $shell -PathType Leaf)) { throw "Cannot find this PowerShell executable: $shell" }
+    $hostBinary = Get-UI4MEHostPath
+    Initialize-UI4MEHelper
+
+    $backendArguments = @('-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $ScriptPath) + @($ArgumentList)
+    $lines = New-Object Collections.Generic.List[string]
+    $lines.Add('[app]'); $lines.Add('id = ' + (ConvertTo-UI4METomlString $AppId)); $lines.Add('name = ' + (ConvertTo-UI4METomlString $Name))
+    if ($Version) { $lines.Add('version = ' + (ConvertTo-UI4METomlString $Version)) }
+    if ($Icon) { $lines.Add('icon = ' + (ConvertTo-UI4METomlString $Icon)) }
+    $lines.Add(''); $lines.Add('[backend]'); $lines.Add('program = ' + (ConvertTo-UI4METomlString $shell))
+    $lines.Add('args = [' + ((@($backendArguments) | ForEach-Object { ConvertTo-UI4METomlString $_ }) -join ', ') + ']')
+    $lines.Add('cwd = ' + (ConvertTo-UI4METomlString ([IO.Path]::GetFullPath((Get-Location -PSProvider FileSystem).ProviderPath))))
+    $lines.Add(''); $lines.Add('[host]')
+    $lines.Add("startup_timeout_ms = $StartupTimeoutMilliseconds"); $lines.Add("shutdown_timeout_ms = $ShutdownTimeoutMilliseconds")
+    $lines.Add("max_windows = $MaxWindows"); $lines.Add('instance = ' + (ConvertTo-UI4METomlString $Instance)); $lines.Add('')
+
+    Clear-UI4MEStaleStartFolders
+    $folder = Join-Path ([IO.Path]::GetTempPath()) ('ui4me-start-' + [guid]::NewGuid().ToString('N'))
+    [void](New-Item -ItemType Directory -Path $folder)
+    $runner = $null
+    $code = 1
+    $previousMarker = $env:UI4ME_DIRECT_START
+    try {
+        $manifest = Join-Path $folder 'app.toml'
+        [IO.File]::WriteAllText($manifest, ($lines -join "`n"), (New-Object Text.UTF8Encoding($false)))
+        $hostArguments = @('run', '--app', $manifest)
+        if ($env:UI4ME_TEST_MODE -eq '1') { $hostArguments += '--headless' }
+        $program = $hostBinary
+        if (-not $script:UI4MEIsWindows) {
+            # If this PowerShell process dies, even by SIGKILL, the host is told to stop.
+            $setpriv = Get-Command setpriv -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($setpriv) { $program = $setpriv.Source; $hostArguments = @('--pdeathsig', 'TERM', '--', $hostBinary) + $hostArguments }
+        }
+        $verbose = @('', '0', 'false', 'no') -notcontains ([string]$env:UI4ME_VERBOSE).Trim().ToLowerInvariant()
+        $env:UI4ME_DIRECT_START = [string]$PID
+        try {
+            $runner = New-Object UI4ME.HostProcess -ArgumentList @($program, [string[]]$hostArguments, [Environment]::CurrentDirectory, $verbose)
+        } finally {
+            $env:UI4ME_DIRECT_START = $previousMarker
+        }
+        # Short waits keep Ctrl+C responsive; the finally block stops the host.
+        while (-not $runner.WaitForExit(200)) { }
+        $code = $runner.ExitCode
+    } finally {
+        if ($null -ne $runner) {
+            if (-not $runner.HasExited) { $runner.Stop() }
+            $runner.Dispose()
+        }
+        Remove-Item -LiteralPath $folder -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    exit $code
+}
+
 function New-UI4MEProject {
     <#
     .SYNOPSIS
-    Generates a runnable HTML + CSS + PowerShell app (app.toml, backend.ps1, index.html, style.css).
+    Generates a runnable HTML + CSS + PowerShell app (app.ps1, index.html, style.css, optional app.toml).
     .DESCRIPTION
-    The backend runs with pwsh, or with Windows PowerShell 5.1 when -WindowsPowerShell is given.
+    Run the generated app directly: pwsh -File ./app.ps1 (or powershell.exe -File .\app.ps1 on
+    Windows PowerShell 5.1). app.toml is optional, for launchers and deployments that start the
+    host explicitly with Start-UI4MEHost; it names pwsh, or powershell.exe with -WindowsPowerShell.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Path, [string]$Name = 'UI4ME PowerShell App',
           [string]$AppId = 'org.example.PowerShellApp', [Alias('WindowsPowerShell51')][switch]$WindowsPowerShell, [switch]$Force)
-    if ($AppId -cnotmatch '^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$' -or $AppId.Length -gt 255) {
+    if ($AppId -cnotmatch '^[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z][A-Za-z0-9_-]*)+$' -or $AppId.Length -gt 128) {
         throw 'AppId must be a reverse-domain ASCII identifier such as org.example.MyApp'
     }
     if ([string]::IsNullOrWhiteSpace($Name) -or $Name.Length -gt 128 -or $Name -match '[\x00-\x1f"\\]') {
         throw 'Name must be 1-128 characters without quotes, backslashes or control characters'
     }
     $folder = Resolve-UI4MEPath $Path
-    $files = @('app.toml', 'backend.ps1', 'index.html', 'style.css')
+    $files = @('app.ps1', 'app.toml', 'index.html', 'style.css')
     if (Test-Path -LiteralPath $folder -PathType Leaf) { throw "Path is a file: $folder" }
     if (-not $Force) {
         foreach ($f in $files) { if (Test-Path -LiteralPath (Join-Path $folder $f)) { throw "Refusing to overwrite $f in $folder; use -Force" } }
@@ -1358,6 +1566,9 @@ function New-UI4MEProject {
     $htmlName = [Net.WebUtility]::HtmlEncode($Name)
     $psName = $Name.Replace("'", "''")
     $manifest = @"
+# Optional. For daily development just run: pwsh -File ./app.ps1
+# This manifest lets a launcher or deployment start the app explicitly with:
+#   Start-UI4MEHost -Manifest ./app.toml
 [app]
 id = "$AppId"
 name = "$Name"
@@ -1365,36 +1576,43 @@ version = "1.0.0"
 
 [backend]
 program = "$program"
-args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "{app_dir}/backend.ps1"]
+args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "{app_dir}/app.ps1"]
 cwd = "{app_dir}"
 
 [host]
-startup_timeout_ms = 20000
+startup_timeout_ms = 30000
 shutdown_timeout_ms = 5000
 max_windows = 8
 instance = "single"
 "@
     $backend = @"
-# Started by the UI4ME native host (Start-UI4MEHost -Manifest app.toml). Do not run directly.
+# $psName - a native desktop window built with HTML, CSS and PowerShell.
+#
+# Run it:  pwsh -File ./app.ps1
+#     or:  powershell.exe -NoProfile -File .\app.ps1   (Windows PowerShell 5.1)
+#
+# UI4ME starts its native window host, which runs this script a second time to
+# connect it to the window. Keep start-up work below Start-UI4MEScript.
 `$ErrorActionPreference = 'Stop'
-Import-Module UI4ME.Core
-`$app = Connect-UI4ME
-try {
-    `$window = New-UI4MEWindow -Application `$app -Title '$psName' -Width 840 -Height 540
-    `$doc = Open-UI4MEFile -Window `$window -Path (Join-Path `$PSScriptRoot 'index.html')
-    `$script:clicks = 0
-    `$null = Register-UI4MEDocumentEvent -Document `$doc -Type click -Element greet -Callback {
-        `$script:clicks++
-        `$name = (Get-UI4MEValue -Document `$doc -Element name).Trim()
-        if (-not `$name) { `$name = 'world' }
-        # Text is never parsed as HTML, so user input is safe here.
-        Set-UI4MEDocumentText -Document `$doc -Element result -Text "Hello, `$name! (`$(`$script:clicks))"
-    }
-    Set-UI4MEReady -Application `$app
-    Wait-UI4ME -Application `$app -UntilShutdown
-} finally {
-    Close-UI4ME -Application `$app
+Import-Module UI4ME.Core -MinimumVersion 1.0.1
+
+`$app = Start-UI4MEScript -Name '$psName' -AppId '$AppId'
+
+`$window = New-UI4MEWindow -Application `$app -Title '$psName' -Width 840 -Height 540
+`$doc = Open-UI4MEFile -Window `$window -Path (Join-Path `$PSScriptRoot 'index.html')
+
+`$script:clicks = 0
+`$null = Register-UI4MEDocumentEvent -Document `$doc -Type click -Element greet -Callback {
+    `$script:clicks++
+    `$name = (Get-UI4MEValue -Document `$doc -Element name).Trim()
+    if (-not `$name) { `$name = 'world' }
+    # Text is never parsed as HTML, so user input is safe here.
+    Set-UI4MEDocumentText -Document `$doc -Element result -Text "Hello, `$name! (`$(`$script:clicks))"
 }
+
+Set-UI4MEReady -Application `$app
+Wait-UI4ME -Application `$app -UntilShutdown
+Close-UI4ME -Application `$app
 "@
     $html = @"
 <!doctype html>
@@ -1428,7 +1646,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); ou
     $utf8 = New-Object Text.UTF8Encoding($false)
     [IO.File]::WriteAllText((Join-Path $folder 'app.toml'), $manifest.Replace("`r`n", "`n"), $utf8)
     # Windows PowerShell 5.1 reads BOM-less scripts as the ANSI code page.
-    [IO.File]::WriteAllText((Join-Path $folder 'backend.ps1'), $backend, (New-Object Text.UTF8Encoding($true)))
+    [IO.File]::WriteAllText((Join-Path $folder 'app.ps1'), $backend, (New-Object Text.UTF8Encoding($true)))
     [IO.File]::WriteAllText((Join-Path $folder 'index.html'), $html.Replace("`r`n", "`n"), $utf8)
     [IO.File]::WriteAllText((Join-Path $folder 'style.css'), $css.Replace("`r`n", "`n"), $utf8)
     return (Get-Item -LiteralPath $folder)
@@ -1583,5 +1801,5 @@ Export-ModuleMember -Function @(
     'Get-UI4MECapabilities', 'Get-UI4MEPreferences', 'Get-UI4MEClipboard', 'Set-UI4MEClipboard',
     'Open-UI4MEExternal', 'Show-UI4MEFileDialog',
     'New-UI4MELiveBitmap', 'Send-UI4MELiveBitmap', 'Remove-UI4MELiveBitmap',
-    'Get-UI4MEHostPath', 'Start-UI4MEHost', 'New-UI4MEProject', 'Install-UI4MESkill'
+    'Get-UI4MEHostPath', 'Start-UI4MEHost', 'Start-UI4MEScript', 'New-UI4MEProject', 'Install-UI4MESkill'
 )

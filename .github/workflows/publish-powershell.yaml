@@ -5,12 +5,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'PowerShell module and Python release version (1.0.0)'
+        description: 'PowerShell module and Python release version (1.0.1)'
         required: true
-        default: '1.0.0'
+        default: '1.0.1'
         type: string
       confirmation:
-        description: 'Type publish-powershell-1.0.0'
+        description: 'Type publish-powershell-1.0.1'
         required: true
         type: string
 permissions:
@@ -33,7 +33,7 @@ jobs:
           CONFIRMATION: ${{ inputs.confirmation }}
         run: |
           set -euo pipefail
-          test "$VERSION" = 1.0.0
+          test "$VERSION" = 1.0.1
           test "$CONFIRMATION" = "publish-powershell-$VERSION"
           grep -Fq "ModuleVersion = '$VERSION'" powershell/UI4ME.Core/UI4ME.Core.psd1
           python tools/release/verify_source.py
@@ -93,7 +93,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ui4me-powershell-staged-${{ inputs.version }}
-          path: dist/psgallery/UI4ME.Core-1.0.0.zip
+          path: dist/psgallery/UI4ME.Core-1.0.1.zip
           if-no-files-found: error
 
   windows-check:
@@ -111,7 +111,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          Expand-Archive staged/UI4ME.Core-1.0.0.zip -DestinationPath expanded
+          Expand-Archive staged/UI4ME.Core-1.0.1.zip -DestinationPath expanded
           $module = Join-Path (Resolve-Path expanded).Path 'UI4ME.Core/UI4ME.Core.psd1'
           Test-ModuleManifest $module | Out-Null
           Import-Module $module -Force
@@ -165,7 +165,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p expanded
-          unzip -q staged/UI4ME.Core-1.0.0.zip -d expanded
+          unzip -q staged/UI4ME.Core-1.0.1.zip -d expanded
           chmod +x expanded/UI4ME.Core/runtimes/linux-x64/ui4me_core/_bin/ui4me-host
           python tools/release/verify_psgallery.py expanded/UI4ME.Core
       - name: Package and publish to PSGallery (manual action only)

@@ -1,8 +1,8 @@
-# Public README screenshots
+# Product images
 
-These are factual **crops** of real desktop captures from the successfully qualified Linux 1.0.0 run (Debian 13, KDE Plasma native Wayland). The application pixels are unretouched; only unrelated terminal/desktop background around the UI was cropped.
+Real screenshots of UI4ME windows, used by the README, the PyPI description and the documentation:
 
-- `desktop-workspace.png` — source: `docs/verification/core-1.0-linux-final-2026-11-13/screenshots/R01-window.png`.
-- `live-bitmap.png` — source: `docs/verification/core-1.0-linux-final-2026-11-13/screenshots/RC2-livebitmap-demo.png`.
+- `desktop-workspace.png`: the desktop workspace example (`examples/python/renderer_demo.py`) on KDE Plasma (Wayland).
+- `live-bitmap.png`: the frameless live-bitmap example (`examples/python/live_bitmap_demo.py`).
 
-The originals and relevant test evidence remain under `docs/verification`. Do not replace these with generated/mock screenshots without labeling them accurately.
+Only add genuine screenshots of UI4ME. The PyPI description links them through `raw.githubusercontent.com` URLs, so keep the file names stable.

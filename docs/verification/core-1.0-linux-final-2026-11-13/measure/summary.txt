@@ -1,4 +1,0 @@
-renderer-system: ready median 533.7 ms (5 runs [501.8, 525.5, 533.7, 571.1, 694.7]), first frame median 111.7 ms; idle 57 s host 0.247% backend 0.291%; combined PSS after idle 59.9 MiB; window cycles 50->400 host PSS 55787->63775 KiB slope 26.4 KiB/cycle; DOM cycles host PSS 65015->65031 KiB slope 0.07 KiB/cycle
-renderer-reduce: ready median 541.3 ms (5 runs [524.2, 536.1, 541.3, 567.5, 735.2]), first frame median 116.4 ms; idle 57 s host 0.252% backend 0.314%; combined PSS after idle 59.9 MiB; window cycles 50->400 host PSS 55823->63446 KiB slope 24.1 KiB/cycle; DOM cycles host PSS 64434->64450 KiB slope 0.03 KiB/cycle
-probe: ready median 126.7 ms (5 runs [115.4, 125.9, 126.7, 133.3, 135.4]), first frame median 125.7 ms; idle 57 s host 0.248% backend 0.306%; combined PSS after idle 33.7 MiB; window cycles 50->400 host PSS 22119->23547 KiB slope 4.0 KiB/cycle
-AT-SPI disabled: window cycles host PSS 56113 -> 56141 KiB; slope 0.1 KiB/cycle

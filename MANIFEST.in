@@ -9,9 +9,6 @@ graft skills
 graft examples
 graft tools
 recursive-include docs *.md *.json *.csv *.txt *.svg *.png *.sha256
-# Qualification logs and historical screenshots belong in the GitHub repository,
-# not every sdist. Keep product screenshots in docs/images.
-prune docs/verification
 recursive-include .github/workflows *.yml *.yaml
 prune target
 prune .git

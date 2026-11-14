@@ -1,6 +1,0 @@
-Before fix (host 79be2d34..., KDE AT-SPI inspection of the C-lab page):
-grid role: table attrs: {'id': 'grid'}  (no rowcount/colcount; cells without row/column indices)
-treeitem 'Child A' attrs: {'posinset': '1', 'setsize': '2'}  (no level)
-live region: status bar {'id': 'live'}  (no live/atomic attributes)
-combo labelled-by: []  (explicit ARIA relationships not published)
-After fix: see ../native/evidence/C08-atspi.txt and C08-atspi-table.txt

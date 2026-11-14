@@ -10,11 +10,11 @@ def validate(mod:Path)->dict:
     psm1=mod/'UI4ME.Core.psm1'
     for p in (psd1,psm1,mod/'private/UI4ME.Transport.cs',mod/'LICENSE'):
         if not p.is_file():raise ValueError(f'Missing module source: {p}')
-    if not re.search(r"ModuleVersion\s*=\s*'1\.0\.0'",psd1.read_text()):raise ValueError('Unexpected module version')
+    if not re.search(r"ModuleVersion\s*=\s*'1\.0\.1'",psd1.read_text()):raise ValueError('Unexpected module version')
     if 'Publish-PSResource' in psm1.read_text():raise ValueError('Runtime module must not publish')
     evidence=json.loads((mod/'HOST-SOURCE-MANIFEST.json').read_text())
-    if evidence['version']!='1.0.0' or evidence['python_runtime_required'] is not False:raise ValueError('Invalid staged metadata')
-    report={'version':'1.0.0','binaries':{},'native_files':0}
+    if evidence['version']!='1.0.1' or evidence['python_runtime_required'] is not False:raise ValueError('Invalid staged metadata')
+    report={'version':'1.0.1','binaries':{},'native_files':0}
     for platform,relative,magic in [('linux','runtimes/linux-x64/ui4me_core/_bin/ui4me-host',b'\x7fELF'),
                                      ('windows','runtimes/win-x64/ui4me_core/_bin/ui4me-host.exe',b'MZ')]:
         path=mod/relative
@@ -33,12 +33,15 @@ def validate(mod:Path)->dict:
         p=mod/rel
         if not p.is_file() or digest(p)!=sha:raise ValueError(f'Changed package source: {p}')
     for rel in ('skills/ui4me-powershell/SKILL.md','skills/ui4me-powershell/references/powershell-api.md',
-                'docs/powershell.md','docs/powershell-api.md','licenses/LICENSE','licenses/THIRD_PARTY_NOTICES.md',
+                'README.md','docs/install-powershell.md','docs/quickstart-powershell.md','docs/powershell-api.md',
+                'docs/troubleshooting.md','licenses/LICENSE','licenses/THIRD_PARTY_NOTICES.md',
                 'runtimes/linux-x64/ui4me_core/_bin/THIRD_PARTY_LICENSES.txt',
                 'runtimes/win-x64/ui4me_core/_bin/THIRD_PARTY_LICENSES.txt'):
         if not (mod/rel).is_file():raise ValueError(f'Missing packaged file: {rel}')
     if any(part in ('tests','examples','__pycache__') for p in mod.rglob('*') for part in p.relative_to(mod).parts):
         raise ValueError('Test, example or cache folders must not be packaged')
+    if 'Start-UI4MEScript' not in (mod/'README.md').read_text(encoding='utf-8'):
+        raise ValueError('The packaged README must show direct script startup')
     exported=set(re.findall(r"'([A-Za-z]+-UI4ME[A-Za-z]*)'",psd1.read_text().split('FunctionsToExport',1)[1].split(')',1)[0]))
     defined=set(re.findall(r'(?m)^function ([A-Za-z]+-UI4ME[A-Za-z]*)',psm1.read_text()))
     if not exported or not exported<=defined:raise ValueError(f'Manifest exports undefined functions: {sorted(exported-defined)}')

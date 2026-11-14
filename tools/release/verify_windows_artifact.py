@@ -76,7 +76,7 @@ def validate_wheel(path: Path) -> dict:
             if needed not in entries:
                 raise ValueError(f'Wheel is missing the coding skill or developer CLI: {needed}')
         for needed in ('ui4me_core/application.py', 'ui4me_core/client.py',
-                       'ui4me_core/live_bitmap.py', 'ui4me_core/launcher.py'):
+                       'ui4me_core/live_bitmap.py', 'ui4me_core/launcher.py', 'ui4me_core/_bootstrap.py'):
             if needed not in entries:
                 raise ValueError(f'Missing module {needed}')
         return {'filename': path.name, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
@@ -89,12 +89,12 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('dist_dir', type=Path, nargs='?', default=Path('dist'))
     args = ap.parse_args()
-    sdists = sorted(args.dist_dir.glob('ui4me_core-1.0.0.tar.gz'))
-    wheels = sorted(args.dist_dir.glob('ui4me_core-1.0.0-*win*.whl'))
+    sdists = sorted(args.dist_dir.glob('ui4me_core-1.0.1.tar.gz'))
+    wheels = sorted(args.dist_dir.glob('ui4me_core-1.0.1-*win*.whl'))
     if not sdists or not wheels:
         raise SystemExit('Both the source distribution and a Windows wheel must exist')
     reports = [validate_sdist(x) for x in sdists] + [validate_wheel(x) for x in wheels]
-    print(json.dumps({'version': '1.0.0', 'artifacts': reports, 'status': 'PASS'}, indent=2))
+    print(json.dumps({'version': '1.0.1', 'artifacts': reports, 'status': 'PASS'}, indent=2))
 
 
 if __name__ == '__main__':

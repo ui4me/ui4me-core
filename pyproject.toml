@@ -4,16 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ui4me-core"
-version = "1.0.0"
-description = "Native desktop HTML/CSS runtime with a language-neutral process host"
-readme = "README.md"
+version = "1.0.1"
+description = "Native desktop apps from local HTML and CSS, controlled by plain Python. No browser or JavaScript."
+readme = {file = "docs/publish/pypi.md", content-type = "text/markdown"}
 requires-python = ">=3.10"
 # The project's own code is MIT; the packaged host bundles an OFL-1.1 font.
 # Statically linked dependency licenses ship in ui4me_core/_bin/THIRD_PARTY_LICENSES.txt.
 license = "MIT AND OFL-1.1"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "crates/ui4me-host/assets/FONT-LICENSE.txt", "patches/licenses/MPL-2.0.txt"]
 authors = [{name="UI4ME Contributors"}]
-keywords = ["desktop", "html", "css", "rust", "wayland", "windows", "gui", "python"]
+keywords = ["desktop", "gui", "html", "css", "native", "wayland", "windows", "linux", "rust"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Operating System :: Microsoft :: Windows",
@@ -26,11 +26,16 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Programming Language :: Rust",
     "Topic :: Software Development :: User Interfaces",
+    "Intended Audience :: Developers",
+    "Environment :: Win32 (MS Windows)",
 ]
 
 [project.urls]
 Homepage = "https://github.com/ui4me/ui4me-core"
+Documentation = "https://github.com/ui4me/ui4me-core/blob/main/docs/index.md"
 Source = "https://github.com/ui4me/ui4me-core"
+Issues = "https://github.com/ui4me/ui4me-core/issues"
+Changelog = "https://github.com/ui4me/ui4me-core/blob/main/docs/release/RELEASE_NOTES_1.0.1.md"
 
 [project.scripts]
 ui4me-host = "ui4me_core.launcher:main"

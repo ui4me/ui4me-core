@@ -14,8 +14,8 @@ from pathlib import Path
 import threading
 import time
 
-from application import Application, StaleDocumentError
-from client import DisconnectedError, RpcError
+from ui4me_core import Application, StaleDocumentError
+from ui4me_core import DisconnectedError, RpcError
 from completion_checks import REQUIRED_CHECKS as COMPLETION_CHECKS, run_completion_checks
 
 HERE = Path(__file__).resolve().parent
@@ -57,7 +57,7 @@ def main():
         if args.evidence:
             args.evidence.parent.mkdir(parents=True, exist_ok=True)
             args.evidence.write_text(json.dumps({
-                "schema": 1, "version": "1.0.0", "time_utc": datetime.now(timezone.utc).isoformat(),
+                "schema": 1, "version": "1.0.1", "time_utc": datetime.now(timezone.utc).isoformat(),
                 "native_desktop_qualified": False,
                 "mode": "headless" if args.headless_verify else "native-smoke" if args.native_verify else "interactive",
                 "results": results,

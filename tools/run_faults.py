@@ -17,8 +17,9 @@ import tempfile
 import time
 import uuid
 
-from run_example import ROOT, locate_host, manifest
+from run_example import ROOT, checkout_environment, locate_host, manifest
 
+sys.path.insert(0, str(ROOT / "python"))
 sys.path.insert(0, str(ROOT / "examples/python"))
 from faults import MODES, process_identity
 
@@ -116,7 +117,7 @@ def main():
         parser.exit(2, str(error) + "\n")
     backend_args = ["--mode", args.mode, "--evidence", str(evidence), "--run-id", run_id,
                     "--duration", str(0 if args.kill_host else args.duration)]
-    env = os.environ.copy()
+    env = checkout_environment()
     if args.headless:
         env["UI4ME_TEST_MODE"] = "1"
     timeout = args.timeout if args.timeout is not None else 45 if args.headless or args.kill_host else None

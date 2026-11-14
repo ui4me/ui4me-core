@@ -1,4 +1,4 @@
-# Runs the code examples from docs/guides/powershell.md, docs/reference/powershell-api.md,
+# Runs the code examples from docs/guides/quickstart-powershell.md, docs/reference/powershell-api.md,
 # skills/ui4me-powershell/SKILL.md and README.md against the real host (app-docs.toml),
 # with real input from the platform driver. Same JSONL protocol as Qualify.ps1.
 $ErrorActionPreference = 'Stop'

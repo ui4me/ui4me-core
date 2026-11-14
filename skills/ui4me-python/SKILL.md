@@ -1,118 +1,142 @@
 ---
 name: ui4me-python
-description: Build native Linux and Windows GUI applications with UI4ME Core using local HTML, CSS and Python. Use for creating windows, modifying the document, handling events and dialogs, styling desktop interfaces, and live bitmap previews. No browser or JavaScript is required.
+description: Build native Linux and Windows desktop GUI applications in Python with UI4ME Core, using local HTML and CSS for the interface and Python callbacks for behavior (no browser, no JavaScript, no web server). Use when creating or modifying a ui4me_core app - Application.start(), windows, documents, events, forms, batch updates, styling, native file dialogs, clipboard, close/quit policy, live RGBA bitmaps - or when debugging one.
 ---
 
-# Build an application with UI4ME Core
+# Build a desktop app with UI4ME Core (Python)
 
-**Use this skill when a user wants a Python desktop GUI built from HTML and CSS.** UI4ME is a native Rust host that creates desktop windows, parses HTML/CSS, edits and paints the document, and forwards application events to a separate Python backend. It does **not** run JavaScript, WebKit, Chromium, Qt, HTTP, or a browser. Do not create a web server, HTML JavaScript event handlers or `electron` project.
+UI4ME Core is a native Rust host that owns the windows, parses and paints HTML/CSS, handles input/IME/editing and runs the event loop. The application's Python code runs as a **separate supervised process** connected over authenticated local IPC and changes the page through `ui4me_core` calls. There is **no browser, no JavaScript, no WebKit/Chromium/Qt, no HTTP**. Do not write `<script>`, `onclick=`, `fetch`, a web server, Electron/Flask/React code, or browser DOM APIs. HTML containing `<script>`, `<iframe>`, any `on…=` attribute, `contenteditable`, `<input type="color">`/date/time inputs, or duplicate `id`s **fails to load** (`RpcError` -32602).
 
-## Fast path: generate and run a project
+## Start a project
 
 ```sh
-python -m pip install ui4me-core
-ui4me-new my-app --name "My App"
-ui4me-host run --app my-app/app.toml
+python -m pip install ui4me-core     # in a virtual environment; or: uv add ui4me-core
+ui4me-new my-app --name "My App"     # app.py, index.html, style.css, pyproject.toml, app.toml
+cd my-app
+python app.py                        # or: uv run app.py
 ```
 
-Windows PowerShell:
-
-```powershell
-py -m pip install ui4me-core
-ui4me-new my-app --name "My App"
-ui4me-host run --app my-app/app.toml
-```
-
-Use a **virtual environment** for the project. `ui4me-new` records that interpreter in `app.toml`; do not move the venv without updating `backend.program`. After installation, `ui4me-host --version` and `ui4me-host doctor` are useful diagnostics.
-
-## Read these rules before writing code
-
-1. **Always start through the host:** `ui4me-host run --app app.toml`, not `python app.py`. The native host creates the authenticated backend connection. In backend code, call `Application.from_environment()`.
-2. **Load HTML from a file or directly from a string:** `app.open_file(path)` loads linked local CSS/assets; `app.open_html(html, asset_root=directory)` accepts generated HTML. You may also create a window first, then use `window.load_file()` or `window.load_html()` to replace its current document.
-3. **Use Python for callbacks:** `doc.on("click", callback, element="button-id")`; use IDs for simple targets, `doc.query_nodes()`/opaque `Node` for anonymous nodes. Avoid `onclick=`, `<script>`, JavaScript, web fetches and browser APIs.
-4. **Change the live document instead of reloading:** `doc.set_text`, `doc.set_value`, `doc.add_class`, `doc.replace_html`, `doc.insert_html`, or `doc.batch([...])` for an atomic group. Reload only when replacing the whole page; after reload the **old document and node objects are stale**.
-5. **Event callbacks run asynchronously after native default actions.** To suppress an action, register `doc.prevent_default(element, event)` beforehand; calling it inside a callback cannot undo an action already performed.
-6. **Native services come from the host:** use `window.open_files`, `window.save_file`, `window.choose_folder`, `app.clipboard_text`, `app.set_clipboard_text`, and `app.open_external`—not HTML browser pickers/JavaScript.
-7. **Window lifecycle:** call `app.run()` to announce readiness and wait until shutdown; use `app.request_quit()`, `window.request_close()`, `window.on_before_close()` and `app.on_before_quit()` when appropriate. Clean up streams/bitmaps on unload/close.
-8. **Styling:** use ordinary local CSS and the documented supported subset. Complex responsive layouts, CSS variables, fonts, flex/grid/tables, controls and common paint effects are supported, but not every browser feature. Check `doc.diagnostics()` when CSS behaves differently.
-9. **Use bounded live bitmaps** for rapidly changing RGBA pixels: `<img src="ui4me-bitmap://preview">`, `doc.create_bitmap("preview", width, height)`, then `bitmap.present(frame)` or `bitmap.try_present(frame)`; close when finished. Do not JSON/base64 encode continuous frames.
-10. **Linux and Windows differ in certain native window operations** (e.g., some Wayland focus/position requests). Check `app.capabilities()` and handle unsupported replies instead of assuming a request succeeded.
-
-## Smallest file-based app
-
-`app.py`:
+The minimal program:
 
 ```python
-from pathlib import Path
 from ui4me_core import Application
 
-HERE = Path(__file__).resolve().parent
-with Application.from_environment() as app:
-    window = app.open_file(HERE / "index.html", title="My Native App", width=900, height=600)
-    doc = window.document
-    doc.on("click", lambda event: doc.set_text("message", "Clicked"), element="action")
-    app.run()
+
+def main():
+    with Application.start(name="My App", app_id="org.example.MyApp") as app:
+        window = app.open_html("<h1>Hello UI4ME</h1>")
+        app.run()
+
+
+if __name__ == "__main__":
+    main()
 ```
+
+Run with `python app.py`, `uv run app.py`, `uv run python app.py` or `python -m package.app`. Wheels exist for Linux x86-64 (glibc 2.34+, Wayland desktop) and Windows x86-64; Python 3.10+.
+
+## How `Application.start()` works (read this first)
+
+`python app.py` is the **launcher**: `start()` runs the packaged native host, which starts the **same command again** as the backend with a private connection. In the launcher `start()` never returns (it exits with the host's status). In the backend it connects and returns the `Application`.
+
+- **Code before `Application.start()` runs twice.** Put side effects (file writes, network, printing banners, heavy init) after it, inside `main()`, and always use `if __name__ == "__main__":`.
+- It must be a script file or `python -m`. `python -c`, stdin and the REPL raise `ui4me_core.StartupError`.
+- `print()` in the backend appears in the terminal. `input()` does not work (no stdin).
+- Options: `name`, `app_id` (reverse-DNS; default derived from the script path, so set one for real apps), `version`, `icon`, `instance="single"|"multiple"`, `startup_timeout_ms`, `shutdown_timeout_ms`, `max_windows`. Invalid values raise `ValueError`.
+- `app.run()` must come after at least one window exists; it blocks until shutdown. Closing the last window asks to quit (the before-quit policy runs).
+- Exit status: 0 normal; nonzero if the backend failed (the host shows an error window); 128+signal on Ctrl+C.
+
+## Core rules
+
+1. **Load UI:** `app.open_file(HERE / "index.html", title=..., width=..., height=...)` (relative CSS/images/fonts resolve from that folder) or `app.open_html(html, asset_root=HERE)`. Use local files only; no network URLs.
+2. **Behavior = Python callbacks:** `document.on("click", handler, element="save")`. `element` is an HTML **id**, not a selector, and also matches events bubbling from descendants (use `event["element"]` to see which identified element was hit). Use named `def` functions.
+3. **Change the live page, don't reload it:** `set_text`, `get_value`/`set_value`, `get_checked`/`set_checked`, `add_class`/`remove_class`, `set_attribute`, `insert_html`, `replace_html`, `remove`, or `document.batch([...])` for an atomic group.
+4. **Untrusted text:** `set_text`/`set_value` are always plain text. `insert_html`/`replace_html` parse HTML: wrap user data with `html.escape()`.
+5. **Events arrive after the native action.** A callback cannot cancel it. To block a default (form submit, a key), call `document.prevent_default("form-id", "submit")` *before* the input happens, then handle the event in Python.
+6. **Stale documents:** `window.load_html()`/`load_file()` returns a new `Document`; the old one, its nodes, callbacks and bitmaps are retired and raise `StaleDocumentError`. Re-register callbacks on the new document; read `window.document` for the current one.
+7. **Threads:** event callbacks run one at a time on one background thread, in order. Slow work goes in a `threading.Thread`; document methods are thread-safe. `on_before_close`/`on_before_quit` callbacks run on other threads, possibly concurrently: protect shared state with a lock, return a bool quickly.
+8. **Text offsets are UTF-16 units** in `control_selection`, `set_control_selection`, `replace_control_range` (an emoji counts as 2), not Python indices.
+9. **Native services come from Python:** `window.open_files(...)`, `window.save_file(...)`, `window.choose_folder(...)` return `{"cancelled": bool, "paths": [...]}`; `app.clipboard_text()`/`app.set_clipboard_text()`; `app.open_external(path_or_url)`; `app.reveal_file(path)`.
+10. **Links never navigate:** clicking `<a href>` sends a `link_activated` event with `href` and `url`; handle it (`app.open_external(event["url"])`, or load another local page). Switch screens with `window.load_file()`/`load_html()`.
+11. **Limits:** 16 KiB per `set_text`/`set_value`, 1 MiB HTML per load, 1024 ops per batch, 2 MiB per IPC message. Page large lists (`trim_children`, `query(..., offset, limit)`).
+12. **Platform differences are real:** on Wayland a window cannot be positioned and focus is up to the compositor. Requests may raise `RpcError` (code -32001 unsupported) or be ignored; check `window.state()["observed"]` and `app.capabilities()`.
+
+## Typical app
 
 `index.html`:
 
 ```html
-<!doctype html><html lang="en"><head><meta charset="utf-8">
-<link rel="stylesheet" href="style.css"></head><body>
-<button id="action">Click me</button><p id="message" role="status">Ready</p>
-</body></html>
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><link rel="stylesheet" href="style.css"></head>
+<body>
+  <form id="add-form">
+    <label for="task">Task</label>
+    <input id="task" name="task" type="text" required>
+    <button id="add" type="submit">Add</button>
+  </form>
+  <ul id="tasks"></ul>
+  <p id="status" role="status">Ready</p>
+</body>
+</html>
 ```
 
-`app.toml` names the application and backend interpreter, for example:
-
-```toml
-[app]
-id = "org.example.MyNativeApp"
-name = "My Native App"
-version = "1.0.0"
-[backend]
-program = "/absolute/path/to/project-venv/bin/python"
-args = ["{app_dir}/app.py"]
-cwd = "{app_dir}"
-[host]
-instance = "single"
-```
-
-On Windows, `backend.program` is an absolute `...\\Scripts\\python.exe` path (properly escaped in TOML). Generate this manifest with `ui4me-new` instead of typing paths manually when possible.
-
-## Generated HTML in Python (no HTML file)
+`app.py`:
 
 ```python
+from html import escape
+from pathlib import Path
+
 from ui4me_core import Application
-with Application.from_environment() as app:
-    window = app.open_html('<button id="go">Run</button><p id="out">Ready</p>', title="Generated UI")
-    doc = window.document
-    doc.on('click', lambda _: doc.set_text('out', 'Done'), element='go')
-    app.run()
+
+HERE = Path(__file__).resolve().parent
+
+
+def main():
+    with Application.start(name="Tasks", app_id="org.example.Tasks") as app:
+        window = app.open_file(HERE / "index.html", title="Tasks", width=520, height=420)
+        document = window.document
+        document.prevent_default("add-form", "submit")
+
+        def add_task(event):
+            title = document.get_value("task").strip()
+            document.batch([
+                {"op": "insert_html", "element": "tasks", "position": "beforeend",
+                 "html": f"<li>{escape(title)}</li>"},
+                {"op": "set_text", "element": "status", "text": "Added " + title},
+            ])
+            document.set_value("task", "")  # form values are not batch operations
+
+        def report_error(event):
+            print("Document error:", event["message"])
+
+        document.on("submit", add_task, element="add-form")
+        document.on("error", report_error)
+        app.run()
+
+
+if __name__ == "__main__":
+    main()
 ```
 
-For images/fonts/local CSS use `asset_root=Path(__file__).resolve().parent`. To replace the entire document use `window.load_html(...)` or `window.load_file(...)` and **re-register callbacks on the new** `window.document`.
+Batch `op` names: `set_text`, `append_text`, `set_attribute`, `remove_attribute`, `add_class`, `remove_class`, `insert_html`, `replace_children_html`, `remove_element`, `move_element` (`target`, `position`), `trim_children` (`keep`, `from`: `"start"`/`"end"`). Max 1024; all-or-nothing.
 
-## Batch changes, forms and events
+## Verify your work
 
-```python
-doc.batch([
-    {"op": "set_text", "element": "status", "text": "Saved"},
-    {"op": "add_class", "element": "panel", "name": "active"},
-    {"op": "insert_html", "element": "items", "position": "beforeend", "html": "<li>New</li>"},
-])
-name = doc.get_value('name')
-doc.set_value('name', 'Updated')
-doc.on('change', lambda event: print(event), element='name')
-```
+- Syntax/import: `python -c "import ui4me_core; print(ui4me_core.__version__)"`.
+- Runtime check: `ui4me-host doctor` and `ui4me-host --version`.
+- Headless smoke test (no desktop needed): `UI4ME_TEST_MODE=1 python app.py`. No window appears and the app must end itself, so temporarily add `threading.Timer(1.0, app.request_quit).start()` before `app.run()`; exit status 0 means startup, document loading and shutdown worked. Assert on `document.get_text(...)`/`get_value(...)` inside the script.
+- Set `UI4ME_VERBOSE=1` to see every host log line. `document.diagnostics()` and `document.computed_style([...], "id")` explain CSS that seems ignored.
+- Real input, IME, clipboard, dialogs and appearance need a real desktop session (Wayland on Linux, an interactive session on Windows; not an SSH shell).
 
-Batch operations are validated/committed as one document transaction (max 1024 entries). **Only these `op` names are accepted:** `set_text`, `append_text`, `set_attribute`, `remove_attribute`, `add_class`, `remove_class`, `insert_html`, `replace_children_html` (what `replace_html()` sends), `remove_element`, `move_element` and `trim_children`. Form values (`set_value`, `set_checked`), focus, stylesheets and dialogs are *not* batch operations; call their methods separately. Escape untrusted data inserted as HTML with `html.escape()`, or use `set_text()` for user content.
+## Advanced: explicit host launch
 
-## Further references (read when needed)
+For packaging, launchers or custom process policy, the host can start the backend from a manifest: `ui4me-host run --app app.toml` (the `app.toml` from `ui4me-new` pins the interpreter). In that backend `Application.start()` simply connects; the lower-level `Application.from_environment()` does the same without launcher behavior and raises `StartupError` when no host started the process. `UI4ME_HOST_BINARY=/path/to/ui4me-host` selects a development host build.
 
-- [Python API cookbook](references/python-api.md): windows, DOM, events, forms, dialogs, fonts, resources, bitmaps.
-- [Project and packaging](references/projects.md): manifests, venvs, local assets, generators, Windows/Wayland differences, common errors.
-- [HTML/CSS support and boundaries](references/css-and-security.md): supported features, security and non-browser expectations.
-- Repository documentation: `docs/guides/quickstart.md`, `docs/reference/python-api.md`, `docs/guides/platforms.md`.
+## References
 
-If a method is not shown here or in the public docs, inspect the installed `ui4me_core.application` source; do not invent methods. For especially advanced document operations use the typed `Document.command()` only with names documented in `CORE_1.0_PROTOCOL.md` and `PROTOCOL_DOCUMENTS.md`.
+- [references/python-api.md](references/python-api.md): every Application/Window/Document/Node/LiveBitmap call, event fields, errors, limits.
+- [references/projects.md](references/projects.md): project layout, `ui4me-new`, uv/venv, manifests, packaging, common mistakes.
+- [references/css-and-security.md](references/css-and-security.md): supported HTML/CSS, assets, security boundaries, platform differences.
+- Online docs: [Python API](https://github.com/ui4me/ui4me-core/blob/main/docs/reference/python-api.md), [patterns](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/patterns.md), [HTML/CSS scope](https://github.com/ui4me/ui4me-core/blob/main/docs/concepts/html-css-scope.md), [platforms](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/platforms.md).
+
+If a method is not listed, read the installed `ui4me_core/application.py`; never invent methods or browser APIs.

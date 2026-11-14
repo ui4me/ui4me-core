@@ -16,7 +16,7 @@ except ImportError:
     from verify_linux_artifact import validate_sdist, validate_wheel as validate_linux
     from verify_windows_artifact import validate_wheel as validate_windows
 
-VERSION = '1.0.0'
+VERSION = '1.0.1'
 EXPECTED = (
     f'ui4me_core-{VERSION}.tar.gz',
     f'ui4me_core-{VERSION}-py3-none-manylinux_2_34_x86_64.whl',

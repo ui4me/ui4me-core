@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / "docs/verification/core-1.0-linux-final-2026-11-13/lab-scripts"))
+sys.path.insert(0, str(ROOT / "tools/lab"))
 import lab  # noqa: E402
 
 CLOSE = """var ws = workspace.windowList(); for (var i=0;i<ws.length;i++){ if (ws[i].caption.indexOf(%s)>=0){ ws[i].closeWindow(); OUT('ok'); } }"""

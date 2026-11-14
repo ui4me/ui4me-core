@@ -1,4 +1,0 @@
-80edb21c7d371655468ff5653620be4b36ded8d0887dce77d52f31f67b2625fe  dist/ui4me_core-1.0.0-py3-none-linux_x86_64.whl
-0654251dc76c3a0f15e911de851534ef26390ce3714bbdd9146725ed0e0d50cd  dist/ui4me_core-1.0.0.tar.gz
-94789932dbbff719b310b4aa78efd7c2a17b3be98b2ec4fcf1d474e570f6b402  dist-manylinux/ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl
-c70346ba412e8348cb6cbbd9fd322128df9bec12accff10d4b26c26fd6dd3146  ~/.cargo/bin/ui4me-host

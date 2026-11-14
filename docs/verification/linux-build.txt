@@ -1,5 +1,0 @@
-$ cargo build --locked -p ui4me-host
-
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.22s
-
-Exit code: 0

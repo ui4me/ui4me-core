@@ -10,9 +10,9 @@ on:
         description: 'Version already qualified in Cargo and pyproject.toml'
         required: true
         type: string
-        default: '1.0.0'
+        default: '1.0.1'
       confirmation:
-        description: 'Type publish-1.0.0 (adjust for the chosen version)'
+        description: 'Type publish-1.0.1 (adjust for the chosen version)'
         required: true
         type: string
 
@@ -46,7 +46,7 @@ jobs:
           import os, tomllib
           from pathlib import Path
           version=os.environ['REQUESTED_VERSION']
-          assert version == '1.0.0', 'This workflow is the reviewed UI4ME 1.0.0 release; update it for future releases'
+          assert version == '1.0.1', 'This workflow is the reviewed UI4ME 1.0.1 release; update it for future releases'
           assert os.environ['CONFIRMATION'] == 'publish-' + version, 'Confirmation phrase does not match'
           assert tomllib.loads(Path('pyproject.toml').read_text())['project']['version'] == version
           assert tomllib.loads(Path('Cargo.toml').read_text())['workspace']['package']['version'] == version
@@ -96,14 +96,14 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           from tools.release.verify_linux_artifact import validate_sdist
-          files=list(Path('dist').glob('ui4me_core-1.0.0.tar.gz'))
+          files=list(Path('dist').glob('ui4me_core-1.0.1.tar.gz'))
           assert len(files)==1
           print(validate_sdist(files[0]))
           PY
       - uses: actions/upload-artifact@v4
         with:
           name: ui4me-sdist
-          path: dist/ui4me_core-1.0.0.tar.gz
+          path: dist/ui4me_core-1.0.1.tar.gz
           if-no-files-found: error
 
   linux-wheel:
@@ -137,12 +137,12 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install 'cibuildwheel>=2.21' 'twine>=6'
-          python -m cibuildwheel --platform linux --output-dir dist source-dist/ui4me_core-1.0.0.tar.gz
+          python -m cibuildwheel --platform linux --output-dir dist source-dist/ui4me_core-1.0.1.tar.gz
           python -m twine check dist/*.whl
           python - <<'PY'
           from pathlib import Path
           from tools.release.verify_linux_artifact import validate_wheel
-          files=list(Path('dist').glob('ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl'))
+          files=list(Path('dist').glob('ui4me_core-1.0.1-py3-none-manylinux_2_34_x86_64.whl'))
           assert len(files)==1,files
           print(validate_wheel(files[0]))
           PY
@@ -174,14 +174,14 @@ jobs:
           $ErrorActionPreference = 'Stop'
           python -m pip install 'build>=1.2' 'twine>=6' 'wheel>=0.44'
           New-Item -ItemType Directory -Force source-tree | Out-Null
-          tar -xzf source-dist/ui4me_core-1.0.0.tar.gz -C source-tree
-          $source = (Get-ChildItem source-tree -Directory -Filter 'ui4me_core-1.0.0').FullName
+          tar -xzf source-dist/ui4me_core-1.0.1.tar.gz -C source-tree
+          $source = (Get-ChildItem source-tree -Directory -Filter 'ui4me_core-1.0.1').FullName
           if (-not $source) { throw 'Source distribution did not extract correctly' }
           # Avoid Cargo reusing build-script products from a previous sdist path.
           $env:CARGO_TARGET_DIR = Join-Path $env:RUNNER_TEMP 'ui4me-cargo-publish'
           python -m build --wheel --outdir dist $source
           if ($LASTEXITCODE -ne 0) { throw 'Windows wheel build failed' }
-          $files = @(Get-ChildItem dist -Filter 'ui4me_core-1.0.0-py3-none-win_amd64.whl')
+          $files = @(Get-ChildItem dist -Filter 'ui4me_core-1.0.1-py3-none-win_amd64.whl')
           if ($files.Count -ne 1) { throw 'Expected exactly one Windows wheel' }
           python -m twine check $files[0].FullName
           if ($LASTEXITCODE -ne 0) { throw 'Twine check failed' }
@@ -316,4 +316,4 @@ jobs:
             dist/*.whl dist/*.tar.gz dist/SHA256SUMS dist/SOURCE_COMMIT.txt \
             --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
             --title "UI4ME Core $RELEASE_VERSION" \
-            --notes-file docs/release/RELEASE_NOTES_1.0.0.md --latest
+            --notes-file docs/release/RELEASE_NOTES_1.0.1.md --latest

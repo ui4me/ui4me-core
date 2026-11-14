@@ -1,4 +1,0 @@
-Checking dist/ui4me_core-1.0.0-py3-none-linux_x86_64.whl: [32mPASSED[0m
-Checking dist-manylinux/ui4me_core-1.0.0-py3-none-manylinux_2_34_x86_64.whl: [32mPASSED[0m
-Checking dist/ui4me_core-1.0.0.tar.gz: [32mPASSED[0m
-Checking dist-manylinux/ui4me_core-1.0.0.tar.gz: [32mPASSED[0m

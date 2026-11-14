@@ -1,4 +1,4 @@
-"""Create a complete UI4ME HTML/CSS/Python app without requiring Rust to scaffold."""
+"""Create a UI4ME HTML/CSS/Python app that runs with `python app.py` or `uv run app.py`."""
 from __future__ import annotations
 
 import argparse
@@ -37,8 +37,13 @@ def templates(name: str, python: Path | str) -> dict[str, str]:
     interpreter = str(python)
     if not interpreter or '\x00' in interpreter:
         raise ValueError('Invalid Python interpreter')
-    manifest = f'''[app]
-id = "org.ui4me.examples.{slug.replace('-', '_')}"
+    app_id = f"org.ui4me.examples.{slug.replace('-', '_')}"
+    manifest = f'''# Optional. For daily development just run: python app.py (or: uv run app.py)
+# This manifest lets a launcher or deployment start the app explicitly with:
+#   ui4me-host run --app app.toml
+# It pins the Python interpreter that was active when the project was created.
+[app]
+id = "{app_id}"
 name = {toml_string(name)}
 version = "1.0.0"
 
@@ -53,31 +58,45 @@ shutdown_timeout_ms = 5000
 max_windows = 4
 instance = "single"
 '''
-    code = f'''"""A native HTML/CSS window controlled by Python.
+    project = f'''[project]
+name = "{slug}"
+version = "1.0.0"
+description = {toml_string(name + " - a native desktop app built with HTML, CSS and Python")}
+requires-python = ">=3.10"
+dependencies = ["ui4me-core>=1.0.1"]
+'''
+    code = f'''"""A native desktop window built with HTML, CSS and Python.
 
-Start with: ui4me-host run --app app.toml
-Do not launch app.py directly; the native Rust host starts the Python backend.
+Run it:  python app.py      or:  uv run app.py
+
+UI4ME starts its native window host, which runs this file a second time
+to connect it to the window. Keep start-up work inside main().
 """
 from pathlib import Path
+
 from ui4me_core import Application
 
 HERE = Path(__file__).resolve().parent
 APP_NAME = {name!r}
+APP_ID = {app_id!r}
 
 
 def main() -> None:
-    with Application.from_environment() as app:
+    with Application.start(name=APP_NAME, app_id=APP_ID) as app:
         window = app.open_file(HERE / "index.html", title=APP_NAME, width=860, height=560)
         document = window.document
 
         def add_item(event: dict) -> None:
             title = document.get_value("item-name").strip() or "Untitled"
-            # Form values are not batch operations; set them directly.
+            # set_text never interprets HTML, so user input is safe here.
             document.set_text("status", "Added: " + title)
             document.set_value("item-name", "")
 
+        def show_error(event: dict) -> None:
+            print("Document error:", event.get("message"))
+
         document.on("click", add_item, element="add-item")
-        document.on("error", lambda event: print("Document error:", event.get("message")))
+        document.on("error", show_error)
         app.run()
 
 
@@ -120,7 +139,8 @@ input { background: #142136; border: 1px solid #55718d; border-radius: 6px; padd
 button { margin-top: 14px; background: #79b8ff; color: #06192e; border: none; padding: 11px 20px; border-radius: 7px; cursor: pointer; }
 #status { color: #afd6ff; margin-top: 18px; }
 '''
-    return {'app.toml': manifest, 'app.py': code, 'index.html': html, 'style.css': css}
+    return {'app.py': code, 'index.html': html, 'style.css': css, 'pyproject.toml': project,
+            'app.toml': manifest}
 
 
 def create_project(destination: Path, *, name: str | None = None, python: Path | str = sys.executable) -> list[Path]:
@@ -162,7 +182,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('directory', type=Path, help='New or empty project directory')
     parser.add_argument('--name', help='Display name (defaults to directory name)')
-    parser.add_argument('--python', default=sys.executable, help='Interpreter used as the managed backend, normally your active virtual environment')
+    parser.add_argument('--python', default=sys.executable,
+                        help='Interpreter named in the optional app.toml manifest (default: this one)')
     args=parser.parse_args(argv)
     _safe_console()
     try:
@@ -172,7 +193,13 @@ def main(argv: list[str] | None = None) -> int:
     print('Created UI4ME app:')
     for file in paths:
         print(' ', file)
-    print(f'Run: ui4me-host run --app {shell_argument(paths[0])}')
+    folder = shell_argument(paths[0].parent)
+    print()
+    print('Run it:')
+    print(f'  cd {folder}')
+    print('  python app.py      (or: uv run app.py)')
+    print()
+    print('Optional explicit host launch: ui4me-host run --app app.toml')
     return 0
 
 

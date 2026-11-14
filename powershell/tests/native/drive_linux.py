@@ -3,7 +3,7 @@
 
 Test tooling only (Python is not part of the PowerShell runtime). Uses the
 uinput daemon and KWin helpers from the 1.0 Linux lab
-(docs/verification/core-1.0-linux-final-2026-11-13/lab-scripts): real pointer
+(tools/lab): real pointer
 and keyboard events go through the compositor, never synthetic DOM calls.
 
 usage: drive_linux.py --host HOST --module PSD1 --out DIR [--mode full|auto|idle|bitmap-kill]
@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / "docs/verification/core-1.0-linux-final-2026-11-13/lab-scripts"))
+sys.path.insert(0, str(ROOT / "tools/lab"))
 import lab  # noqa: E402
 
 KEYS = {"Tab": "KEY_TAB", "Enter": "KEY_ENTER", "Escape": "KEY_ESC"}

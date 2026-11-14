@@ -20,6 +20,13 @@ def product_version():
     return re.search(r'^version\s*=\s*"([^"]+)"', section, re.M).group(1)
 
 
+def checkout_environment(base=None):
+    """The environment for a host whose backend imports `ui4me_core` from this checkout."""
+    env = dict(os.environ if base is None else base)
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(ROOT / "python"), env.get("PYTHONPATH")]))
+    return env
+
+
 def locate_host(explicit=None, release=False):
     if explicit:
         path = Path(explicit).expanduser().resolve()
@@ -92,7 +99,7 @@ def main():
             command.append("--headless")
         if args.allow_unsupervised:
             command.append("--allow-unsupervised")
-        env = os.environ.copy()
+        env = checkout_environment()
         if args.headless:
             env["UI4ME_TEST_MODE"] = "1"
         print("Launching", " ".join(command), flush=True)

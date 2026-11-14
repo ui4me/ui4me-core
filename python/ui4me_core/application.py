@@ -1,7 +1,7 @@
-"""Small reference API for HTML/CSS applications over the private host protocol.
+"""The UI4ME Python API: applications, windows, documents and nodes.
 
-This module is supplied source, not a separately published SDK. The Rust host
-owns native windows, input, editing and rendering. Python owns application logic.
+The Rust host owns native windows, input, editing and rendering. Python owns
+application logic and talks to the host over the private IPC protocol.
 Application notifications are serialized on one event worker; independent
 transport and lifecycle-request workers continue resolving RPC and close/quit
 policy, so a notification callback can issue document commands or wait for a
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 import base64
+import os
 from pathlib import Path
 import sys
 import threading
@@ -24,11 +25,13 @@ class StaleDocumentError(RuntimeError):
 
 
 class Application:
-    """Connect to the host that launched this backend, then create documents.
+    """A UI4ME application: native windows owned by the Rust host, logic here.
 
-    Use ``Application.from_environment()`` from a managed backend. ``run()``
-    announces readiness and waits for native shutdown. No native event loop runs
-    in this process. The exposed ``rpc`` remains available for desktop services.
+    ``Application.start()`` is the normal entry point for ``python app.py``.
+    ``Application.from_environment()`` only connects to a host that already
+    launched this process from a manifest. ``run()`` announces readiness and
+    waits for native shutdown. No native event loop runs in this process. The
+    exposed ``rpc`` remains available for desktop services.
     """
 
     def __init__(self, rpc: RpcClient):
@@ -41,7 +44,51 @@ class Application:
         self.rpc.on_notification("window.event", self._window_event)
 
     @classmethod
+    def start(cls, *, name: str | None = None, app_id: str | None = None,
+              version: str | None = None, icon: str | Path | None = None,
+              instance: str = "single", startup_timeout_ms: int = 30_000,
+              shutdown_timeout_ms: int = 5_000, max_windows: int = 16) -> Application:
+        """Start a native UI4ME application from a normal Python script.
+
+        Run directly (``python app.py``, ``uv run app.py`` or ``python -m
+        package.app``), this starts the packaged native host, which runs the
+        same command again as its supervised backend; this first process
+        then exits with the host's status and never returns from here. In
+        that second run, the call connects to the host and returns the
+        ``Application``. Code before ``start()`` therefore runs twice: keep
+        side effects after it.
+
+        ``name`` is the window/application name (default: the script name).
+        ``app_id`` is a reverse-DNS identity; without it, a stable ID is derived
+        from the script path. ``instance="single"`` forwards a second launch
+        of the same app to the running one; ``"multiple"`` allows several.
+        Already inside a host-launched backend (``ui4me-host run --app``),
+        the options are validated and the call simply connects.
+        """
+        from . import _bootstrap
+
+        _bootstrap.validate_options(name=name, app_id=app_id, version=version, instance=instance,
+                                    startup_timeout_ms=startup_timeout_ms,
+                                    shutdown_timeout_ms=shutdown_timeout_ms, max_windows=max_windows)
+        if _bootstrap.managed():
+            app = cls.from_environment()
+            _bootstrap.forget_host_environment()
+            return app
+        raise SystemExit(_bootstrap.launch(
+            name=name, app_id=app_id, version=version, icon=icon, instance=instance,
+            startup_timeout_ms=startup_timeout_ms, shutdown_timeout_ms=shutdown_timeout_ms,
+            max_windows=max_windows))
+
+    @classmethod
     def from_environment(cls) -> Application:
+        """Connect to the native host that launched this process from a manifest."""
+        from ._bootstrap import ENDPOINT, TOKEN, StartupError
+
+        if not (os.environ.get(ENDPOINT) and os.environ.get(TOKEN)):
+            raise StartupError(
+                "No UI4ME host connection: UI4ME_ENDPOINT and UI4ME_TOKEN are set only for a backend "
+                "that the native host started. Use Application.start() to run a script directly, "
+                "or launch it with: ui4me-host run --app app.toml")
         # Document/window events are ordered, while the existing four-worker
         # host request pool remains able to answer close/quit independently.
         return cls(RpcClient.from_environment(ordered_notifications=True))
@@ -193,8 +240,37 @@ class Application:
     def __enter__(self) -> Application:
         return self
 
-    def __exit__(self, *_):
+    def __exit__(self, exc_type, exc, traceback):
+        if exc is not None and not isinstance(exc, (SystemExit, KeyboardInterrupt)):
+            # Closing the connection makes the host end this backend at once,
+            # which would lose the traceback Python prints only afterwards.
+            _report_before_disconnect(exc)
         self.close()
+
+
+_REPORTED = "_ui4me_traceback_reported"
+
+
+def _report_before_disconnect(error: BaseException) -> None:
+    import traceback
+
+    try:
+        traceback.print_exception(type(error), error, error.__traceback__)
+        sys.stderr.flush()
+        setattr(error, _REPORTED, True)
+    except Exception:  # Reporting must never replace the application's error.
+        return
+    previous = sys.excepthook
+    if getattr(previous, "_ui4me_hook", False):
+        return
+
+    def hook(kind, value, trace):
+        # Already shown above; anything else is reported normally.
+        if not getattr(value, _REPORTED, False):
+            previous(kind, value, trace)
+
+    hook._ui4me_hook = True
+    sys.excepthook = hook
 
 
 class Window:

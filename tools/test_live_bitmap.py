@@ -8,10 +8,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'examples' / 'python'))
-from application import Application, StaleDocumentError
-from live_bitmap import LiveBitmap
-from client import RpcError
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'python'))
+from ui4me_core.application import Application, StaleDocumentError
+from ui4me_core.live_bitmap import LiveBitmap
+from ui4me_core.client import RpcError
 
 
 class BitmapRPC:
@@ -98,7 +98,7 @@ class LiveBitmapTests(unittest.TestCase):
 
     def test_creation_failure_releases_native_bitmap(self):
         # Host creation succeeded, but the local mapper is unavailable.
-        with patch('live_bitmap.mmap.mmap', side_effect=OSError('mmap unavailable')):
+        with patch('ui4me_core.live_bitmap.mmap.mmap', side_effect=OSError('mmap unavailable')):
             with self.assertRaises(OSError):self.doc.create_bitmap('plot',2,2)
         self.assertEqual(self.rpc.calls[-1][0],'bitmap.close')
 

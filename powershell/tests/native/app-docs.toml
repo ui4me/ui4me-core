@@ -1,7 +1,7 @@
 [app]
 id = "org.ui4me.PowerShellDocExamples"
 name = "UI4ME PowerShell doc examples"
-version = "1.0.0"
+version = "1.0.1"
 
 [backend]
 program = "pwsh"

@@ -6,15 +6,15 @@ BeforeAll {
 }
 
 Describe 'UI4ME.Core manifest and exports' {
-    It 'has the 1.0.0 identity and matching manifest/module exports' {
+    It 'has the 1.0.1 identity and matching manifest/module exports' {
         $m = Test-ModuleManifest $script:ModuleManifest
-        $m.Version.ToString() | Should -Be '1.0.0'
+        $m.Version.ToString() | Should -Be '1.0.1'
         $m.CompatiblePSEditions | Should -Contain 'Desktop'
         $m.CompatiblePSEditions | Should -Contain 'Core'
         $declared = @($m.ExportedFunctions.Keys | Sort-Object)
         $actual = @((Get-Command -Module UI4ME.Core -CommandType Function).Name | Sort-Object)
         ($actual -join ',') | Should -Be ($declared -join ',')
-        $actual.Count | Should -Be 82
+        $actual.Count | Should -Be 83
     }
     It 'documents every exported command with a synopsis or help' {
         foreach ($c in Get-Command -Module UI4ME.Core) {
@@ -85,11 +85,16 @@ Describe 'New-UI4MEProject' {
         $toml = Get-Content -LiteralPath (Join-Path $path 'app.toml') -Raw -Encoding UTF8
         $toml | Should -Match 'program = "pwsh"'
         $toml | Should -Match 'name = "Mÿ App"'
-        $toml | Should -Match '"-File", "\{app_dir\}/backend.ps1"'
-        $backendBytes = [IO.File]::ReadAllBytes((Join-Path $path 'backend.ps1'))
+        $toml | Should -Match '"-File", "\{app_dir\}/app.ps1"'
+        $toml | Should -Match 'id = "org.example.Generated"'
+        Test-Path -LiteralPath (Join-Path $path 'backend.ps1') | Should -BeFalse
+        $backendBytes = [IO.File]::ReadAllBytes((Join-Path $path 'app.ps1'))
         $backendBytes[0..2] | Should -Be @(0xEF, 0xBB, 0xBF)
-        $backend = Get-Content -LiteralPath (Join-Path $path 'backend.ps1') -Raw -Encoding UTF8
+        $backend = Get-Content -LiteralPath (Join-Path $path 'app.ps1') -Raw -Encoding UTF8
         $backend | Should -Match "Title 'Mÿ App'"
+        # Runs directly; both launch routes share the manifest identity.
+        $backend | Should -Match "Start-UI4MEScript -Name 'Mÿ App' -AppId 'org.example.Generated'"
+        $backend | Should -Not -Match 'Connect-UI4ME'
         $errors = $null
         $null = [Management.Automation.Language.Parser]::ParseInput($backend, [ref]$null, [ref]$errors)
         @($errors).Count | Should -Be 0

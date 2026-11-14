@@ -7,9 +7,9 @@ import time
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "examples/python"))
-from application import Application, Document, StaleDocumentError, Window
-from client import RpcClient, RpcError, SocketStream, encode_frame, read_frame, write_all
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
+from ui4me_core.application import Application, Document, StaleDocumentError, Window
+from ui4me_core.client import RpcClient, RpcError, SocketStream, encode_frame, read_frame, write_all
 
 
 class FakeRpc:
@@ -129,7 +129,7 @@ class FacadeTests(unittest.TestCase):
     def test_document_native_errors_are_visible_and_generation_scoped(self):
         events = []
         self.document.on("error", events.append)
-        with patch("application.print") as log:
+        with patch("ui4me_core.application.print") as log:
             self.rpc.notifications["document.error"]({"window_id": self.window.id,
                 "document_id": self.document.id, "message": "Native clipboard unavailable"})
             self.assertEqual(events[0]["message"], "Native clipboard unavailable")
@@ -151,7 +151,7 @@ class FacadeTests(unittest.TestCase):
         def broken(_):
             raise ValueError("Application callback failed")
         self.document.on("error", broken)
-        with patch("application.print"), self.assertRaises(ValueError):
+        with patch("ui4me_core.application.print"), self.assertRaises(ValueError):
             self.rpc.notifications["document.error"]({"window_id": self.window.id,
                 "document_id": self.document.id, "message": "Paint failed", "fatal": True})
         self.assertIsNone(self.window.document)
@@ -161,7 +161,7 @@ class FacadeTests(unittest.TestCase):
 
     def test_fatal_error_handler_can_install_a_replacement_document(self):
         self.document.on("error", lambda event: self.window.load_html("<p>Recovered</p>"))
-        with patch("application.print"):
+        with patch("ui4me_core.application.print"):
             self.rpc.notifications["document.error"]({"window_id": self.window.id,
                 "document_id": self.document.id, "message": "Paint failed", "fatal": True})
         self.assertIsNotNone(self.window.document)
@@ -171,7 +171,8 @@ class FacadeTests(unittest.TestCase):
             self.document.get_text("label")
 
     def test_environment_constructor_selects_ordered_notifications(self):
-        with patch("application.RpcClient.from_environment", return_value=FakeRpc()) as factory:
+        with patch("ui4me_core.application.RpcClient.from_environment", return_value=FakeRpc()) as factory, \
+                patch.dict("os.environ", {"UI4ME_ENDPOINT": "fixture", "UI4ME_TOKEN": "fixture"}):
             with Application.from_environment():
                 factory.assert_called_once_with(ordered_notifications=True)
 

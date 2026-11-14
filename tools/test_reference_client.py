@@ -10,9 +10,9 @@ import threading
 import unittest
 from unittest.mock import patch
 
-EXAMPLES = Path(__file__).resolve().parents[1] / "examples" / "python"
-sys.path.insert(0, str(EXAMPLES))
-from client import (DisconnectedError, MAX_FRAME_BYTES, MAX_PENDING, ProtocolError,
+PACKAGE_ROOT = Path(__file__).resolve().parents[1] / "python"
+sys.path.insert(0, str(PACKAGE_ROOT))
+from ui4me_core.client import (DisconnectedError, MAX_FRAME_BYTES, MAX_PENDING, ProtocolError,
                     RpcClient, RpcError, SocketStream, NamedPipeStream, encode_frame, read_frame, write_all)
 
 
@@ -163,10 +163,10 @@ class RpcTests(unittest.TestCase):
 class Utf8StdioTests(unittest.TestCase):
     def test_backend_output_is_utf8_even_with_an_ansi_pipe_encoding(self):
         import subprocess
-        code = ("import sys; sys.path.insert(0, sys.argv[1]); import client; "
+        code = ("import sys; sys.path.insert(0, sys.argv[1]); from ui4me_core import client; "
                 "client.use_utf8_stdio(); print('Příliš → 😀')")
         env = dict(os.environ, PYTHONIOENCODING="cp1252")
-        result = subprocess.run([sys.executable, "-c", code, str(EXAMPLES)], env=env,
+        result = subprocess.run([sys.executable, "-c", code, str(PACKAGE_ROOT)], env=env,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.decode("utf-8").strip(), "Příliš → 😀")

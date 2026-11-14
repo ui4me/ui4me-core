@@ -162,9 +162,15 @@ impl AppConfig {
             {
                 candidate
             }
+            // Without the verbatim `\\?\` prefix that canonicalize adds:
+            // .NET Framework programs (Windows PowerShell 5.1) fail to
+            // initialize when started through a verbatim image path.
             #[cfg(not(unix))]
             {
-                resolved
+                match resolved.to_str() {
+                    Some(text) => PathBuf::from(without_verbatim_prefix(text)),
+                    None => resolved,
+                }
             }
         } else {
             // Command resolves a single component through PATH. Do not join it
@@ -426,6 +432,21 @@ mod tests {
         assert!(AppConfig::from_toml(&text, &std::env::temp_dir()).is_err());
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn absolute_windows_program_is_not_a_verbatim_path() {
+        let executable = std::env::current_exe().unwrap();
+        let text = format!(
+            "{}\n[backend]\nprogram={}\n",
+            "[app]\nid='org.ui4me.Probe'\nname='Probe'",
+            toml::Value::String(executable.to_str().unwrap().to_owned())
+        );
+        let config = AppConfig::from_toml(&text, &std::env::temp_dir()).unwrap();
+        let program = config.backend.program.to_str().unwrap().to_owned();
+        assert!(!program.starts_with(r"\\?\"), "{program}");
+        assert!(config.backend.program.is_file());
+    }
+
     #[test]
     fn relative_executable_is_validated_and_absolutized() {
         // Use this test executable as a known-existing program without relying
@@ -435,6 +456,7 @@ mod tests {
         let relative = format!("./{}", executable.file_name().unwrap().to_str().unwrap());
         let text = manifest().replace("program='python3'", &format!("program='{relative}'"));
         let config = AppConfig::from_toml(&text, parent).unwrap();
-        assert_eq!(config.backend.program, executable);
+        let expected = PathBuf::from(without_verbatim_prefix(executable.to_str().unwrap()));
+        assert_eq!(config.backend.program, expected);
     }
 }

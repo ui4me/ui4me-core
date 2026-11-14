@@ -25,8 +25,8 @@ class SourceManifestTests(unittest.TestCase):
             (root / '.git').mkdir()
             (root / '.git' / 'config').write_text('not included')
             (root / 'project.local.json').write_text('private')
-            (root / 'docs').mkdir()
-            (root / 'docs' / 'SOURCE_FILES.sha256').write_text('recursive')
+            (root / 'tools' / 'release').mkdir(parents=True)
+            (root / 'tools' / 'release' / 'SOURCE_FILES.sha256').write_text('recursive')
             included = [p.relative_to(root).as_posix() for p in included_source_files(root)]
             self.assertEqual(included, ['safe.py'])
 

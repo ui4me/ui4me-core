@@ -16,7 +16,7 @@ import threading
 import time
 import traceback
 
-from client import RpcClient
+from ui4me_core import RpcClient
 
 MODES = ("veto-close", "veto-quit", "freeze-close", "freeze-quit",
          "crash-after-ready", "log-flood", "managed-tree")
