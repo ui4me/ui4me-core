@@ -1,8 +1,8 @@
-# Your first PowerShell desktop app
+# Your first PowerShell app
 
 This guide builds a small native window with HTML, CSS and PowerShell. You need the
 `UI4ME.Core` module ([install it](install-powershell.md)); Python, Rust, a browser and
-JavaScript are not needed.
+JavaScript are not needed. The same guide for Python is [Your first Python app](quickstart-python.md).
 
 ## 1. A window in one file
 
@@ -12,12 +12,22 @@ Create a folder with a file named `app.ps1`:
 $ErrorActionPreference = 'Stop'
 Import-Module UI4ME.Core
 
+$page = @'
+<main style="font-family: sans-serif; padding: 24px">
+  <h1>Hello from PowerShell</h1>
+  <button id="hello">Say hello</button>
+  <p id="message" role="status">Click the button.</p>
+</main>
+'@
+
 $app = Start-UI4MEScript -Name 'Hello UI4ME'
 $window = New-UI4MEWindow -Application $app -Title 'Hello UI4ME' -Width 520 -Height 320
-$doc = Open-UI4MEHtml -Window $window -Html '<h1 id="title">Hello</h1><button id="go">Go</button>'
-$null = Register-UI4MEDocumentEvent -Document $doc -Type click -Element go -Callback {
-    Set-UI4MEDocumentText -Document $doc -Element title -Text 'Clicked'
+$doc = Open-UI4MEHtml -Window $window -Html $page
+
+$null = Register-UI4MEDocumentEvent -Document $doc -Type click -Element hello -Callback {
+    Set-UI4MEDocumentText -Document $doc -Element message -Text 'Hello from native UI4ME!'
 }
+
 Set-UI4MEReady -Application $app
 Wait-UI4ME -Application $app -UntilShutdown
 Close-UI4ME -Application $app
@@ -31,19 +41,17 @@ powershell.exe -NoProfile -File .\app.ps1     # Windows PowerShell 5.1
 ```
 
 Running `./app.ps1` from a PowerShell prompt that is already open works too. A window opens;
-press **Go** and the heading changes. Close the window to end the script.
+press **Say hello** and the message changes. Close the window to end the script.
 
 What each line does:
 
 | Line | Purpose |
 | --- | --- |
 | `Start-UI4MEScript` | Starts the native window host and connects your script to it. Returns the application object. |
-| `New-UI4MEWindow` | Creates a native window (size in CSS pixels). |
-| `Open-UI4MEHtml` | Loads HTML into the window and returns a document object. |
-| `Register-UI4MEDocumentEvent` | Runs a scriptblock when the element with `id="go"` is clicked. |
-| `Set-UI4MEDocumentText` | Changes the text of the element with `id="title"`. |
-| `Set-UI4MEReady` | Tells the host that startup is finished. |
-| `Wait-UI4ME -UntilShutdown` | Runs your callbacks until the user closes the app. |
+| `New-UI4MEWindow`, `Open-UI4MEHtml` | Creates a native window (size in CSS pixels), loads HTML into it and returns the document object. |
+| `Register-UI4MEDocumentEvent` | Runs a scriptblock when the element with `id="hello"` is clicked. |
+| `Set-UI4MEDocumentText` | Changes the text of the element with `id="message"`. |
+| `Set-UI4MEReady`, `Wait-UI4ME -UntilShutdown` | Tells the host that startup is finished, then runs your callbacks until the user closes the app. |
 | `Close-UI4ME` | Releases the connection. |
 
 ## 2. Why the top of the script runs twice
@@ -51,18 +59,35 @@ What each line does:
 `Start-UI4MEScript` starts the Rust host, which then runs **the same script a second time**
 as its supervised backend, with a private connection. In the first run (the launcher),
 `Start-UI4MEScript` waits until the app ends and then exits the script with the host's exit
-code, so nothing below it runs there. In the second run it returns the connected
-application, and your code below builds the window.
+code (0 after a normal close), so nothing below it runs there. In the second run it returns
+the connected application, and your code below builds the window.
 
 So:
 
-- Put `param()`, `$ErrorActionPreference` and `Import-Module` above `Start-UI4MEScript`.
-- Put everything with side effects (reading or writing files, logging, network calls) below it.
+- Put `param()`, `$ErrorActionPreference`, `Import-Module` and plain assignments (such as the
+  HTML string) above `Start-UI4MEScript`.
+- Put everything with side effects (reading or writing files, logging, network calls,
+  starting jobs) below it.
 - Script arguments are passed on: `pwsh -File ./app.ps1 -Path data.csv` gives the backend
   `-Path data.csv` too, so a `param([string]$Path)` block works.
 - `Write-Output`, `Write-Host` and errors from your script appear in the terminal you started
   it from. Set `$env:UI4ME_VERBOSE = '1'` before starting to see the host's own log as well.
 - Ctrl+C in that terminal stops the app.
+- The program must be a `.ps1` file: `pwsh -File ./app.ps1`, `powershell.exe -File .\app.ps1`
+  and `./app.ps1` from a prompt work; code pasted into a prompt does not, because the host
+  needs a script it can run again.
+
+Useful options:
+
+```powershell
+$app = Start-UI4MEScript `
+    -Name 'Invoice Tool' `
+    -AppId 'com.example.InvoiceTool' `
+    -Instance single
+# -Name: window/app name (default: the script name)
+# -AppId: stable reverse-DNS identity (default: derived from the script path)
+# -Instance: single = a second launch reaches the running app; multiple allows several
+```
 
 ## 3. Use HTML and CSS files
 
@@ -118,8 +143,10 @@ Close-UI4ME -Application $app
 ```
 
 `Open-UI4MEFile` resolves `style.css`, images and fonts relative to the HTML file. Use
-`$PSScriptRoot` so the script works from any current directory. Elements are found by their
-HTML `id`, so give an `id` to everything your script reads or changes.
+`$PSScriptRoot` (the script's folder) so the script works from any current directory.
+Elements are found by their HTML `id`, so give an `id` to everything your script reads or
+changes. For HTML strings, pass `-AssetRoot $PSScriptRoot` to `Open-UI4MEHtml` if they
+reference local files.
 
 `Set-UI4MEDocumentText` never interprets HTML, which makes it safe for anything a user typed.
 There is no JavaScript: `<script>` and `onclick="..."` do nothing. Handle events in
@@ -136,24 +163,39 @@ New-UI4MEProject -Path ./my-app -Name 'My App' -AppId org.example.MyApp
 pwsh -File ./my-app/app.ps1
 ```
 
-This writes `app.ps1`, `index.html`, `style.css` and an optional `app.toml`. The manifest is
-only needed when something else should start the app explicitly with
-`Start-UI4MEHost -Manifest ./my-app/app.toml`; add `-WindowsPowerShell` to make its backend
-`powershell.exe` instead of `pwsh`. Daily development just runs `app.ps1`.
+This writes `app.ps1` (saved as UTF-8 with BOM), `index.html`, `style.css` and an optional
+`app.toml`. Daily development just runs `app.ps1`.
+
+## 5. Launching the host explicitly (advanced)
+
+Installers, desktop shortcuts and process managers can start the host from a checked-in
+manifest such as the generated `app.toml`:
+
+```powershell
+Start-UI4MEHost -Manifest ./my-app/app.toml     # or: ui4me-host run --app ./my-app/app.toml
+```
+
+A backend started this way can still call `Start-UI4MEScript`, which then just connects.
+Scripts that use `Connect-UI4ME` keep working with a manifest launch. `New-UI4MEProject
+-WindowsPowerShell` makes the manifest's backend `powershell.exe` instead of `pwsh`. See
+[`ui4me-host` and app.toml](../reference/host-cli.md).
 
 ## Common mistakes
 
 - **Work above `Start-UI4MEScript` happens twice.** Move it below the call.
 - **Nothing happens on click.** Check that the `-Element` id exists in the HTML, and that
   `Set-UI4MEReady` and `Wait-UI4ME -UntilShutdown` are reached.
-- **Callbacks inside functions lose variables.** Use `.GetNewClosure()`; see the
+- **A callback cannot change a script variable.** Assign it as `$script:name = ...` (see the
+  `hello` example). Callbacks created inside functions lose the function's variables; use
+  `.GetNewClosure()`, see the
   [command reference](../reference/powershell-api.md#callbacks-ordering-and-closures).
+- **`Read-Host` hangs or fails.** The backend has no standard input; ask with a form control.
 - **A non-ASCII script shows garbled text on Windows PowerShell 5.1.** Save the `.ps1` as
   UTF-8 *with BOM*.
 
 ## Next steps
 
-- [Common patterns](patterns.md): reading fields, batch updates, file dialogs, live images.
+- [PowerShell recipes](patterns-powershell.md): forms, lists, batch updates, screens, styles, file dialogs, close guards, background jobs and live images.
 - [PowerShell command reference](../reference/powershell-api.md): every command.
 - [Application lifecycle](../concepts/lifecycle.md) and [HTML/CSS scope](../concepts/html-css-scope.md).
 - [Troubleshooting](troubleshooting.md).

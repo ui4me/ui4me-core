@@ -5,7 +5,7 @@ version = "1.0.1"
 
 [backend]
 program = "pwsh"
-args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "{app_dir}/backend.ps1"]
+args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "{app_dir}/app.ps1"]
 cwd = "{app_dir}"
 
 [host]

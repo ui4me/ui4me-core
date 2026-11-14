@@ -1,14 +1,17 @@
-# Python patterns
+# Python recipes
 
-Ready-to-adapt recipes for common desktop-app tasks. Each one is a complete program: save it as `app.py` and run `python app.py` (or `uv run app.py`). The HTML is inline to keep the examples short; in a real project put it in `index.html` and `style.css` and use `app.open_file(...)`.
+Ready-to-adapt recipes for common desktop-app tasks, written for the `ui4me_core` Python package. Each one is a complete program: save it as `app.py` and run `python app.py` (or `uv run app.py`), on Linux or Windows. Every recipe works with Python 3.10 to 3.14. The HTML is inline to keep the examples short; in a real project put it in `index.html` and `style.css` and use `app.open_file(...)` (recipe 6). The same recipes for PowerShell are in [PowerShell recipes](patterns-powershell.md).
 
 A few rules apply to every recipe:
 
 - Behavior lives in Python callbacks registered with `document.on(...)`. There is no JavaScript: HTML containing `<script>` or `onclick=`-style attributes is rejected when it loads.
-- Code before `Application.start()` runs twice (once in the launcher, once in the backend), so keep work inside `main()` after `start()`.
-- Callbacks run on a background thread of your program, one at a time, *after* the native action already happened.
+- Code before `Application.start()` runs twice (once in the launcher, once in the backend). Keep only imports and constants such as the HTML strings at module level, and put everything else inside `main()` after `start()`.
+- Callbacks run on a background thread of your program, one at a time, *after* the native action already happened. Document methods are thread-safe, so your own threads may call them too.
+- A callback is a function nested in `main()`. It can *read* `main()`'s variables (`document`, `window`, a dictionary), but to *assign* one, declare it `nonlocal name` first; a plain `name = ...` only creates a local variable that disappears when the callback returns. Changing an entry of a shared dictionary (`state["dirty"] = True`) needs no declaration.
+- Use named `def` callbacks rather than lambdas: they show up by name in tracebacks and can hold several statements.
+- Save `.py` files as UTF-8 (Python's default source encoding); no byte-order mark is needed.
 
-The full list of calls is in the [Python API reference](../reference/python-api.md). For PowerShell, see the [PowerShell reference](../reference/powershell-api.md).
+Every call used here is described in the [Python API reference](../reference/python-api.md).
 
 ## Contents
 
@@ -55,7 +58,7 @@ if __name__ == "__main__":
     main()
 ```
 
-`element="save"` is the button's `id`. `set_text` always inserts plain text, so it is safe for anything the user typed.
+`element="save"` is the button's `id`. `set_text` always inserts plain text, so it is safe for anything the user typed. `document.on` returns a function; keep it if you want to remove the callback later by calling it.
 
 ## 2. Read a form
 
@@ -99,9 +102,15 @@ if __name__ == "__main__":
     main()
 ```
 
-The `required` attribute is checked natively: an empty name does not submit. `document.form_data("signup")` returns every entry in order, if you prefer reading the form in one call. For live validation, `document.set_custom_validity("person", "That name is taken")` marks the field invalid and `""` clears it.
+The `required` attribute is checked natively: an empty name does not submit. `document.form_data("signup")["entries"]` returns every entry in order (each with `name` and `value`), if you prefer reading the form in one call. `document.request_submit("signup")` requests a submission from Python, with the same validation and `submit` event.
 
-Text-control selection (`document.control_selection(...)`) uses **UTF-16 offsets**, not Python indices: an emoji counts as 2.
+For live validation, a non-empty message marks the field invalid and `""` clears it:
+
+```python
+document.set_custom_validity("person", "That name is taken")
+```
+
+Text-control selection (`document.control_selection(...)`, `document.set_control_selection(...)`) uses **UTF-16 offsets**, not Python string indices: an emoji counts as 2 offsets but 1 Python character. Convert with `len(text[:i].encode("utf-16-le")) // 2`.
 
 ## 3. Handle many items with one callback
 
@@ -149,7 +158,7 @@ if __name__ == "__main__":
     main()
 ```
 
-Only `insert_html` and `replace_html` parse HTML. Treat their input as code: build it from your own templates and pass user text through `html.escape()`.
+`nonlocal counter` is needed because the callback assigns to a variable of `main()`; without it, `counter += 1` would fail with `UnboundLocalError`. Only `insert_html` and `replace_html` (and the `insert_html` and `replace_children_html` batch operations) parse HTML. Treat their input as code: build it from your own templates and pass user text through `html.escape()`.
 
 ## 4. Update several elements at once
 
@@ -241,7 +250,7 @@ if __name__ == "__main__":
     main()
 ```
 
-Read `window.document` when you need the current page, instead of keeping an old `Document` variable around. For small changes, prefer updating the existing page; reload only to switch whole screens. If a load fails (for example the HTML is over 1 MiB), the previous page stays.
+Read `window.document` when you need the current page, instead of keeping an old `Document` variable around. The nested functions above refer to each other and to `window`; Python closures keep those names alive after `main()`'s setup code has run, so nothing extra is needed. For small changes, prefer updating the existing page; reload only to switch whole screens. If a load fails (for example the HTML is over 1 MiB), the previous page stays.
 
 ## 6. Load HTML and CSS files
 
@@ -285,7 +294,7 @@ if __name__ == "__main__":
 </html>
 ```
 
-Relative URLs resolve from the HTML file's folder and must stay inside it. Use local files only; network URLs are not loaded. Bundling fonts with `@font-face` makes typography identical on every machine. For HTML built in Python, pass the folder explicitly: `app.open_html(html, asset_root=HERE)`. `ui4me-new my-app` creates this layout for you.
+Relative URLs resolve from the HTML file's folder and must stay inside it. Use local files only; network URLs are not loaded. Bundling fonts with `@font-face` makes typography identical on every machine. Build paths from `HERE` (the script's folder): relative paths resolve against the current working directory, which is wherever the user started the script. For HTML built in Python, pass the folder explicitly: `app.open_html(html, asset_root=HERE)`. `ui4me-new my-app` creates this layout for you.
 
 ## 7. Change styles at runtime
 
@@ -388,7 +397,7 @@ if __name__ == "__main__":
     main()
 ```
 
-Desktop values can be `None` when the platform does not report them (for example in a minimal Linux session); design for that case.
+`on_desktop_preferences` receives the same dictionary that `app.desktop_preferences()` returns (`color_scheme`, `reduced_motion`, `high_contrast`, `available`, `source`). Desktop values can be `None` when the platform does not report them (for example in a minimal Linux session); design for that case. `document.environment()` shows what the document actually uses and where each value came from.
 
 ## 9. Open and save files with native dialogs
 
@@ -438,12 +447,14 @@ if __name__ == "__main__":
     main()
 ```
 
-Other options: `window.open_files(multiple=True)`, `window.choose_folder()`, and `directory=` for the starting folder. With `wait=False` you get a `concurrent.futures.Future`; `future.cancel()` closes the dialog. An `<input type="file">` in the page also opens the native picker; read its paths with `document.files("input-id")`. On Linux the dialog comes from the desktop portal, which decides its own appearance.
+The script reads and writes with an explicit `encoding="utf-8"` because Python's default file encoding depends on the platform (the ANSI code page on Windows). The dialog returns absolute paths.
+
+Other options: `window.open_files(multiple=True)`, `window.choose_folder()`, and `directory=` for the starting folder. With `wait=False` you get a `concurrent.futures.Future`: `future.result()` returns the result and `future.cancel()` closes the dialog. An `<input type="file">` in the page also opens the native picker; read its paths with `document.files("input-id")`. On Linux the dialog comes from the desktop portal, which decides its own appearance.
 
 ## 10. Copy and paste
 
 ```python
-from ui4me_core import Application
+from ui4me_core import Application, RpcError
 
 HTML = """
 <input id="field" type="text" value="Copy me">
@@ -459,12 +470,18 @@ def main():
         document = window.document
 
         def copy_value(event):
-            app.set_clipboard_text(document.get_value("field"))
-            document.set_text("status", "Copied")
+            try:
+                app.set_clipboard_text(document.get_value("field"))
+                document.set_text("status", "Copied")
+            except RpcError as error:
+                document.set_text("status", "Copy failed: " + error.message)
 
         def paste_value(event):
-            document.set_value("field", app.clipboard_text())
-            document.set_text("status", "Pasted")
+            try:
+                document.set_value("field", app.clipboard_text())
+                document.set_text("status", "Pasted")
+            except RpcError as error:
+                document.set_text("status", "Paste failed: " + error.message)
 
         def show_error(event):
             document.set_text("status", "Error: " + event["message"])
@@ -479,7 +496,7 @@ if __name__ == "__main__":
     main()
 ```
 
-Ctrl+C/Ctrl+V inside text fields already work natively. `document.edit("copy", "field")` runs the same native editing command from Python; it completes asynchronously, and a failure arrives as an `error` event.
+Ctrl+C/Ctrl+V inside text fields already work natively. `document.edit("copy", "field")` runs the same native editing command from Python; it completes asynchronously, and a failure arrives as an `error` event (the third callback above). A clipboard call that the host refuses raises `RpcError`; without the `try`, the exception would only be printed (`Notification handler failed: ...`) and the status would not change. On Wayland the app must have received keyboard or pointer input before it may set the clipboard.
 
 ## 11. Ask before closing
 
@@ -537,11 +554,11 @@ if __name__ == "__main__":
     main()
 ```
 
-Policy callbacks run on a different thread from event callbacks, possibly at the same time, hence the lock. Answer quickly; do not open dialogs or do slow work inside them. An exception in a policy callback counts as "no".
+Unlike PowerShell, Python runs policy callbacks on a different thread from event callbacks, possibly at the same time, hence the lock. Only the return value decides: `True` allows, anything false (including a missing `return`, which gives `None`) vetoes. Answer quickly; do not open dialogs or do slow work inside a policy. An exception in a policy callback counts as "no".
 
 ## 12. Run slow work without freezing events
 
-Event callbacks run one at a time. A callback that takes ten seconds delays every later event. Start a thread and send small updates from it; document methods are safe to call from any thread.
+Event callbacks run one at a time. A callback that takes ten seconds delays every later event. Start a **thread** and send small updates from it; document methods are safe to call from any thread. (PowerShell cannot do this, because its UI4ME commands must stay on the script's runspace; its recipe uses a job and a pump loop instead.)
 
 ```python
 import threading
@@ -560,18 +577,29 @@ def main():
     with Application.start(name="Worker") as app:
         window = app.open_html(HTML, title="Worker", width=400, height=200)
         document = window.document
+        running = threading.Event()
 
         def work():
+            # The thread may call document methods; it reports progress directly.
             try:
                 for step in range(1, 101):
                     time.sleep(0.05)  # stand-in for real work
                     document.set_attribute("bar", "value", str(step))
                 document.set_text("status", "Done")
             except StaleDocumentError:
-                pass  # The window closed or the page changed; stop quietly.
+                return  # The window closed or the page changed; stop quietly.
+            except Exception as error:
+                document.set_text("status", f"Stopped: {error}")
+            finally:
+                running.clear()
+            document.remove_attribute("start", "disabled")
 
         def start(event):
-            document.set_text("status", "Working…")
+            if running.is_set():
+                return  # already running
+            running.set()
+            document.set_attribute("start", "disabled", "")
+            document.set_text("status", "Working...")
             threading.Thread(target=work, daemon=True).start()
 
         document.on("click", start, element="start")
@@ -582,21 +610,37 @@ if __name__ == "__main__":
     main()
 ```
 
+`daemon=True` lets the program end while a thread is still working; catching `StaleDocumentError` stops it quietly when the window closes. Several threads may run at once, but keep shared state behind a `threading.Lock` (recipe 11). For CPU-heavy work that should use another core, `concurrent.futures.ProcessPoolExecutor` runs it in another process, and its `Future` callbacks can update the page.
+
 ## 13. Stream pixels with a live bitmap
 
-For pictures that change many times per second, write raw RGBA pixels into a live bitmap. The pixels travel through shared memory, not JSON, and same-sized frames do not re-run layout.
+For pictures that change many times per second, write raw RGBA pixels into a live bitmap. The pixels travel through shared memory, not JSON, and same-sized frames do not re-run layout. Python produces the frames on its own thread while `app.run()` handles events.
 
 ![Live bitmap example](../images/live-bitmap.png)
 
 ```python
+import math
 import threading
 
 from ui4me_core import Application
 
 WIDTH, HEIGHT = 256, 160
+# The width and height attributes match WIDTH and HEIGHT.
 HTML = f"""
 <img id="preview" src="ui4me-bitmap://preview" width="{WIDTH}" height="{HEIGHT}" alt="Animated preview">
 """
+
+
+def make_band():
+    """One band of colours, twice the image width, so that any row can be sliced out of it."""
+    band = bytearray(WIDTH * 2 * 4)
+    for x in range(WIDTH * 2):
+        t = (x % WIDTH) / WIDTH * 2 * math.pi
+        band[x * 4] = round(127 + 127 * math.sin(t))
+        band[x * 4 + 1] = round(127 + 127 * math.sin(t + 2.1))
+        band[x * 4 + 2] = round(127 + 127 * math.sin(t + 4.2))
+        band[x * 4 + 3] = 255
+    return bytes(band)
 
 
 def main():
@@ -604,16 +648,18 @@ def main():
         window = app.open_html(HTML, title="Live bitmap", width=320, height=240)
         document = window.document
         bitmap = document.create_bitmap("preview", WIDTH, HEIGHT)
+        band = make_band()  # per-pixel Python loops are too slow per frame
         stop = threading.Event()
 
         def produce():
             frame = bytearray(WIDTH * HEIGHT * 4)
+            row_bytes = WIDTH * 4
             tick = 0
-            while not stop.wait(1 / 30):
-                tick = (tick + 4) % 256
+            while not stop.wait(1 / 30):  # about 30 frames per second
+                tick = (tick + 4) % WIDTH
                 for y in range(HEIGHT):
-                    row = bytes([tick, y, 255 - tick, 255]) * WIDTH
-                    frame[y * WIDTH * 4:(y + 1) * WIDTH * 4] = row
+                    start = ((tick + y) % WIDTH) * 4
+                    frame[y * row_bytes:(y + 1) * row_bytes] = band[start:start + row_bytes]
                 try:
                     bitmap.try_present(frame)  # None means "busy, frame skipped"
                 except Exception:
@@ -633,7 +679,7 @@ if __name__ == "__main__":
     main()
 ```
 
-A frame is exactly `width * height * 4` bytes of straight-alpha RGBA, row by row. `present` waits until the host has taken the frame; `try_present` skips a frame instead of waiting. A bitmap belongs to its document and is closed automatically if the page is replaced. Limits: 4096 pixels per side, 8 bitmaps and 64 MiB per document.
+A frame is exactly `width * height * 4` bytes of straight-alpha RGBA, row by row (`bytes`, `bytearray` or `memoryview`). `present` waits until the host has taken the frame, which paces a fast producer; `try_present` returns `None` immediately instead of waiting when another present of the same bitmap is still in progress, so a producer thread skips that frame. (PowerShell has one producer loop, so its `Send-UI4MELiveBitmap -Try` only matters for callbacks.) A bitmap belongs to its document and is closed automatically if the page is replaced. Limits: 4096 pixels per side, 8 bitmaps and 64 MiB per document.
 
 ## 14. Work with elements that have no id
 
@@ -643,6 +689,7 @@ A frame is exactly `width * height * 4` bytes of straight-alpha RGBA, row by row
 from ui4me_core import Application
 
 HTML = """
+<style>.marked { font-weight: bold; }</style>
 <ul id="list">
   <li>Apples</li>
   <li>Pears</li>
@@ -663,7 +710,8 @@ def main():
             operations = []
             for entry in result["nodes"]:
                 operations.append({"op": "add_class", "node": entry["node"], "name": "marked"})
-            document.node_batch(operations)
+            if operations:
+                document.node_batch(operations)
 
         def move_last_first(event):
             items = document.query_nodes("#list > li")["nodes"]
@@ -682,7 +730,7 @@ if __name__ == "__main__":
     main()
 ```
 
-Node references belong to one document generation; after a reload, look them up again. `node_batch` takes the same operations as `batch`, with `node` instead of `element` (and `target_node` instead of `target` for moves). For a fixed set of elements you control, giving them `id`s and using `batch` is simpler.
+Node references belong to one document generation; after a reload, look them up again. `node_batch` takes the same operations as `batch`, with `node` instead of `element` (and `target_node` instead of `target` for moves). `document.query(...)` runs the same selector but returns only the `ids` of matches that have one. For a fixed set of elements you control, giving them `id`s and using `batch` is simpler.
 
 ## 15. Keyboard shortcuts
 
@@ -715,20 +763,39 @@ if __name__ == "__main__":
     main()
 ```
 
+`.lower()` makes `"S"` (Ctrl+Shift+S, or Caps Lock) match too; compare `event["key"] == "s"` to tell them apart. The event also carries `shift`, `alt` and `meta`.
+
 ## Testing a recipe without a desktop
 
-`UI4ME_TEST_MODE=1` runs the host headless: the document engine and lifecycle work, no window is shown, and the program must end itself. Add a timer before `app.run()` for a smoke test:
+`UI4ME_TEST_MODE=1` runs the host headless: the document engine and lifecycle work, no window is shown, and the program must end itself. Request the quit with a timer just before `app.run()`. `document.request_submit` makes the host send a real `submit` event without any input device, which exercises a callback end to end:
 
 ```python
 import threading
+import time
 
 from ui4me_core import Application
 
 
 def main():
     with Application.start(name="Smoke test") as app:
-        window = app.open_html('<p id="msg">Hello</p>')
-        assert window.document.get_text("msg") == "Hello"
+        window = app.open_html('<form id="form"><input id="msg" value="Hello"></form><p id="out"></p>',
+                               title="Smoke test")
+        document = window.document
+        if document.get_value("msg") != "Hello":
+            raise RuntimeError("unexpected value")
+
+        def copy_message(event):
+            document.set_text("out", document.get_value("msg"))
+
+        document.prevent_default("form", "submit")
+        document.on("submit", copy_message, element="form")
+        document.request_submit("form")
+        deadline = time.monotonic() + 5
+        while document.get_text("out") != "Hello":
+            if time.monotonic() > deadline:
+                raise RuntimeError("the submit callback did not run")
+            time.sleep(0.05)
+
         threading.Timer(0.5, app.request_quit).start()
         app.run()
 
@@ -738,7 +805,11 @@ if __name__ == "__main__":
 ```
 
 ```sh
-UI4ME_TEST_MODE=1 python smoke.py
+UI4ME_TEST_MODE=1 python smoke.py; echo "exit code $?"
 ```
 
-Headless mode cannot check real input, IME, clipboard, native dialogs or how the window looks; try those on a real desktop. See [platforms](platforms.md) and [troubleshooting](troubleshooting.md).
+```powershell
+$env:UI4ME_TEST_MODE = '1'; python smoke.py; "exit code $LASTEXITCODE"
+```
+
+An exception in the script ends the backend, and the launcher exits with a nonzero code, so the smoke test fails in CI. Exceptions inside event callbacks do not end the app; they are printed as `Notification handler failed: ...`, so check the result (as the loop above does). For clicks and key presses there is no headless input: move the logic into a function and call it from the test as well as from the callback. Headless mode cannot check real input, IME, clipboard, native dialogs or how the window looks (clipboard and file-dialog calls raise `RpcError` with code `-32001`); try those on a real desktop. See [platforms](platforms.md) and [troubleshooting](troubleshooting.md).

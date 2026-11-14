@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>About the UI4ME Showcase</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body id="app" class="theme-system">
+  <main class="about">
+    <article class="card">
+      <img src="assets/logo.svg" width="48" height="48" alt="">
+      <p class="eyebrow">A second HTML file</p>
+      <h1>About this demo</h1>
+      <p class="muted">The five showcase pages live in one document; the backend shows one section at a time. This page is different: it is a separate file, <code>about.html</code>, loaded into the same window.</p>
+      <ol>
+        <li>Loading a file replaces the whole document.</li>
+        <li>The old document and its event handlers are retired.</li>
+        <li>The backend registers handlers again for the new document.</li>
+      </ol>
+      <p class="muted">The link below sends a <code>link_activated</code> event, and the backend loads <code>index.html</code> again, restoring the page, theme and counter it remembers.</p>
+      <div class="actions"><a id="back-link" class="btn primary" href="index.html">Back to the showcase</a></div>
+    </article>
+  </main>
+</body>
+</html>

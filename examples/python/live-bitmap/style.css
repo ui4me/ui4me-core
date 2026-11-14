@@ -1,0 +1,4 @@
+body{font-family:system-ui,sans-serif;background:#0c182b;color:#f4faff;padding:32px}
+main{max-width:600px;margin:auto;background:#213652;padding:30px;border-radius:18px}
+.eyebrow{font-size:12px;letter-spacing:2px;color:#71dce9}img{display:block;width:100%;max-width:540px;image-rendering:pixelated;border:1px solid #4c708c;border-radius:12px;background:black}
+p{color:#afcde0;line-height:1.6}h1{font-size:29px}

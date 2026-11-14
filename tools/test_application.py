@@ -320,5 +320,69 @@ class OrderedTransportTests(unittest.TestCase):
             server.close()
 
 
+class LifecycleHookTests(unittest.TestCase):
+    def test_window_events_reach_public_listeners_after_bookkeeping(self):
+        rpc = FakeRpc()
+        app = Application(rpc)
+        window = app.open_html("<p>x</p>")
+        seen = []
+
+        def listener(params):
+            seen.append((params["type"], window.closed))
+
+        unsubscribe = app.on_window_event(listener)
+        rpc.notifications["window.event"]({"window_id": window.id, "type": "resized", "width": 10})
+        rpc.notifications["window.event"]({"window_id": window.id, "type": "closed"})
+        # The API's own bookkeeping (retiring the window) happens first.
+        self.assertEqual(seen, [("resized", False), ("closed", True)])
+        unsubscribe()
+        rpc.notifications["window.event"]({"window_id": "other", "type": "focused"})
+        self.assertEqual(len(seen), 2)
+
+    def test_run_delivers_final_events_before_shutdown_callbacks(self):
+        # The host sends a window's last "closed" event, then app.shutdown, which
+        # bypasses the ordered event queue. run() must not return (and shutdown
+        # hooks must not run) until that earlier event has been delivered.
+        local, remote = socket.socketpair()
+        remote.settimeout(4)
+        rpc = RpcClient(SocketStream(local), workers=2, ordered_notifications=True)
+        server = SocketStream(remote)
+        app = Application(rpc)
+        app._ready = True  # no host to answer app.ready in this fixture
+        order = []
+
+        def slow_listener(params):
+            time.sleep(0.4)
+            order.append(("window", params["type"]))
+
+        app.on_window_event(slow_listener)
+        app.on_shutdown(lambda: order.append(("shutdown",)))
+        try:
+            write_all(server, encode_frame({"jsonrpc": "2.0", "method": "window.event",
+                                            "params": {"window_id": "w1", "type": "closed"}}))
+            write_all(server, encode_frame({"jsonrpc": "2.0", "method": "app.shutdown", "params": {}}))
+            app.run()
+            self.assertEqual(order, [("window", "closed"), ("shutdown",)])
+        finally:
+            rpc.close()
+            server.close()
+
+    def test_failing_shutdown_callback_does_not_skip_others(self):
+        rpc = FakeRpc()
+        app = Application(rpc)
+        app._ready = True
+        calls = []
+
+        def broken():
+            raise RuntimeError("boom")
+
+        app.on_shutdown(broken)
+        app.on_shutdown(lambda: calls.append("second"))
+        rpc.shutdown_requested.set()
+        with patch("sys.stderr"):
+            app.run()
+        self.assertEqual(calls, ["second"])
+
+
 if __name__ == "__main__":
     unittest.main()

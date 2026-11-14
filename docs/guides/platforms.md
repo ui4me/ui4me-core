@@ -25,15 +25,15 @@ Wayland gives the compositor, not the application, control over placement and fo
 
 | Operation | Linux (Wayland) | Windows |
 | --- | --- | --- |
-| Create a hidden window / show or hide an existing window | Refused | Supported |
-| Focus a window (`focus=True`) | Refused; use an attention request | Supported |
-| Set the window position (`x`, `y`) | Refused; observed position is `None` | Supported (position reported in physical pixels) |
-| Restore a minimized window (`minimized=False`) | Refused (no protocol request exists) | Supported |
+| Create a hidden window / show or hide an existing window (`visible=` / `-Visible`) | Refused | Supported |
+| Focus a window (`focus=True` / `-Focus $true`) | Refused; use an attention request | Supported |
+| Set the window position (`x`, `y` / `-X`, `-Y`) | Refused; observed position is `None`/`$null` | Supported (position reported in physical pixels) |
+| Restore a minimized window (`minimized=False` / `-Minimized $false`) | Refused (no protocol request exists) | Supported |
 | Minimize, maximize, fullscreen, resize, title, min/max size | Supported (compositor may adjust) | Supported |
 | Request attention | Requires the compositor's `xdg-activation`; clearing a request is refused | `critical` / `informational`, clearable |
 | Activate on second launch | Forwards `XDG_ACTIVATION_TOKEN`; the compositor decides whether to raise | Primary window is focused |
 
-Query what the current host supports with `app.capabilities()` (Python) or `Get-UI4MECapabilities` (PowerShell): each feature reports `implemented` and `available`. Window state queries separate what you requested from what the platform reports (`observed`); values a platform cannot report are `None`/`$null`.
+Query what the current host supports with `app.capabilities()` (Python) or `Get-UI4MECapabilities` (PowerShell): each feature reports `implemented` and `available`. Window state queries (`window.state()` / `Get-UI4MEWindow`) separate what you requested from what the platform reports (`observed`); values a platform cannot report are `None`/`$null`.
 
 Window frames are drawn by the compositor where it provides server-side decorations (KDE). Frameless windows with `data-ui4me-drag`/`data-ui4me-resize` regions use the native move/resize operations on both platforms.
 
@@ -63,7 +63,7 @@ The host exposes the document through AccessKit: **AT-SPI** on Linux (Orca) and 
 
 ### Display scaling
 
-Window sizes and CSS pixels are logical. The host renders at the window's current scale factor (the Wayland output scale, or the Windows per-monitor DPI) and re-renders when it changes; `window.event` reports `resized` (physical size and scale) and `scale_changed`.
+Window sizes and CSS pixels are logical. The host renders at the window's current scale factor (the Wayland output scale, or the Windows per-monitor DPI) and re-renders when it changes; the `window.event` notification reports `resized` (physical size and scale) and `scale_changed`. Observe it with `app.on_window_event(callback)` in Python or `Register-UI4MENotification -Application $app -Method window.event` in PowerShell.
 
 ## Known limitations
 

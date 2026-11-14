@@ -2,7 +2,7 @@
 
 > **Status: private and versioned.** The supported programming interfaces are the [Python](python-api.md) and [PowerShell](powershell-api.md) bindings in this repository. This page documents protocol version 1, as implemented by UI4ME Core 1.0.x, for people who maintain those bindings or write another one. Method names, parameters and results can change in a future protocol version; the `protocol_version` handshake is how such a change is detected. UI4ME Core 1.0.1 does not change the protocol.
 
-The authoritative sources are `crates/ui4me-host/src/protocol.rs` (framing, message profile, error codes), `transport.rs` (connection limits), `host/mod.rs` (handshake, lifecycle, notifications), `host/requests.rs` (window and native services), `host/documents.rs` and `host/document_commands.rs` (documents), `host/bitmap.rs` (live bitmaps), and the reference client `python/ui4me_core/client.py`.
+The authoritative sources are `crates/ui4me-host/src/protocol.rs` (framing, message profile, error codes), `transport.rs` (connection limits), `host/mod.rs` (handshake, lifecycle, notifications), `host/requests.rs` (window and native services), `host/documents.rs` and `host/document_commands.rs` (documents), `host/bitmap.rs` (live bitmaps), and the two reference clients, `python/ui4me_core/client.py` (Python) and `powershell/UI4ME.Core/private/UI4ME.Transport.cs` with `UI4ME.Core.psm1` (PowerShell).
 
 ## Roles
 
@@ -41,7 +41,7 @@ Each message is one frame:
 
 * `length` counts body bytes only, must be 1 to 2,097,152 (2 MiB), and is checked before the body is read. A zero length, an oversized length, invalid UTF-8 or invalid JSON ends the connection. EOF inside a header or body is an error, not a clean close.
 * The body is exactly one JSON object. Batches (arrays) are not supported.
-* Writers serialize the complete body before writing the header, so an oversized message is never partially written. The Python client additionally rejects duplicate object keys and non-finite numbers.
+* Writers serialize the complete body before writing the header, so an oversized message is never partially written. Both reference clients additionally reject duplicate object keys and non-finite numbers.
 
 ## Message profile (JSON-RPC 2.0 subset)
 
@@ -61,7 +61,7 @@ Rules enforced by the host:
 * At most 128 requests may be pending. Reusing the ID of a request that is still pending (a native dialog, external open or clipboard read) is a protocol violation: the host disconnects and fails the application.
 * A result that would not fit in a 2 MiB frame is replaced by an `unavailable` error. A notification that would not fit is dropped (a `document.event` that is too large is reported as `document.error` instead).
 
-Buffers: the host queues at most 128 outgoing messages / 8 MiB per connection, and a peer that does not read its messages is disconnected. Incoming messages share a 256-event / 8 MiB queue; when it is full the host stops reading from the connection (backpressure) until the GUI thread catches up. The Python client caps its own outgoing queue at 256 frames and pending requests at 128.
+Buffers: the host queues at most 128 outgoing messages / 8 MiB per connection, and a peer that does not read its messages is disconnected. Incoming messages share a 256-event / 8 MiB queue; when it is full the host stops reading from the connection (backpressure) until the GUI thread catches up. The Python client caps its own outgoing queue at 256 frames; both clients allow at most 128 pending requests, and the PowerShell client queues at most 128 incoming messages / 8 MiB (see the [PowerShell limits](powershell-api.md#limits)).
 
 ## Backend environment
 

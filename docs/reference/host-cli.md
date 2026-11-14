@@ -124,7 +124,7 @@ The direct-start launchers additionally bind the host to themselves: Linux uses 
 
 With `instance = "single"` (default), the first launch for a given `app.id` in the same desktop session becomes the primary instance. On Linux the session is the user plus the Wayland compositor socket; on Windows it is the logon session (a named mutex). A later launch does not start a backend. It sends `app.activate` to the primary with its `args`, `cwd` and (on Linux) `XDG_ACTIVATION_TOKEN`, retries while the primary is still starting (within `startup_timeout_ms` + 5 s), and exits `0`. The primary focuses one of its windows where the platform allows and delivers an `app.activated` notification to the backend. With `instance = "multiple"`, every launch is independent.
 
-## Example: Python application in a virtual environment
+## Example: Python application
 
 ```toml
 [app]
@@ -154,22 +154,26 @@ instance = "single"
 `app.py` is unchanged from a directly started app: inside a host-started backend, `Application.start()` sees `UI4ME_ENDPOINT`/`UI4ME_TOKEN` and connects instead of launching another host (`Application.from_environment()` connects explicitly). Run it with:
 
 ```bash
-ui4me-host run --app /opt/invoice-tool/app.toml
+ui4me-host run --app /opt/invoice-tool/app.toml     # the ui4me-host command from the ui4me-core package
 ```
 
-## Example: PowerShell script
+## Example: PowerShell application
 
 ```toml
 [app]
-id = "org.example.PowerShellTool"
-name = "PowerShell Tool"
-version = "1.0.0"
+id = "org.example.InvoiceTool"
+name = "Invoice Tool"
+version = "1.2.0"
+icon = "{app_dir}/icon.png"
 
 [backend]
 # "pwsh" is found on PATH. For Windows PowerShell 5.1 use "powershell.exe".
 program = "pwsh"
 args = ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "{app_dir}/app.ps1"]
 cwd = "{app_dir}"
+
+[backend.env]
+INVOICE_DATA_DIR = "{app_dir}/data"
 
 [host]
 startup_timeout_ms = 30000
@@ -178,17 +182,19 @@ max_windows = 8
 instance = "single"
 ```
 
+`app.ps1` is unchanged from a directly started app: inside a host-started backend, `Start-UI4MEScript` sees `UI4ME_ENDPOINT`/`UI4ME_TOKEN` and connects instead of launching another host (`Connect-UI4ME` connects explicitly). Run it with:
+
 ```powershell
-Start-UI4MEHost -Manifest ./app.toml     # or: ui4me-host run --app ./app.toml
+Start-UI4MEHost -Manifest /opt/invoice-tool/app.toml     # or: & (Get-UI4MEHostPath) run --app /opt/invoice-tool/app.toml
 ```
 
-`New-UI4MEProject` writes this manifest next to a generated `app.ps1`; `ui4me-new` does the same for Python.
+The Python example above and this one differ only in `[backend]`. `ui4me-new` writes such a manifest next to a generated `app.py` (`--python` pins the interpreter); `New-UI4MEProject` writes one next to a generated `app.ps1` (`-WindowsPowerShell` selects `powershell.exe`).
 
 ## Direct start versus an explicit manifest
 
 | | Direct start | Explicit manifest |
 | --- | --- | --- |
-| Command | `python app.py`, `uv run app.py`, `pwsh -File app.ps1` | `ui4me-host run --app app.toml`, `Start-UI4MEHost` |
+| Command | `python app.py`, `uv run app.py`, `pwsh -File app.ps1`, `powershell.exe -File app.ps1` | `ui4me-host run --app app.toml`, `Start-UI4MEHost -Manifest app.toml` |
 | Manifest | Private temporary `ui4me-start-*` folder, removed afterwards | Your file |
 | Backend command | The same interpreter and script, started again | Whatever `[backend]` names |
 | Default app ID | Derived from the script path (`local.ui4me.<name>.h<hash>`) | `app.id` |

@@ -39,6 +39,8 @@ class Application:
         self._lock = threading.RLock()
         self._windows: dict[str, Window] = {}
         self._ready = False
+        self._window_listeners: list[Callable[[dict], Any]] = []
+        self._shutdown_listeners: list[Callable[[], Any]] = []
         self.rpc.on_notification("document.event", self._document_event)
         self.rpc.on_notification("document.error", self._document_error)
         self.rpc.on_notification("window.event", self._window_event)
@@ -136,10 +138,47 @@ class Application:
             self._ready = True
 
     def run(self) -> None:
+        """Announce readiness and wait for an orderly native shutdown.
+
+        Before returning, events the host sent ahead of the shutdown (such as
+        the last window's ``closed`` event) are delivered (for up to two
+        seconds), then ``on_shutdown`` callbacks run in this thread.
+        """
         self.ready()
         while not self.rpc.shutdown_requested.wait(0.1):
             if self.rpc.closed:
                 raise DisconnectedError("The host disconnected before orderly shutdown")
+        drain = getattr(self.rpc, "wait_for_notifications", None)
+        if drain is not None:
+            drain(2.0)
+        for callback in list(self._shutdown_listeners):
+            try:
+                callback()
+            except Exception as error:  # One failing hook must not skip the others.
+                print(f"Shutdown callback failed: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
+
+    def on_window_event(self, callback: Callable[[dict], Any]) -> Callable[[], None]:
+        """Call ``callback(params)`` for every native window event.
+
+        ``params`` holds ``window_id``, ``type`` (for example ``"closed"``,
+        ``"resized"``, ``"focused"``) and the event's fields. Callbacks run in
+        event order, after the window bookkeeping of this API (a ``closed``
+        window is already retired). Returns a function that unsubscribes.
+        """
+        with self._lock:
+            self._window_listeners.append(callback)
+
+        def unsubscribe() -> None:
+            with self._lock:
+                if callback in self._window_listeners:
+                    self._window_listeners.remove(callback)
+        return unsubscribe
+
+    def on_shutdown(self, callback: Callable[[], Any]) -> None:
+        """Run ``callback()`` once the host has shut the application down, in the
+        thread that called ``run()``, after the final events were delivered."""
+        with self._lock:
+            self._shutdown_listeners.append(callback)
 
     def request_quit(self) -> None:
         self.rpc.call("app.request_quit")
@@ -198,14 +237,20 @@ class Application:
             document._dispatch(event)
 
     def _window_event(self, params: dict) -> None:
-        if params.get("type") != "closed":
-            return
+        if params.get("type") == "closed":
+            with self._lock:
+                window = self._windows.pop(params.get("window_id"), None)
+                if window:
+                    window.closed = True
+                    if window.document:
+                        window.document._retire()
         with self._lock:
-            window = self._windows.pop(params.get("window_id"), None)
-            if window:
-                window.closed = True
-                if window.document:
-                    window.document._retire()
+            listeners = list(self._window_listeners)
+        for callback in listeners:
+            try:
+                callback(params)
+            except Exception as error:
+                print(f"Window event callback failed: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
 
     def _document_error(self, params: dict) -> None:
         with self._lock:

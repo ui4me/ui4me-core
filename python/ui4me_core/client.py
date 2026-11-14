@@ -473,35 +473,60 @@ class RpcClient:
                 message = callbacks.get(timeout=0.2)
             except queue.Empty:
                 continue
-            method, params = message["method"], message.get("params", {})
-            if "id" not in message:
-                callback = self._notifications.get(method)
-                if callback:
-                    try:
-                        callback(params)
-                    except Exception as error:
-                        print(f"Notification handler failed: {type(error).__name__}: {error}", flush=True)
-                if method == "app.shutdown":
-                    self.shutdown_requested.set()
-                continue
             try:
-                callback = self._handlers.get(method)
-                if callback is None:
-                    raise RpcError(-32601, f"Unknown method: {method}")
-                result = callback(params)
-                response = {"jsonrpc": "2.0", "id": message["id"], "result": result}
-            except RpcError as error:
-                response = {"jsonrpc": "2.0", "id": message["id"], "error": {
-                    "code": error.code, "message": error.message, "data": error.data}}
-            except Exception as error:
-                response = {"jsonrpc": "2.0", "id": message["id"], "error": {
-                    "code": -32603, "message": f"Callback failed: {type(error).__name__}"}}
-            try:
-                self._enqueue(response)
-                if method == "app.shutdown":
-                    self.shutdown_requested.set()
-            except (DisconnectedError, RpcError):
-                return
+                if not self._dispatch(message):
+                    return
+            finally:
+                callbacks.task_done()
+
+    def wait_for_notifications(self, timeout: float) -> bool:
+        """Wait until ordered notifications already received have been handled.
+
+        The host sends a window's final ``closed`` event before ``app.shutdown``,
+        but shutdown is handled outside the ordered queue. Returns False on
+        timeout (for example a callback still waiting for a native dialog).
+        """
+        if self._ordered_notifications is None:
+            return True
+        deadline = time.monotonic() + timeout
+        while self._ordered_notifications.unfinished_tasks:
+            if self._closed.is_set() or time.monotonic() >= deadline:
+                return False
+            time.sleep(0.01)
+        return True
+
+    def _dispatch(self, message) -> bool:
+        """Handle one host message; False when the connection is gone."""
+        method, params = message["method"], message.get("params", {})
+        if "id" not in message:
+            callback = self._notifications.get(method)
+            if callback:
+                try:
+                    callback(params)
+                except Exception as error:
+                    print(f"Notification handler failed: {type(error).__name__}: {error}", flush=True)
+            if method == "app.shutdown":
+                self.shutdown_requested.set()
+            return True
+        try:
+            callback = self._handlers.get(method)
+            if callback is None:
+                raise RpcError(-32601, f"Unknown method: {method}")
+            result = callback(params)
+            response = {"jsonrpc": "2.0", "id": message["id"], "result": result}
+        except RpcError as error:
+            response = {"jsonrpc": "2.0", "id": message["id"], "error": {
+                "code": error.code, "message": error.message, "data": error.data}}
+        except Exception as error:
+            response = {"jsonrpc": "2.0", "id": message["id"], "error": {
+                "code": -32603, "message": f"Callback failed: {type(error).__name__}"}}
+        try:
+            self._enqueue(response)
+            if method == "app.shutdown":
+                self.shutdown_requested.set()
+        except (DisconnectedError, RpcError):
+            return False
+        return True
 
     def _fail(self, error: BaseException):
         with self._lock:

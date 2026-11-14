@@ -30,8 +30,8 @@ Useful environment variables: `UI4ME_VERBOSE=1` (all host logs), `UI4ME_TEST_MOD
 ## Structuring code
 
 - Keep module top level side-effect free; everything runs twice before `Application.start()`.
-- Register all callbacks before `app.run()`; `run()` blocks.
-- Group per-screen setup in functions (`show_home(window)`), each loading HTML and registering its callbacks on the returned document.
+- Register all callbacks before `app.run()`; `run()` blocks until shutdown.
+- Group per-screen setup in functions (`show_home(window)`), each loading HTML and registering its callbacks on the returned document. Nested `def` callbacks capture the function's variables automatically; rebinding one needs `nonlocal`.
 - Keep application state in Python objects; the page only displays it. Guard state shared with policy callbacks or worker threads with a `threading.Lock`.
 - Background work: `threading.Thread(daemon=True)`; catch `StaleDocumentError` to stop when the window or page goes away.
 - For headless smoke tests, add `threading.Timer(1.0, app.request_quit).start()` behind an `os.environ.get("UI4ME_TEST_MODE") == "1"` check.
@@ -44,16 +44,20 @@ Useful environment variables: `UI4ME_VERBOSE=1` (all host logs), `UI4ME_TEST_MOD
 | `StartupError: ... must run from a script file` | Ran via `python -c`, stdin or a REPL. Save to a file. |
 | `StartupError: No UI4ME host connection` | `Application.from_environment()` used with `python app.py`. Use `Application.start()`. |
 | `StartupError: ... native host is missing` | Platform wheel not installed (unsupported OS/arch) or wrong environment. Check `ui4me-host doctor`. |
+| `StartupError: Incomplete UI4ME host environment` | Only one of `UI4ME_ENDPOINT`/`UI4ME_TOKEN` is set (left over in a shell or IDE). Unset both. |
 | `RpcError -32602` when loading HTML | The page has `<script>`, `on…=` attributes, `contenteditable`, a color/date input or duplicate `id`s. Remove them. |
 | `RpcError: Text exceeds 16 KiB` | Split long text, or render it as a list of elements. |
 | Clicking a link does nothing | Links never navigate; handle `link_activated`. |
 | `StaleDocumentError` | Using a `Document`/`Node` after `load_html`/`load_file` or after its window closed. Use the returned document / `window.document`. |
 | Button does nothing | Wrong `element` id, callback registered on an old document, or JS/`onclick` used. |
+| Counter or flag never changes / `UnboundLocalError` | Assigned a `main()` variable inside a callback without `nonlocal`; declare it, or mutate a dict. |
+| Close/quit is always refused | The policy callback returns `None` or raises; return `True` to allow. |
 | Form clears/reloads on submit | Missing `document.prevent_default("form-id", "submit")` before input. |
 | Relative image/CSS missing with `open_html` | Pass `asset_root=HERE`. Network URLs never load. |
 | `RpcError -32001` on `window.set(x=..., y=...)` | Wayland cannot position windows; make it optional. |
 | UI freezes for later events | A callback is doing slow work; move it to a thread. |
 | Selection lands in the wrong place with emoji | Offsets are UTF-16 units, not `str` indices. |
+| Garbled non-ASCII text in files you write | Pass `encoding="utf-8"` to `open()`/`read_text()`/`write_text()`; the platform default differs on Windows. |
 | `input()` hangs/fails | The backend has no stdin; use a form in the window. |
 | Nothing visible over SSH | The host needs the user's desktop session (Wayland on Linux; an interactive session on Windows). |
 

@@ -21,24 +21,25 @@ When a property seems ignored: `document.computed_style(["prop"], "id")` reports
 
 ## Assets
 
-Relative URLs resolve against the HTML file's folder, or `asset_root` for `open_html`/`load_html`; keep every asset inside that root. An HTML string without `asset_root` has no base folder. `data:` URLs (up to 4 MiB) and `ui4me-res://` bundles also work; every other scheme, including `http(s):`, is refused. Raster formats: PNG, JPEG, GIF/WebP (first frame), BMP. Per-load HTML is limited to 1 MiB; text per update to 16 KiB.
+Relative URLs resolve against the HTML file's folder, or `asset_root` for `open_html`/`load_html`; keep every asset inside that root. An HTML string without `asset_root` has no base folder. `data:` URLs (up to 4 MiB) and `ui4me-res://` bundles (`document.register_resources`) also work; every other scheme, including `http(s):`, is refused. Raster formats: PNG, JPEG, GIF/WebP (first frame), BMP. Per-load HTML is limited to 1 MiB; text per update to 16 KiB.
 
 ## Security model
 
 - The Python backend is trusted application code with the user's normal OS permissions. UI4ME is **not** a sandbox for untrusted web content; do not load HTML from untrusted sources.
 - Treat `insert_html`/`replace_html`/batch `html` as code: escape user data with `html.escape()`, or use `set_text`/`set_value`.
 - The IPC endpoint is private and authenticated with a per-launch token. `Application.start()` removes `UI4ME_ENDPOINT`/`UI4ME_TOKEN` from `os.environ` in the backend; never print, log or persist them.
-- `app.open_external(target)` hands a path or URL to the desktop's default handler; validate targets that come from user input.
-- File paths from dialogs, file inputs and drops are chosen by the user; the backend reads them directly (no data is copied over IPC).
+- `app.open_external(target)` hands a path or URL to the desktop's default handler and refuses executables, scripts and shortcuts; still validate targets that come from user input.
+- File paths from dialogs, file inputs and drops are chosen by the user; the backend reads them directly (no data is copied over IPC). Read and write them with an explicit `encoding="utf-8"`, because the default text encoding differs on Windows.
 
 ## Platform differences
 
 | Topic | Linux (Wayland) | Windows |
 | --- | --- | --- |
 | Window position (`x`, `y`) | Not supported (`RpcError` -32001 / `observed["position"] is None`) | Supported |
-| Focus / raise | Compositor decides; requests may be ignored | Supported within OS focus rules |
+| Focus / raise | Compositor decides; `focus=True` is refused | Supported within OS focus rules |
 | File dialogs | Desktop portal; its own look and parenting | Native common dialogs |
 | Desktop preferences | Depend on the desktop; values may be `None` | Reported by Windows; still handle `None` |
+| Python | 3.10-3.14 | 3.10-3.14 |
 
 Check `app.capabilities()` and `window.state()["observed"]`, and handle `RpcError` instead of assuming a request took effect. Linux x86-64 with glibc 2.34+ and a Wayland session, and Windows x86-64, are supported; macOS, X11-only and ARM64 are not.
 

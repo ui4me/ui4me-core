@@ -15,7 +15,7 @@ This page is for people working on UI4ME Core itself. To build apps with it you 
 | `powershell/UI4ME.Core/` | PowerShell module and its C# helper (`private/UI4ME.Transport.cs`) |
 | `powershell/tests/` | Pester suites and the native qualification harness |
 | `skills/` | Canonical coding-agent skills, bundled into both packages |
-| `examples/` | Python and PowerShell example apps and test fixtures |
+| `examples/python/`, `powershell/examples/` | The same beginner example apps in both languages (`hello`, `notes`, `counter`, `frameless`, `live-bitmap`), plus Python test fixtures |
 | `tools/` | Unit and integration tests, runners and qualification tools |
 | `tools/release/` | Build, staging and artifact verifiers, `SOURCE_FILES.sha256`, release records |
 | `patches/`, `third_party/` | Pinned, locally patched dependencies (build inputs) |
@@ -37,7 +37,7 @@ To run apps against your build, point the bindings at it and put the package sou
 ```bash
 export UI4ME_HOST_BINARY="$PWD/target/debug/ui4me-host"
 export PYTHONPATH="$PWD/python"
-python examples/python/hello.py
+python examples/python/hello/app.py
 ```
 
 ```powershell
@@ -65,7 +65,7 @@ $c = New-PesterConfiguration; $c.Run.Path = '.'; Invoke-Pester -Configuration $c
 
 `UI4ME_TEST_MODE=1` runs the host headless: protocol, lifecycle and document behaviour without a desktop or visible windows. Both direct-start helpers honour it, which is how `tools/test_bootstrap.py` and `powershell/tests/DirectStart.Tests.ps1` exercise `python app.py` and `pwsh -File app.ps1` with the real host. A headless pass is **not** desktop qualification.
 
-When you edit `docs/reference/powershell-api.md`, regenerate the skill copy with `python tools/release/sync_powershell_docs.py`; `--check` fails if they drift.
+When you edit `docs/reference/python-api.md` or `docs/reference/powershell-api.md`, regenerate the skill copies with `python tools/release/sync_powershell_docs.py`; `--check` fails if they drift.
 
 ## Integration checkpoint
 
@@ -86,6 +86,6 @@ bash tools/release/check_linux.sh       # full Linux source gate
 | `docs/` | Full documentation |
 | `skills/*/SKILL.md` | Coding agents |
 
-When a change affects how people get started, update all of them. `tools/test_public_docs.py` checks links, screenshots and code examples.
+When a change affects how people get started, update all of them, in both languages: the Python and PowerShell pages (install, quickstart, recipes, API reference, skill, examples) are kept 1:1, with the same sections and equivalent examples. `tools/test_public_docs.py` checks links, screenshots and code examples, and runs every beginner example app in both languages against the real host.
 
 See [Building and verifying releases](../release/building.md) and [Publishing](../release/publishing.md).

@@ -53,7 +53,20 @@ Loading new content into a window (`window.load_file()`, `window.load_html()`, `
 - Your code can request a quit with `app.request_quit()` / `Request-UI4MEQuit`. A **before-quit** policy (`app.on_before_quit(callback)` / `Set-UI4MEBeforeQuit`) can veto it.
 - Once a quit is accepted, `app.run()` and `Wait-UI4ME -UntilShutdown` return. Clean up and let the script end. The host waits up to `shutdown_timeout_ms` (5 seconds by default) for your process to exit, then terminates it and anything it started.
 
-Policy callbacks must answer quickly. They run on a separate path from event callbacks, so a slow event callback cannot block a close or quit decision.
+```python
+def allow_close():
+    return not state["dirty"]      # True allows, False vetoes
+
+window.on_before_close(allow_close)
+app.on_before_quit(allow_close)
+```
+
+```powershell
+Set-UI4MEBeforeClose -Window $window -Callback { -not $state.dirty }   # last output: $true allows, $false vetoes
+Set-UI4MEBeforeQuit -Application $app -Callback { -not $state.dirty }
+```
+
+Policy callbacks must answer quickly. A slow event callback cannot block a close or quit decision: Python runs policies on separate worker threads (protect shared state with a lock), and PowerShell answers them on the script's runspace while an event callback waits for a host reply.
 
 ## Errors and exit status
 
@@ -69,4 +82,18 @@ Policy callbacks must answer quickly. They run on a separate path from event cal
 
 ## Second launches
 
-With the default `instance="single"` (`-Instance single`), starting an app that is already running does not open a second copy. The new launch is forwarded to the running instance, which receives an `app.activated` notification, and then exits with status 0. Use `instance="multiple"` to allow independent copies. The identity used for this is `app_id` / `-AppId`; without one, UI4ME derives a stable ID from the script's path.
+With the default `instance="single"` (`-Instance single`), starting an app that is already running does not open a second copy. The new launch is forwarded to the running instance, which receives an `app.activated` notification, and then exits with status 0. Use `instance="multiple"` (`-Instance multiple`) to allow independent copies. The identity used for this is `app_id` / `-AppId`; without one, UI4ME derives a stable ID from the script's path.
+
+```python
+def on_activated(params):
+    print("The app was launched again")
+
+app.rpc.on_notification("app.activated", on_activated)
+```
+
+```powershell
+Register-UI4MENotification -Application $app -Method app.activated -Callback {
+    param($params)
+    Write-Host 'The app was launched again'
+}
+```

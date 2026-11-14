@@ -1,0 +1,17 @@
+[app]
+id = "org.ui4me.PythonCounter"
+name = "Python Counter"
+version = "1.0.1"
+
+[backend]
+# The interpreter that has ui4me-core installed ("python" on Windows, or a
+# virtual environment's interpreter such as "{app_dir}/.venv/bin/python").
+program = "python3"
+args = ["-u", "{app_dir}/app.py"]
+cwd = "{app_dir}"
+
+[host]
+startup_timeout_ms = 15000
+shutdown_timeout_ms = 5000
+max_windows = 8
+instance = "single"

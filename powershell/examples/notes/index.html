@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Notes</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Notes</h1>
+      <span id="count">0 note(s)</span>
+    </header>
+    <div class="row">
+      <label for="note" class="hidden">New note</label>
+      <input id="note" type="text" placeholder="Write a note" autocomplete="off">
+      <button id="add" type="button">Add</button>
+    </div>
+    <ul id="notes"></ul>
+    <footer>
+      <button id="export" type="button">Export…</button>
+      <button id="clear" type="button" class="secondary">Clear</button>
+      <p id="status" role="status" aria-live="polite">Ready.</p>
+    </footer>
+  </main>
+</body>
+</html>

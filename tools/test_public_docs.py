@@ -27,6 +27,8 @@ STANDALONE = ('docs/publish/pypi.md', 'powershell/UI4ME.Core/README.md', 'skills
 REPO_PREFIXES = ('https://github.com/ui4me/ui4me-core/blob/main/',
                  'https://github.com/ui4me/ui4me-core/tree/main/',
                  'https://raw.githubusercontent.com/ui4me/ui4me-core/main/')
+# The beginner example apps, one folder per app in each language.
+BEGINNER_EXAMPLES = ('hello', 'notes', 'counter', 'frameless', 'live-bitmap')
 LINK = re.compile(r'\]\(([^)\s]+)\)|(?:href|src)="([^"]+)"')
 
 
@@ -113,7 +115,7 @@ class AudienceTests(unittest.TestCase):
 
     def test_beginner_python_examples_use_named_callbacks(self):
         for name in ('README.md', 'docs/publish/pypi.md', 'docs/guides/quickstart-python.md',
-                     'examples/python/hello.py', 'examples/python/notes/app.py'):
+                     *(f'examples/python/{example}/app.py' for example in BEGINNER_EXAMPLES)):
             body = text(name)
             self.assertNotIn('lambda', body, name)
             self.assertNotIn('from_environment', body if name.endswith('.py') else
@@ -224,9 +226,35 @@ class RunnableExampleTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, f'{script}\n{result.stdout}\n{result.stderr}')
 
     def test_example_files(self):
-        for script in (ROOT / 'examples/python/hello.py', ROOT / 'examples/python/notes/app.py'):
-            with self.subTest(script=script.name):
-                self.run_example(script)
+        for example in BEGINNER_EXAMPLES:
+            with self.subTest(example=example):
+                self.run_example(ROOT / 'examples/python' / example / 'app.py')
+
+    @unittest.skipUnless(shutil.which('pwsh'), 'PowerShell 7 is not installed')
+    def test_powershell_example_files(self):
+        # A copy of each app asks the host to quit once it is ready (live-bitmap: after 30 frames).
+        module = ROOT / 'powershell/UI4ME.Core/UI4ME.Core.psd1'
+        fallback = "try { Import-Module UI4ME.Core -MinimumVersion 1.0.1 } catch { Import-Module (Join-Path $PSScriptRoot '../../UI4ME.Core/UI4ME.Core.psd1') }"
+        quit = '$null = Request-UI4MEQuit -Application $app\n'
+        for example in BEGINNER_EXAMPLES:
+            with self.subTest(example=example), tempfile.TemporaryDirectory() as folder:
+                target = Path(folder) / example
+                shutil.copytree(ROOT / 'powershell/examples' / example, target)
+                script = target / 'app.ps1'
+                body = script.read_text(encoding='utf-8-sig')
+                self.assertIn(fallback, body)
+                body = body.replace(fallback, f"Import-Module '{module}'")
+                if example == 'live-bitmap':
+                    body = body.replace('        $step++\n', '        $step++\n        if ($step -eq 30) { ' + quit.strip() + ' }\n', 1)
+                else:
+                    body = body.replace('Wait-UI4ME -Application $app -UntilShutdown', quit + 'Wait-UI4ME -Application $app -UntilShutdown')
+                self.assertIn('Request-UI4MEQuit', body)
+                script.write_text(body, encoding='utf-8-sig')
+                env = {k: v for k, v in os.environ.items() if not k.startswith('UI4ME_')}
+                env.update({'UI4ME_TEST_MODE': '1', 'UI4ME_HOST_BINARY': built_host()})
+                result = subprocess.run(['pwsh', '-NoProfile', '-NonInteractive', '-File', str(script)], cwd=target,
+                                        env=env, capture_output=True, text=True, timeout=120)
+                self.assertEqual(result.returncode, 0, f'{example}\n{result.stdout}\n{result.stderr}')
 
     def test_readme_pypi_and_quickstart_apps(self):
         for name in ('README.md', 'docs/publish/pypi.md', 'docs/guides/quickstart-python.md'):

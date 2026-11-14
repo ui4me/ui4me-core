@@ -4,6 +4,8 @@ UI4ME ships two self-contained Agent Skills: one for Python and another for Powe
 
 ## Python agents
 
+The `ui4me-skill` command comes with the `ui4me-core` package and installs the `ui4me-python` skill.
+
 Preview changes:
 
 ```bash
@@ -39,26 +41,62 @@ ui4me-skill uninstall --agents claude
 
 ## PowerShell agents
 
+The `Install-UI4MESkill` command comes with the `UI4ME.Core` module and installs the `ui4me-powershell` skill.
+
+Preview changes:
+
 ```powershell
 Install-UI4MESkill -Agents all -Scope user -DryRun
-Install-UI4MESkill -Agents all -Scope user
-Install-UI4MESkill -Agents claude,codex -Scope project -ProjectPath .
-Install-UI4MESkill -Action status -Agents all
-Install-UI4MESkill -Action uninstall -Agents claude -Scope user
 ```
+
+Install globally for your user:
+
+```powershell
+Install-UI4MESkill -Agents all -Scope user
+# Equivalent explicit form:
+Install-UI4MESkill -Action install -Agents all -Scope user
+```
+
+Install for selected agents:
+
+```powershell
+Install-UI4MESkill -Agents claude,codex,opencode
+```
+
+Project-local installation:
+
+```powershell
+Install-UI4MESkill -Scope project -ProjectPath . -Agents claude,codex
+```
+
+Check or remove skills:
+
+```powershell
+Install-UI4MESkill -Action status -Agents all
+Install-UI4MESkill -Action uninstall -Agents claude
+```
+
+| Python option | PowerShell parameter |
+| --- | --- |
+| `install` / `status` / `uninstall` | `-Action install` (default) / `status` / `uninstall` |
+| `--agents all` or `claude,codex,...` | `-Agents all` or `claude,codex,...` |
+| `--scope user` (default) / `project` | `-Scope user` (default) / `project` |
+| `--project PATH` | `-ProjectPath PATH` |
+| `--dry-run` | `-DryRun` |
+| `--force` | `-Force` |
 
 ## Supported agent locations
 
-| Agent | Per-user Python skill destination (relative to home) | Project destination |
+| Agent | Per-user destination (relative to home) | Project destination |
 | --- | --- | --- |
-| Claude Code | `.claude/skills/ui4me-python/` | `.claude/skills/ui4me-python/` |
-| Codex | `.agents/skills/ui4me-python/` | `.agents/skills/ui4me-python/` |
-| OpenCode | `.config/opencode/skills/ui4me-python/` | `.opencode/skills/ui4me-python/` |
-| GitHub Copilot | `.copilot/skills/ui4me-python/` | `.github/skills/ui4me-python/` |
-| Cursor | `.cursor/skills/ui4me-python/` | `.cursor/skills/ui4me-python/` |
-| Gemini CLI | `.gemini/skills/ui4me-python/` | `.gemini/skills/ui4me-python/` |
+| Claude Code | `.claude/skills/<skill>/` | `.claude/skills/<skill>/` |
+| Codex | `.agents/skills/<skill>/` | `.agents/skills/<skill>/` |
+| OpenCode | `.config/opencode/skills/<skill>/` | `.opencode/skills/<skill>/` |
+| GitHub Copilot | `.copilot/skills/<skill>/` | `.github/skills/<skill>/` |
+| Cursor | `.cursor/skills/<skill>/` | `.cursor/skills/<skill>/` |
+| Gemini CLI | `.gemini/skills/<skill>/` | `.gemini/skills/<skill>/` |
 
-PowerShell uses the same destination conventions but the folder name `ui4me-powershell`. The installers create only their own managed skill folders. They refuse to silently replace unrelated or user-modified skills; `-Force` is explicit and should be used only after inspection.
+`<skill>` is `ui4me-python` for the Python installer and `ui4me-powershell` for the PowerShell one, so both skills can be installed side by side. The installers create only their own managed skill folders. They refuse to silently replace unrelated or user-modified skills; `--force` / `-Force` is explicit and should be used only after inspection.
 
 ## What to ask an agent
 

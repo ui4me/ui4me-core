@@ -11,7 +11,7 @@ HERE = Path(__file__).resolve().parent
 
 
 def main():
-    with Application.start(name="Notes", app_id="org.ui4me.examples.Notes") as app:
+    with Application.start(name="Notes", app_id="org.ui4me.PythonNotes") as app:
         window = app.open_file(HERE / "index.html", title="Notes", width=720, height=520)
         document = window.document
         notes = []

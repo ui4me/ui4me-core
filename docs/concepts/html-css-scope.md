@@ -92,14 +92,14 @@ Resources load only from three places:
 | --- | --- |
 | Local files, by relative URL or `file:` | Must be inside the document's **asset root**: the directory of the loaded HTML file, or the `asset_root` you pass when loading. The real path is checked after symlinks are resolved. HTML given as a string without an asset root cannot reference local files. |
 | `data:` URLs | Up to 4 MiB |
-| `ui4me-res://<bundle>/<path>` | In-memory bundles registered by the backend (`register_resource_bundle`): up to 64 bundles, 16 MiB in total, at most 1 MiB and 256 entries per registration request |
+| `ui4me-res://<bundle>/<path>` | In-memory bundles registered by the backend (`document.register_resources(...)` in Python, `Register-UI4MEResources` in PowerShell; protocol operation `register_resource_bundle`): up to 64 bundles, 16 MiB in total, at most 1 MiB and 256 entries per registration request |
 
 Every other scheme, including `http:` and `https:`, is refused. There is no network setting to turn on.
 
 * **Raster formats:** PNG, JPEG, GIF, WebP and BMP (detected by content, EXIF orientation applied). Animated GIF, WebP and APNG show their first frame. AVIF, TIFF and ICO are not supported, and there is no ICC colour management.
 * **`<img>`** supports `srcset`, `sizes`, `<picture>` with `media`/`type`, `object-fit` and `alt` text for broken images; `loading="lazy"` has no effect. The same loader serves CSS `background-image`, `<link rel="stylesheet">` and `@import`.
 * **SVG** is static: as an `<img>` or CSS image, and as inline `<svg>` (up to 2,000 elements and 512 KiB of markup, with a limited subset of page CSS such as `fill`, `stroke` and `currentColor`). Not supported: SVG `<text>`, SMIL animation, `foreignObject`, SVGZ, references from an SVG to external files, and per-shape hit testing.
-* **Live bitmaps:** `<img src="ui4me-bitmap://preview">` displays RGBA pixels streamed by the backend (up to 4096×4096 per bitmap, 8 bitmaps and 64 MiB per document). See `LiveBitmap` in the [Python API](../reference/python-api.md) and the [protocol](../reference/protocol.md#live-bitmaps).
+* **Live bitmaps:** `<img src="ui4me-bitmap://preview">` displays RGBA pixels streamed by the backend (up to 4096×4096 per bitmap, 8 bitmaps and 64 MiB per document). See `LiveBitmap` in the [Python API](../reference/python-api.md), `New-UI4MELiveBitmap` in the [PowerShell commands](../reference/powershell-api.md) and the [protocol](../reference/protocol.md#live-bitmaps).
 * **Budgets:** an image may decode to at most 16,777,216 pixels; each document has bounded decoded-image and cache memory.
 
 ## Desktop attributes
@@ -107,7 +107,7 @@ Every other scheme, including `http:` and `https:`, is refused. There is no netw
 | Attribute | Effect |
 | --- | --- |
 | `data-ui4me-drop="files text"` | **Opt-in** target for drops from other applications. Tokens: `files`, `text`, `none`. The nearest element carrying the attribute receives the drop if its tokens include the dropped kind; `none`, or a disabled or inert ancestor, rejects it. Without the attribute, nothing accepts drops. The backend gets `drag_feedback` events while hovering and a `drop` event with `paths` or `text` (≤ 1024 local paths or 1 MiB of text). |
-| `data-ui4me-drag` | Pressing on this region moves the native window (custom title bars, typically with a window created with `decorations=False`). |
+| `data-ui4me-drag` | Pressing on this region moves the native window (custom title bars, typically with a window created with `decorations=False` in Python or `-Decorations $false` in PowerShell). |
 | `data-ui4me-resize="north-west"` | Pressing on this region resizes the window from that edge: `n`/`north`, `s`/`south`, `e`/`east`, `w`/`west`, `ne`/`north-east`, `nw`/`north-west`, `se`/`south-east`, `sw`/`south-west`. |
 | `data-ui4me-no-drag` | Excludes a subtree from drag and resize regions. Buttons, links, form controls and `summary` are never drag regions. |
 
@@ -130,7 +130,7 @@ Document events reach Python callbacks (`document.on(...)`) and PowerShell callb
 | Drag and drop | `dragstart`, `dragover`, `drop`, `dragend`, `drag_feedback` |
 | UI4ME | `link_activated`, `environment_changed` |
 
-Each event carries `type`, `element` (the `id` of the nearest element with one), `node`, modifier flags and event-specific fields such as `value`, `checked`, `key`, `code`, `x`, `y`, `submitter`, `validity` or `return_value`. Callbacks run after the host has already handled the input. To cancel a default action (for example, a keyboard shortcut, `submit`, a context menu or a dialog `cancel`), register a rule ahead of time with `set_default_action`; it applies without a round trip to the backend.
+Each event carries `type`, `element` (the `id` of the nearest element with one), `node`, modifier flags and event-specific fields such as `value`, `checked`, `key`, `code`, `x`, `y`, `submitter`, `validity` or `return_value`. Callbacks run after the host has already handled the input. To cancel a default action (for example, a keyboard shortcut, `submit`, a context menu or a dialog `cancel`), register a rule ahead of time with `document.prevent_default(...)` (Python) or `Set-UI4MEPreventDefault` (PowerShell), which send the `set_default_action` operation; it applies without a round trip to the backend.
 
 ## Limits
 
@@ -149,4 +149,9 @@ Each event carries `type`, `element` (the `id` of the nearest element with one),
 
 JavaScript and inline event handlers; frames and embedded objects; network loading of any kind and link navigation; audio and video playback; a canvas drawing API; WebGL/GPU rendering; printing and PDF export (the host reports `printing: false`); Shadow DOM and custom-element behaviour; `contenteditable` rich-text editing; colour and date/time pickers; datalist suggestions; HTML or image clipboard formats; dragging content out to other applications; browser storage, cookies and Web APIs.
 
-If you put user-provided text into a page, use the text operations (`set_text`, `set_value`); HTML-inserting operations parse markup and should only receive trusted HTML.
+### Known rendering gaps
+
+- A `dashed` or `dotted` border on a box with `border-radius` is not drawn (the host logs an unsupported-feature diagnostic). Use a solid border with rounded corners, or a dashed border without them.
+- `option:checked` colours in a `<select multiple>` list are ignored; selected rows use the engine's own highlight.
+
+If you put user-provided text into a page, use the text operations (`set_text`, `set_value` in Python; `Set-UI4MEDocumentText`, `Set-UI4MEDocumentValue` in PowerShell); HTML-inserting operations parse markup and should only receive trusted HTML, with user values escaped by `html.escape()` or `[Net.WebUtility]::HtmlEncode()`.

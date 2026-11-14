@@ -68,7 +68,7 @@ Import-Module UI4ME.Core
 | Topic | Read |
 | --- | --- |
 | First steps | [Install for Python](docs/guides/install-python.md) · [Install for PowerShell](docs/guides/install-powershell.md) · [Python quickstart](docs/guides/quickstart-python.md) · [PowerShell quickstart](docs/guides/quickstart-powershell.md) |
-| Building apps | [Python recipes](docs/guides/patterns.md) · [Lifecycle and events](docs/concepts/lifecycle.md) · [HTML and CSS support](docs/concepts/html-css-scope.md) · [Platforms](docs/guides/platforms.md) |
+| Building apps | [Python recipes](docs/guides/patterns.md) · [PowerShell recipes](docs/guides/patterns-powershell.md) · [Lifecycle and events](docs/concepts/lifecycle.md) · [HTML and CSS support](docs/concepts/html-css-scope.md) · [Platforms](docs/guides/platforms.md) |
 | Reference | [Python API](docs/reference/python-api.md) · [PowerShell commands](docs/reference/powershell-api.md) · [`ui4me-host` and app.toml](docs/reference/host-cli.md) · [IPC protocol](docs/reference/protocol.md) |
 | When something goes wrong | [Troubleshooting](docs/guides/troubleshooting.md) · [Architecture](docs/concepts/architecture.md) |
 | Contributing and releases | [Development](docs/guides/development.md) · [Building](docs/release/building.md) · [Publishing](docs/release/publishing.md) · [Release notes](docs/release/RELEASE_NOTES_1.0.1.md) |
@@ -173,7 +173,7 @@ python app.py
 uv run app.py
 ```
 
-`Application.start()` launches the native host, which starts your script a second time as the connected app. Code above `Application.start()` therefore runs twice, so keep your setup inside `main()`. To start from a ready-made project with separate HTML and CSS files, run `ui4me-new my-app`.
+`Application.start()` launches the native host, which starts your script a second time as the connected app. Code above `Application.start()` therefore runs twice, so keep your setup inside `main()`. `ui4me-new my-app` creates a project with separate HTML and CSS files.
 
 ## Your first PowerShell app
 
@@ -215,12 +215,12 @@ pwsh -File ./app.ps1
 powershell.exe -NoProfile -File .\app.ps1
 ```
 
-`Start-UI4MEScript` works like `Application.start()`: it starts the host, which runs the script again as the connected app. `New-UI4MEProject -Path ./my-app` creates a project with separate HTML and CSS files.
+`Start-UI4MEScript` launches the native host, which starts your script a second time as the connected app. Code above `Start-UI4MEScript` therefore runs twice, so keep your setup below it. `New-UI4MEProject -Path ./my-app` creates a project with separate HTML and CSS files.
 
 ## Next steps
 
-- [Python recipes](docs/guides/patterns.md): HTML files and CSS, forms, dialogs, multiple windows, frameless windows and live bitmaps
-- [Python examples](examples/python/README.md) and [PowerShell examples](powershell/examples/README.md)
+- [Python recipes](docs/guides/patterns.md) and [PowerShell recipes](docs/guides/patterns-powershell.md): the same 15 tasks in both languages, from forms, lists and file dialogs to close guards, background work and live bitmaps
+- [Python examples](examples/python/README.md) and [PowerShell examples](powershell/examples/README.md): the same five apps (`hello`, `notes`, `counter`, `frameless`, `live-bitmap`) in both languages
 - [Lifecycle and events](docs/concepts/lifecycle.md): callbacks, closing and quitting, and replacing documents
 - [`ui4me-host` and app.toml](docs/reference/host-cli.md): explicit host launch for installers and deployments
 

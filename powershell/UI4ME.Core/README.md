@@ -25,11 +25,24 @@ $ErrorActionPreference = 'Stop'
 Import-Module UI4ME.Core
 
 $app = Start-UI4MEScript -Name 'Hello UI4ME'
+
 $window = New-UI4MEWindow -Application $app -Title 'Hello UI4ME' -Width 520 -Height 320
-$doc = Open-UI4MEHtml -Window $window -Html '<h1 id="title">Hello</h1><button id="go">Go</button>'
-$null = Register-UI4MEDocumentEvent -Document $doc -Type click -Element go -Callback {
-    Set-UI4MEDocumentText -Document $doc -Element title -Text 'Clicked'
+$doc = Open-UI4MEHtml -Window $window -Html @'
+<main style="font-family: sans-serif; padding: 24px">
+  <h1>Hello from PowerShell</h1>
+  <label for="name">Your name</label>
+  <input id="name" type="text">
+  <button id="greet">Greet me</button>
+  <p id="message">Type your name and press the button.</p>
+</main>
+'@
+
+$null = Register-UI4MEDocumentEvent -Document $doc -Type click -Element greet -Callback {
+    $name = (Get-UI4MEValue -Document $doc -Element name).Trim()
+    if (-not $name) { $name = 'world' }
+    Set-UI4MEDocumentText -Document $doc -Element message -Text "Hello, $name!"
 }
+
 Set-UI4MEReady -Application $app
 Wait-UI4ME -Application $app -UntilShutdown
 Close-UI4ME -Application $app
@@ -99,6 +112,7 @@ More in the [troubleshooting guide](https://github.com/ui4me/ui4me-core/blob/mai
 
 - [Install](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/install-powershell.md)
 - [Quickstart](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/quickstart-powershell.md)
+- [Recipes](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/patterns-powershell.md)
 - [Command reference](https://github.com/ui4me/ui4me-core/blob/main/docs/reference/powershell-api.md)
 - [Supported platforms](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/platforms.md)
 - [Coding-agent skills](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/agent-skills.md)

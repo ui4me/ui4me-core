@@ -96,7 +96,8 @@ def build(linux: Path, windows: Path, output: Path, source_identity: str='') -> 
     (dest/'README.md').write_text(standalone(MOD/'README.md'),encoding='utf-8',newline='\n')
     (dest/'docs').mkdir()
     for doc in ('docs/guides/install-powershell.md','docs/guides/quickstart-powershell.md',
-                'docs/reference/powershell-api.md','docs/guides/troubleshooting.md'):
+                'docs/reference/powershell-api.md','docs/guides/troubleshooting.md',
+                'docs/guides/patterns-powershell.md'):
         source=ROOT/doc
         (dest/'docs'/source.name).write_text(standalone(source),encoding='utf-8',newline='\n')
     reports={'version':VERSION,'python_runtime_required':False,'source_identity':source_identity,

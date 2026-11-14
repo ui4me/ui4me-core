@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>UI4ME Showcase</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<!-- The backend sets class="theme-light" or "theme-dark" here; "theme-system" follows the desktop. -->
+<body id="app" class="theme-system">
+<div class="shell">
+
+  <!-- ===== Sidebar navigation: the backend handles clicks on #nav ===== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="assets/logo.svg" width="34" height="34" alt="">
+      <div><strong>UI4ME Showcase</strong><span>HTML + CSS, no browser</span></div>
+    </div>
+    <p class="nav-label">Pages</p>
+    <nav id="nav" class="nav" aria-label="Pages">
+      <button id="nav-overview" class="nav-item active" type="button" aria-current="page">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        <span>Overview</span>
+      </button>
+      <button id="nav-forms" class="nav-item" type="button" aria-current="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+        <span>Forms</span>
+      </button>
+      <button id="nav-layouts" class="nav-item" type="button" aria-current="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 9v12"/></svg>
+        <span>Layouts</span>
+      </button>
+      <button id="nav-content" class="nav-item" type="button" aria-current="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 10h16M4 14h10M4 18h12"/></svg>
+        <span>Typography</span>
+      </button>
+      <button id="nav-overlays" class="nav-item" type="button" aria-current="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="14" height="13" rx="2"/><path d="M7 4h12a2 2 0 0 1 2 2v10"/></svg>
+        <span>Overlays</span>
+      </button>
+    </nav>
+    <div class="sidebar-card">
+      <p><strong>Backend</strong></p>
+      <p class="muted" id="backend-name">Connecting...</p>
+      <p><a id="about-link" href="about.html">About this demo</a></p>
+    </div>
+  </aside>
+
+  <div class="main">
+    <!-- ===== Top bar: page title (set by the backend) and the theme toggle ===== -->
+    <header class="topbar">
+      <div>
+        <h1 id="page-title">Overview</h1>
+        <p id="page-subtitle" class="muted">Cards, stat tiles, badges, progress bars and a table.</p>
+      </div>
+      <span class="spacer"></span>
+      <span class="badge success">Native window</span>
+      <button id="theme-toggle" class="btn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <span id="theme-label">Dark mode</span>
+      </button>
+    </header>
+
+    <div id="pages" class="pages">
+
+      <!-- ================= Page 1: Overview ================= -->
+      <section id="page-overview" class="page active">
+        <div class="card hero">
+          <div class="hero-text">
+            <p class="eyebrow">Welcome</p>
+            <h2>A desktop interface made from local HTML and CSS</h2>
+            <p class="muted">Every page in this window comes from one HTML file and one stylesheet. A native engine draws it; your backend script handles the buttons, forms and links. There is no browser and no JavaScript.</p>
+            <div class="actions">
+              <button id="advance" class="btn primary" type="button">Advance progress</button>
+              <button id="go-forms" class="btn" type="button">Try the form</button>
+            </div>
+          </div>
+          <img class="hero-art" src="assets/hero.svg" width="220" height="147" alt="Illustration of an application window with cards">
+        </div>
+
+        <div class="stats">
+          <article class="card stat"><span class="stat-label">Pages</span><strong class="stat-value">5</strong><span class="badge success">All loaded</span></article>
+          <article class="card stat"><span class="stat-label">Counter</span><strong id="stat-counter" class="stat-value">0</strong><span class="badge accent">Overlays page</span></article>
+          <article class="card stat"><span class="stat-label">Build progress</span><strong id="stat-progress" class="stat-value">64%</strong><span class="badge info">Live</span></article>
+          <article class="card stat"><span class="stat-label">Theme</span><strong id="stat-theme" class="stat-value">Light</strong><span id="stat-theme-source" class="badge">Follows the desktop</span></article>
+        </div>
+
+        <div class="grid-2">
+          <article class="card">
+            <header class="card-head">
+              <div><h3>Release checklist</h3><p class="muted small">A table with zebra rows and status badges</p></div>
+              <span class="badge">4 of 6 done</span>
+            </header>
+            <table class="table zebra">
+              <thead><tr><th>Task</th><th>Owner</th><th>Status</th><th class="num">Hours</th></tr></thead>
+              <tbody>
+                <tr><td>Window layout</td><td>Ada</td><td><span class="badge success">Done</span></td><td class="num">6</td></tr>
+                <tr><td>Form validation</td><td>Grace</td><td><span class="badge success">Done</span></td><td class="num">4</td></tr>
+                <tr><td>Dark theme</td><td>Linus</td><td><span class="badge success">Done</span></td><td class="num">3</td></tr>
+                <tr><td>Toasts</td><td>Barbara</td><td><span class="badge success">Done</span></td><td class="num">5</td></tr>
+                <tr><td>Keyboard shortcuts</td><td>Alan</td><td><span class="badge warning">In progress</span></td><td class="num">2</td></tr>
+                <tr><td>Installer</td><td>Margaret</td><td><span class="badge">Planned</span></td><td class="num">8</td></tr>
+              </tbody>
+            </table>
+          </article>
+
+          <article class="card">
+            <header class="card-head">
+              <div><h3>Progress and meters</h3><p class="muted small">&lt;progress&gt; and &lt;meter&gt; elements</p></div>
+            </header>
+            <div class="meters">
+              <div class="meter-row"><label for="build-progress">Build</label><progress id="build-progress" max="100" value="64">64%</progress><span id="progress-label">64%</span></div>
+              <div class="meter-row"><span>Disk (good)</span><meter min="0" max="100" low="60" high="85" optimum="20" value="35">35%</meter><span>35%</span></div>
+              <div class="meter-row"><span>Memory (high)</span><meter min="0" max="100" low="60" high="85" optimum="20" value="72">72%</meter><span>72%</span></div>
+              <div class="meter-row"><span>CPU (critical)</span><meter min="0" max="100" low="60" high="85" optimum="20" value="93">93%</meter><span>93%</span></div>
+              <div class="meter-row"><span>Waiting</span><progress aria-label="Indeterminate progress"></progress><span>...</span></div>
+            </div>
+            <hr class="divider">
+            <p class="muted small" style="margin-bottom: 10px">Badges</p>
+            <div class="badges">
+              <span class="badge">Default</span>
+              <span class="badge accent">Accent</span>
+              <span class="badge success">Success</span>
+              <span class="badge warning">Warning</span>
+              <span class="badge danger">Danger</span>
+              <span class="badge info">Info</span>
+              <span class="badge outline">Outline</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- ================= Page 2: Forms ================= -->
+      <section id="page-forms" class="page">
+        <div class="form-layout">
+          <form id="signup" class="card form">
+            <fieldset>
+              <legend>Account</legend>
+              <div class="field-grid">
+                <label class="field"><span>Full name <span class="req">*</span></span>
+                  <input id="full-name" name="full_name" type="text" placeholder="Ada Lovelace" required minlength="2"></label>
+                <label class="field"><span>Email <span class="req">*</span></span>
+                  <input id="email" name="email" type="email" placeholder="ada@example.org" required></label>
+                <label class="field"><span>Username <span class="req">*</span></span>
+                  <input id="username" name="username" type="text" placeholder="lowercase letters and digits" required pattern="[a-z0-9_]{3,16}">
+                  <span id="username-hint" class="hint">Try "admin": the backend marks it as taken.</span></label>
+                <label class="field"><span>Password</span>
+                  <input id="password" name="password" type="password" minlength="8" placeholder="At least 8 characters"></label>
+                <label class="field"><span>Website</span>
+                  <input id="website" name="website" type="url" placeholder="https://example.org"></label>
+                <label class="field"><span>Phone</span>
+                  <input id="phone" name="phone" type="tel" placeholder="+1 555 0100"></label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Preferences</legend>
+              <div class="field-grid">
+                <label class="field"><span>Role</span>
+                  <select id="role" name="role">
+                    <optgroup label="Engineering">
+                      <option value="developer" selected>Developer</option>
+                      <option value="tester">Tester</option>
+                    </optgroup>
+                    <optgroup label="Design">
+                      <option value="designer">Designer</option>
+                      <option value="writer">Technical writer</option>
+                    </optgroup>
+                  </select></label>
+                <label class="field"><span>Team size</span>
+                  <input id="team-size" name="team_size" type="number" min="1" max="50" step="1" value="4"></label>
+                <label class="field"><span>Interests <span class="hint">(Ctrl+click for several)</span></span>
+                  <select id="interests" name="interests" multiple size="4">
+                    <option value="desktop" selected>Desktop apps</option>
+                    <option value="automation">Automation</option>
+                    <option value="design" selected>Design systems</option>
+                    <option value="accessibility">Accessibility</option>
+                    <option value="testing">Testing</option>
+                  </select></label>
+                <div class="field">
+                  <label for="volume">Notification volume</label>
+                  <div class="range-row"><input id="volume" name="volume" type="range" min="0" max="100" step="5" value="60"><output id="volume-out" for="volume">60</output></div>
+                  <label class="field" style="margin-top: 8px"><span>Search</span>
+                    <input id="search" name="search" type="search" placeholder="Search the docs"></label>
+                </div>
+                <label class="field full"><span>Message</span>
+                  <textarea id="message" name="message" rows="3" placeholder="Anything you would like to tell us"></textarea></label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Plan and notifications</legend>
+              <div class="choice-row">
+                <label class="choice"><input id="plan-free" name="plan" type="radio" value="free"><div><strong>Free</strong><span>For trying things out</span></div></label>
+                <label class="choice"><input id="plan-pro" name="plan" type="radio" value="pro" checked><div><strong>Pro</strong><span>For one serious user</span></div></label>
+                <label class="choice"><input id="plan-team" name="plan" type="radio" value="team"><div><strong>Team</strong><span>Shared settings</span></div></label>
+              </div>
+              <div class="checks">
+                <label class="check"><input id="notify-news" name="notify" type="checkbox" value="news" checked> Product news</label>
+                <label class="check"><input id="notify-security" name="notify" type="checkbox" value="security" checked> Security alerts</label>
+                <label class="check"><input id="notify-digest" name="notify" type="checkbox" value="digest"> Weekly digest</label>
+                <label class="check"><input id="terms" name="terms" type="checkbox" value="accepted" required> I accept the terms <span class="req">*</span></label>
+              </div>
+            </fieldset>
+
+            <div class="form-actions">
+              <p id="form-feedback" class="feedback" role="status">Required fields are checked natively before the form submits.</p>
+              <button id="disabled-button" class="btn" type="button" disabled>Disabled</button>
+              <button id="reset-button" class="btn" type="reset">Reset</button>
+              <button id="submit-button" class="btn primary" type="submit">Submit</button>
+            </div>
+          </form>
+
+          <aside class="card result">
+            <header class="card-head"><h3>Backend received</h3><span id="result-badge" class="badge">Nothing yet</span></header>
+            <dl id="form-result" class="result-list"><dt>Status</dt><dd>Submit the form to see the data the backend reads with form_data.</dd></dl>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ================= Page 3: Layouts ================= -->
+      <section id="page-layouts" class="page">
+        <div class="grid-2">
+          <article class="card">
+            <header class="card-head"><h3>Flexbox: justify-content</h3><code>display: flex</code></header>
+            <p class="demo-label">justify-content: flex-start</p>
+            <div class="flex-demo jc-start"><div class="box">1</div><div class="box alt">2</div><div class="box alt2">3</div></div>
+            <p class="demo-label">justify-content: center</p>
+            <div class="flex-demo jc-center"><div class="box">1</div><div class="box alt">2</div><div class="box alt2">3</div></div>
+            <p class="demo-label">justify-content: space-between</p>
+            <div class="flex-demo jc-between"><div class="box">1</div><div class="box alt">2</div><div class="box alt2">3</div></div>
+            <p class="demo-label">justify-content: space-evenly</p>
+            <div class="flex-demo jc-evenly"><div class="box">1</div><div class="box alt">2</div><div class="box alt2">3</div></div>
+          </article>
+
+          <article class="card">
+            <header class="card-head"><h3>Flexbox alignment</h3><code>flex-wrap</code></header>
+            <div class="grid-2" style="gap: 10px">
+              <div><p class="demo-label">align-items: flex-start</p><div class="flex-demo align-demo ai-start"><div class="box tall">A</div><div class="box">B</div><div class="box mid">C</div></div></div>
+              <div><p class="demo-label">align-items: center</p><div class="flex-demo align-demo ai-center"><div class="box tall">A</div><div class="box">B</div><div class="box mid">C</div></div></div>
+              <div><p class="demo-label">align-items: flex-end</p><div class="flex-demo align-demo ai-end"><div class="box tall">A</div><div class="box">B</div><div class="box mid">C</div></div></div>
+              <div><p class="demo-label">align-items: stretch</p><div class="flex-demo align-demo ai-stretch"><div class="box">A</div><div class="box">B</div><div class="box">C</div></div></div>
+            </div>
+            <p class="demo-label">flex-wrap: wrap</p>
+            <div class="flex-demo wrap-demo"><span class="tag">HTML</span><span class="tag">CSS</span><span class="tag">Flexbox</span><span class="tag">Grid</span><span class="tag">Tables</span><span class="tag">Forms</span><span class="tag">Dialogs</span><span class="tag">Popovers</span><span class="tag">SVG</span><span class="tag">Themes</span><span class="tag">Accessibility</span></div>
+            <p class="demo-label">flex-direction: column</p>
+            <div class="flex-demo column-demo"><div class="box">60%</div><div class="box alt">80%</div><div class="box alt2">60%</div></div>
+          </article>
+
+          <article class="card">
+            <header class="card-head"><h3>Grid areas and spans</h3><code>grid-template-areas</code></header>
+            <div class="grid-areas">
+              <div class="ga-a">a: spans two columns</div>
+              <div class="ga-b">b: spans two rows</div>
+              <div class="ga-c">c</div>
+              <div class="ga-d">d</div>
+              <div class="ga-e">e: full width</div>
+            </div>
+          </article>
+
+          <article class="card">
+            <header class="card-head"><h3>Holy-grail layout</h3><code>grid</code></header>
+            <div class="holy-grail">
+              <header class="hg-header">Header</header>
+              <nav class="hg-nav">Navigation</nav>
+              <main class="hg-main">Main content grows, the side columns keep 90px.</main>
+              <aside class="hg-aside">Aside</aside>
+              <footer class="hg-footer">Footer</footer>
+            </div>
+          </article>
+
+          <article class="card">
+            <header class="card-head"><h3>Sticky headings</h3><code>position: sticky</code></header>
+            <div id="contacts" class="scroll-box">
+              <h4>A</h4>
+              <ul><li>Ada Lovelace <span>Analyst</span></li><li>Alan Turing <span>Mathematician</span></li><li>Anita Borg <span>Engineer</span></li></ul>
+              <h4>B</h4>
+              <ul><li>Barbara Liskov <span>Professor</span></li><li>Bjarne Stroustrup <span>Designer</span></li></ul>
+              <h4>D</h4>
+              <ul><li>Dennis Ritchie <span>Engineer</span></li><li>Donald Knuth <span>Author</span></li></ul>
+              <h4>G</h4>
+              <ul><li>Grace Hopper <span>Admiral</span></li><li>Guido van Rossum <span>Designer</span></li></ul>
+              <h4>K</h4>
+              <ul><li>Ken Thompson <span>Engineer</span></li><li>Katherine Johnson <span>Mathematician</span></li></ul>
+              <h4>M</h4>
+              <ul><li>Margaret Hamilton <span>Engineer</span></li><li>Mary Kenneth Keller <span>Teacher</span></li></ul>
+            </div>
+          </article>
+
+          <article class="card">
+            <header class="card-head"><h3>Auto-fill grid</h3><code>auto-fill</code></header>
+            <div class="auto-grid">
+              <div>One</div><div>Two</div><div>Three</div><div>Four</div><div>Five</div><div>Six</div><div>Seven</div><div>Eight</div>
+            </div>
+            <p class="demo-label" style="margin-top: 16px">columns: 3</p>
+            <div class="columns-demo">Multi-column layout flows text into columns like a newspaper. Resize the window to see the auto-fill grid above rearrange its tiles, while this paragraph keeps three balanced columns with a rule between them.</div>
+          </article>
+        </div>
+      </section>
+
+      <!-- ================= Page 4: Typography and content ================= -->
+      <section id="page-content" class="page">
+        <div class="content-layout">
+          <article class="card prose">
+            <p class="eyebrow">Article</p>
+            <h1>Heading level one</h1>
+            <p class="lead">A lead paragraph introduces the article in a slightly larger, softer type.</p>
+            <p>Body text supports <strong>strong</strong>, <em>emphasis</em>, <mark>highlighted text</mark>, <code>inline code</code>, <kbd>Ctrl</kbd> + <kbd>S</kbd>, <abbr title="Cascading Style Sheets">CSS</abbr>, <small>small print</small>, H<sub>2</sub>O, x<sup>2</sup>, <del>removed</del> and <ins>inserted</ins> text.</p>
+            <h2>Heading level two</h2>
+            <p>Links never navigate by themselves. Activating one sends a <code>link_activated</code> event, and the backend decides what to do: try <a id="link-forms" href="#forms">jumping to the forms page</a>, <a id="link-docs" href="https://github.com/ui4me/ui4me-core">the project on GitHub</a>, or <a id="link-about" href="about.html">the about page</a> (a separate HTML file).</p>
+            <h3>Lists</h3>
+            <ul>
+              <li>An unordered list item</li>
+              <li>Another item with <strong>bold</strong> text</li>
+              <li>A third item</li>
+            </ul>
+            <ol>
+              <li>Write the HTML</li>
+              <li>Style it with CSS</li>
+              <li>Handle events in the backend</li>
+            </ol>
+            <h3>Quotation</h3>
+            <blockquote>
+              <p>Simplicity is prerequisite for reliability.</p>
+              <footer>Edsger W. Dijkstra</footer>
+            </blockquote>
+            <h3>Preformatted code</h3>
+            <pre><code><span class="tok-k">$onClick</span> = {
+    <span class="tok-k">param</span>($e)
+    <span class="tok-c"># Runs in your backend process</span>
+    <span class="tok-f">Set-UI4MEDocumentText</span> -Document $doc -Element status -Text <span class="tok-s">'Clicked!'</span>
+}</code></pre>
+            <h3>Description list</h3>
+            <dl class="terms">
+              <dt>Host</dt><dd>The native process that owns windows and draws HTML.</dd>
+              <dt>Backend</dt><dd>Your Python or PowerShell script.</dd>
+              <dt>Document</dt><dd>One loaded HTML page in one window.</dd>
+            </dl>
+          </article>
+
+          <div class="side-stack">
+            <figure class="card">
+              <img src="assets/landscape.svg" width="480" height="220" alt="Purple mountains under a pale sky with a yellow sun">
+              <figcaption>A local SVG image inside a figure, with alt text and a caption.</figcaption>
+            </figure>
+
+            <article class="card">
+              <header class="card-head"><h3>Links</h3></header>
+              <ul class="link-list">
+                <li><a id="link-layouts" href="#layouts">Layouts page</a><span class="badge">#hash</span></li>
+                <li><a id="link-web" href="https://example.org/">example.org</a><span class="badge info">https</span></li>
+                <li><a id="link-mail" href="mailto:hello@example.org">hello@example.org</a><span class="badge">mailto</span></li>
+                <li><a id="link-about-2" href="about.html">About this demo</a><span class="badge accent">.html file</span></li>
+              </ul>
+            </article>
+
+            <article class="card">
+              <header class="card-head"><h3>Accordion</h3><span class="badge">details name</span></header>
+              <details name="faq" open>
+                <summary>Is there a browser inside?</summary>
+                <p>No. A native engine parses the HTML, applies the CSS and draws the window itself.</p>
+              </details>
+              <details name="faq">
+                <summary>Can I use JavaScript?</summary>
+                <p>No. All behaviour lives in your backend, which receives events and changes the page.</p>
+              </details>
+              <details name="faq">
+                <summary>Which platforms are supported?</summary>
+                <p>Linux (Wayland) and Windows, with Python or PowerShell backends.</p>
+              </details>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= Page 5: Feedback and overlays ================= -->
+      <section id="page-overlays" class="page">
+        <div class="grid-3">
+          <article class="card">
+            <header class="card-head"><h3>Dialog</h3><span class="badge">&lt;dialog&gt;</span></header>
+            <p class="muted small">The backend opens a modal HTML dialog and reads which button closed it.</p>
+            <div class="actions" style="margin-top: 16px"><button id="open-dialog" class="btn primary" type="button">Open dialog</button></div>
+            <p id="dialog-result" class="muted small" style="margin-top: 12px">No answer yet.</p>
+          </article>
+
+          <article class="card">
+            <header class="card-head"><h3>Popover</h3><span class="badge">popover</span></header>
+            <p class="muted small">One button opens it natively with <code>popovertarget</code>; the other asks the backend.</p>
+            <div class="actions" style="margin-top: 16px">
+              <button class="btn" type="button" popovertarget="tips-popover">Open natively</button>
+              <button id="toggle-popover" class="btn" type="button">Toggle from backend</button>
+            </div>
+          </article>
+
+          <article class="card">
+            <header class="card-head"><h3>Counter</h3><span class="badge accent">state</span></header>
+            <div id="counter-controls" class="counter">
+              <button id="counter-dec" class="btn icon" type="button" aria-label="Decrease">&minus;</button>
+              <span id="counter-value" class="counter-value" role="status">0</span>
+              <button id="counter-inc" class="btn icon" type="button" aria-label="Increase">+</button>
+            </div>
+            <div class="actions" style="justify-content: center"><button id="counter-reset" class="btn ghost" type="button">Reset</button></div>
+          </article>
+
+          <article class="card span-2">
+            <header class="card-head"><h3>Toasts</h3><span class="badge">insert_html + trim_children</span></header>
+            <p class="muted small">The backend adds a toast to the corner of the window and keeps only the newest three.</p>
+            <div id="toast-buttons" class="actions" style="margin-top: 16px">
+              <button id="toast-success" class="btn" type="button">Success toast</button>
+              <button id="toast-warning" class="btn" type="button">Warning toast</button>
+              <button id="toast-error" class="btn" type="button">Error toast</button>
+              <button id="toast-clear" class="btn ghost" type="button">Clear all</button>
+            </div>
+          </article>
+
+          <article class="card">
+            <header class="card-head"><h3>Theme</h3><span class="badge">light-dark()</span></header>
+            <fieldset id="theme-choice" class="segmented" aria-label="Theme">
+              <label><input id="theme-mode-system" name="theme" type="radio" value="system" checked>System</label>
+              <label><input id="theme-mode-light" name="theme" type="radio" value="light">Light</label>
+              <label><input id="theme-mode-dark" name="theme" type="radio" value="dark">Dark</label>
+            </fieldset>
+            <div class="swatches"><span class="swatch sw-bg"></span><span class="swatch sw-surface"></span><span class="swatch sw-accent"></span><span class="swatch sw-success"></span><span class="swatch sw-warning"></span><span class="swatch sw-danger"></span></div>
+          </article>
+
+          <article class="card span-3">
+            <header class="card-head"><h3>Inline alerts and a loading indicator</h3><span class="badge">CSS only</span></header>
+            <div class="alerts">
+              <div class="alert info" role="note"><strong>Info</strong><span>Your settings are stored locally.</span></div>
+              <div class="alert success" role="note"><strong>Success</strong><span>The form was received by the backend.</span></div>
+              <div class="alert warning" role="note"><strong>Warning</strong><span>One field still needs your attention.</span></div>
+              <div class="alert error" role="note"><strong>Error</strong><span>The file could not be saved.</span></div>
+            </div>
+            <div class="loading"><span class="spinner" aria-hidden="true"></span><span class="muted small">A spinner made with a CSS animation (stopped when the desktop asks for reduced motion).</span></div>
+          </article>
+        </div>
+      </section>
+    </div>
+
+    <!-- ===== Status bar: the backend writes messages here ===== -->
+    <footer class="statusbar">
+      <span class="status-dot"></span>
+      <span id="status" role="status">Ready.</span>
+      <span class="spacer"></span>
+      <span id="status-page">Overview</span>
+    </footer>
+  </div>
+</div>
+
+<!-- ===== Overlays live outside the page sections ===== -->
+<dialog id="demo-dialog" class="dialog" aria-labelledby="dialog-title">
+  <h2 id="dialog-title">Publish your changes?</h2>
+  <p>This modal HTML dialog was opened by the backend. Press Escape to dismiss it, or choose an answer.</p>
+  <label class="field"><span>Release note</span>
+    <input id="dialog-note" type="text" value="Showcase update"></label>
+  <div class="dialog-actions">
+    <button id="dialog-cancel" class="btn" type="button">Cancel</button>
+    <button id="dialog-confirm" class="btn primary" type="button">Publish</button>
+  </div>
+</dialog>
+
+<div id="tips-popover" class="popover" popover="auto">
+  <h3>Quick tips</h3>
+  <ul>
+    <li>Press Escape or click outside to close this popover.</li>
+    <li>The sidebar buttons switch pages from the backend.</li>
+    <li>Links send a <code>link_activated</code> event.</li>
+  </ul>
+</div>
+
+<div id="toasts" class="toast-stack" aria-live="polite"></div>
+</body>
+</html>

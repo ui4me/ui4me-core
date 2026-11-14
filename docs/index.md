@@ -15,7 +15,15 @@
 
 ## Learn by building
 
-[Python recipes](guides/patterns.md) explain events, forms, document replacement, styling, dialogs, and native image buffers. [Python API reference](reference/python-api.md) covers the public `Application`, `Window`, `Document`, and `Node` objects. [PowerShell reference](reference/powershell-api.md) organizes the equivalent commands.
+Every Python page has a PowerShell twin with the same sections and equivalent examples:
+
+| Topic | Python | PowerShell |
+| --- | --- | --- |
+| Install | [Install for Python](guides/install-python.md) | [Install for PowerShell](guides/install-powershell.md) |
+| First app | [Your first Python app](guides/quickstart-python.md) | [Your first PowerShell app](guides/quickstart-powershell.md) |
+| Recipes: events, forms, document replacement, styling, dialogs, background work, live bitmaps | [Python recipes](guides/patterns.md) | [PowerShell recipes](guides/patterns-powershell.md) |
+| Every call | [Python API reference](reference/python-api.md) | [PowerShell command reference](reference/powershell-api.md) |
+| Example apps (`hello`, `notes`, `counter`, `frameless`, `live-bitmap`) | [`examples/python`](https://github.com/ui4me/ui4me-core/tree/main/examples/python) | [`powershell/examples`](https://github.com/ui4me/ui4me-core/tree/main/powershell/examples) |
 
 ## How it works
 

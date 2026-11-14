@@ -34,7 +34,7 @@ def validate(mod:Path)->dict:
         if not p.is_file() or digest(p)!=sha:raise ValueError(f'Changed package source: {p}')
     for rel in ('skills/ui4me-powershell/SKILL.md','skills/ui4me-powershell/references/powershell-api.md',
                 'README.md','docs/install-powershell.md','docs/quickstart-powershell.md','docs/powershell-api.md',
-                'docs/troubleshooting.md','licenses/LICENSE','licenses/THIRD_PARTY_NOTICES.md',
+                'docs/troubleshooting.md','docs/patterns-powershell.md','licenses/LICENSE','licenses/THIRD_PARTY_NOTICES.md',
                 'runtimes/linux-x64/ui4me_core/_bin/THIRD_PARTY_LICENSES.txt',
                 'runtimes/win-x64/ui4me_core/_bin/THIRD_PARTY_LICENSES.txt'):
         if not (mod/rel).is_file():raise ValueError(f'Missing packaged file: {rel}')

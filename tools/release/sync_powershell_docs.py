@@ -1,7 +1,8 @@
-"""Copy the PowerShell command reference into the self-contained agent skill.
+"""Copy the Python API and PowerShell command references into the self-contained agent skills.
 
-The skill (and the PowerShell Gallery package) must not depend on repository
-paths, so relative documentation links become absolute GitHub links.
+The skills (bundled in the wheel and the PowerShell Gallery package) must not
+depend on repository paths, so relative documentation links become absolute
+GitHub links. Both skills therefore carry the same full reference.
 usage: python tools/release/sync_powershell_docs.py [--check]
 """
 from __future__ import annotations
@@ -12,7 +13,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE = "https://github.com/ui4me/ui4me-core/blob/main/"
-PAIRS = [(ROOT / "docs/reference/powershell-api.md", ROOT / "skills/ui4me-powershell/references/powershell-api.md")]
+PAIRS = [(ROOT / "docs/reference/powershell-api.md", ROOT / "skills/ui4me-powershell/references/powershell-api.md"),
+         (ROOT / "docs/reference/python-api.md", ROOT / "skills/ui4me-python/references/python-api.md")]
 
 
 def standalone(source: Path) -> str:
