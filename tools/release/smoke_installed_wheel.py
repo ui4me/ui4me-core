@@ -44,4 +44,6 @@ with tempfile.TemporaryDirectory(prefix='ui4me wheel smoke ') as folder:
                             capture_output=True, text=True, encoding='utf-8', timeout=120)
     assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
     assert "SMOKE direct start ['arg one']" in result.stdout, (result.stdout, result.stderr)
+# Never fail after passing because the console cannot show a path (cp1252 pipes).
+sys.stdout.reconfigure(errors='backslashreplace')
 print('PASS installed Python wheel, native host, direct start, project generator and coding-agent skill:',binary,value.strip())

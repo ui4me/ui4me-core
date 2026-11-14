@@ -1,0 +1,67 @@
+{
+ "product": "UI4ME Core",
+ "version": "1.0.1",
+ "date": "2026-11-14",
+ "candidate_commit": "3e50227",
+ "note": "Release-candidate artifacts were built locally from the candidate commit's sdist; the publish workflow rebuilds and verifies the published artifacts on GitHub runners. The final commit adds only this record, the release notes, the source manifest and an encoding-safe print in tools/release/smoke_installed_wheel.py.",
+ "artifacts": {
+  "files": {
+   "ui4me_core-1.0.1.tar.gz": "3f290663fae18d88ceb18324453f79cba131434dc9ad1cca780da3a4eb61efac",
+   "ui4me_core-1.0.1-py3-none-manylinux_2_34_x86_64.whl": "7b0e2a4aff99eb467e79038415b7222cd7e7277174068d6500ee4e9bfec15bb4",
+   "ui4me_core-1.0.1-py3-none-win_amd64.whl": "e968f859a281053532a1c9b6f32fe43a7d7773b134fc121952762d34d144d404"
+  },
+  "linux_host_sha256": "be08dd8837158694c0a348f3a2a54b8815edcff648424e7630667fc8d64e9136",
+  "windows_host_sha256": "4f9b4b47f42f72014d9255ff128025dd6f65a137dbd1651ee2b4e62006537ba4",
+  "windows_wheel_host": "prebuilt from Rust sources identical to the candidate commit (verified per file; one doc-comment difference) instead of recompiled from the sdist extraction, because the Proxmox test node rebooted twice under sustained compile load"
+ },
+ "linux": {
+  "environment": "Debian 13, KDE Plasma 6 Wayland, 2048x1080, scale 1",
+  "source_gates": {
+   "cargo_fmt": "PASS",
+   "clippy_deny_warnings": "PASS",
+   "cargo_test_workspace": "1094 passed, 0 failed, 11 ignored",
+   "python_tool_tests": "120 run, all pass (1 skipped: Windows-only)",
+   "pester_pwsh_7_7": "54/54",
+   "verify_headless_renderer_faults": "PASS"
+  },
+  "artifact_checks": {
+   "twine_check": "PASS",
+   "verify_publish_dist": "PASS",
+   "cibuildwheel_smoke_manylinux_2_34": "PASS",
+   "clean_installs_python_3_10_3_12_3_13": "PASS",
+   "psgallery_stage_verify": "PASS",
+   "pester_on_staged_module": "54/54"
+  },
+  "native": {
+   "python_direct_start_installed_wheel": "4/4 scenarios PASS (real clicks + user close, Ctrl+C, second launch, backend crash)",
+   "uv_run": "4/4 PASS",
+   "pwsh_direct_start_staged_module": "4/4 PASS",
+   "powershell_qualify_harness_staged_module": "28/28 PASS",
+   "renderer_acceptance_automated_subset": "PASS",
+   "host_probe_automated_subset": "PASS (with real key input)",
+   "generated_projects_and_examples": "PASS (ui4me-new, New-UI4MEProject, hello, notes, live bitmap)"
+  }
+ },
+ "windows": {
+  "environment": "Windows Server 2022 x64, interactive RDP session, Python 3.13, PowerShell 7, Windows PowerShell 5.1.20348",
+  "source_gates": {
+   "host_config_tests": "8/8 incl. new Windows test",
+   "python_tool_tests": "all pass (3 skipped)",
+   "pester_pwsh_7": "54/54",
+   "pester_windows_powershell_5_1": "54/54",
+   "verify_headless_renderer_faults": "PASS"
+  },
+  "native": {
+   "python_direct_start_installed_wheel": "4/4 PASS (interrupt = launcher killed; host removed by kill-on-close job)",
+   "pwsh_direct_start_installed_module": "4/4 PASS",
+   "windows_powershell_5_1_direct_start_installed_module": "4/4 PASS",
+   "powershell_qualify_harness_pwsh": "28/28 PASS",
+   "powershell_qualify_harness_5_1": "28/28 PASS",
+   "installed_wheel_smoke": "PASS"
+  }
+ },
+ "not_executed": [
+  "Windows 10/11 desktop editions (Windows Server 2022 qualified)",
+  "Wayland desktops other than KDE Plasma 6"
+ ]
+}

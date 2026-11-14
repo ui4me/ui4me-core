@@ -35,4 +35,20 @@ Linux x86-64 (glibc 2.34+, Wayland desktop session) and Windows x64; Python 3.10
 
 ## Qualification
 
-QUALIFICATION_PENDING
+Qualified on 2026-11-14 with release-candidate artifacts built from one sdist (full record: `tools/release/records/qualification-1.0.1.json`).
+
+| | Linux (Debian 13, KDE Plasma 6, Wayland) | Windows Server 2022 x64 (interactive session) |
+| --- | --- | --- |
+| Source gates | fmt, Clippy with `-D warnings`, 1094 Rust tests, 120 Python tool tests, Pester 54/54, headless, renderer and failure-injection suites | host configuration tests including the new Windows test, Python tool tests, Pester 54/54 on PowerShell 7 and 54/54 on 5.1, headless, renderer and failure-injection suites |
+| Packages | `twine check`, release-set verifier, manylinux smoke test, clean installs on Python 3.10, 3.12 and 3.13, Gallery stage verifier, Pester against the staged module | installed-wheel smoke test; staged module installed for PowerShell 7 and 5.1 |
+| Direct start with real windows and real input: normal close, Ctrl+C or killed launcher, second launch, backend crash | `python app.py` 4/4, `uv run app.py` 4/4, `pwsh -File` 4/4 | `python app.py` 4/4, `pwsh -File` 4/4, `powershell.exe -File` 4/4 |
+| PowerShell qualification harness (real input) | 28/28 | 28/28 on PowerShell 7, 28/28 on 5.1 |
+| Other | renderer and host-probe automated subsets, generated projects, examples | |
+
+### Known limitations
+
+- Windows: a PowerShell app's own console output (`Write-Output`, `Write-Host`) loses non-ASCII characters on the way to the terminal; use `[Console]::Out.WriteLine` for exact text. The UI is unaffected.
+- After Ctrl+C, a PowerShell launcher exits with the host's status (the app still shuts down gracefully); Python reports 128 + the signal number.
+- If a window is closed at the very moment its backend is exiting after a failure, the status line can keep saying "Waiting for application close decision"; close it again.
+- Rendering: dashed or dotted borders combined with `border-radius` are not drawn, and `option:checked` colours in `<select multiple>` are ignored. Date, time and colour inputs are still rejected (see [HTML and CSS support](../concepts/html-css-scope.md)).
+- Only Windows Server 2022 and KDE Plasma 6 on Wayland were qualified for this release.
