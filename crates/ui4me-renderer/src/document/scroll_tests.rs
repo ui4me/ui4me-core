@@ -535,3 +535,28 @@ fn the_new_properties_parse_without_diagnostics() {
         d.diagnostics()
     );
 }
+
+#[test]
+fn descendants_of_a_fixed_box_do_not_move_with_viewport_scroll() {
+    // A modal <dialog> is position:fixed in the top layer: its controls stay put while the page
+    // scrolls, so their reported (accessibility / element) rects must not subtract the page offset.
+    let mut d = Document::parse(
+        "<!doctype html><style>body{margin:0}#tall{height:3000px}\
+         #fx{position:fixed;top:50px;left:10px;width:200px;height:100px}#child{height:20px}</style>\
+         <div id=tall></div><div id=fx><div id=child>x</div></div>",
+    )
+    .unwrap();
+    d.use_manual_clock();
+    d.render(400, 300, 1.0).unwrap();
+    let before = d.element_rect("child").unwrap().unwrap();
+    d.scroll_to(None, None, Some(400.0)).unwrap();
+    d.render(400, 300, 1.0).unwrap();
+    let after = d.element_rect("child").unwrap().unwrap();
+    let fixed = d.element_rect("fx").unwrap().unwrap();
+    assert_eq!(fixed.y, 50.0, "the fixed box itself stays at top:50px");
+    assert_eq!(
+        after.y, before.y,
+        "a fixed box's child does not move with the viewport"
+    );
+    assert_eq!(after.y, 50.0);
+}

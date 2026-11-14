@@ -1170,12 +1170,9 @@ impl Document {
         }
         let (x0, y0, x1, y1) = bounds?;
         let (mut sx, mut sy) = (0.0, 0.0);
-        // A `fixed` box does not scroll with its containers (an anchored one follows its anchor, above).
-        let fixed = tree.fragments_of(n).first().is_some_and(|&f| {
-            matches!(&tree.get(f).kind, crate::layout::fragment::FragmentKind::Box(b)
-                if b.extras.position == crate::layout::box_tree::PositionValue::Fixed)
-        });
-        for e in self.pipeline.scroll_chain(n).into_iter().filter(|_| !fixed) {
+        // A `fixed` box, and everything inside one (for example a modal `<dialog>`'s controls), does
+        // not scroll with the containers outside it (an anchored box follows its anchor, above).
+        for e in self.pipeline.scroll_chain_until_fixed(n) {
             if e.target != ScrollTarget::Node(n) {
                 sx += e.offset.0;
                 sy += e.offset.1;
