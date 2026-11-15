@@ -922,6 +922,55 @@ namespace UI4ME {
     }
 
     /// <summary>
+    /// Windows: while a Start-UI4MEScript launcher waits for the host, consume
+    /// Ctrl+C and Ctrl+Break for this process. The host is in the same console
+    /// and shuts the application down itself; without this, PowerShell's console
+    /// host would stop the pipeline (Ctrl+C) or enter the script debugger
+    /// (Ctrl+Break). Handlers run newest first, so this one is asked before
+    /// PowerShell's. Other events (close, logoff, shutdown) are not consumed.
+    /// </summary>
+    public static class ConsoleInterrupt {
+        private delegate bool ConsoleHandler(uint controlType);
+        private static ConsoleHandler handler;   // kept alive while installed
+        private static int count;
+        private static readonly object gate = new object();
+
+        /// <summary>Ctrl+C/Ctrl+Break events received since Install.</summary>
+        public static int Count { get { return Volatile.Read(ref count); } }
+        public static bool Installed { get { lock (gate) return handler != null; } }
+
+        /// <summary>Installs the handler (Windows only); false elsewhere or on failure.</summary>
+        public static bool Install() {
+            if (Environment.OSVersion.Platform != PlatformID.Win32NT) return false;
+            lock (gate) {
+                Interlocked.Exchange(ref count, 0);
+                if (handler != null) return true;
+                ConsoleHandler candidate = new ConsoleHandler(OnEvent);
+                if (!SetConsoleCtrlHandler(candidate, true)) return false;
+                handler = candidate;
+                return true;
+            }
+        }
+
+        public static void Uninstall() {
+            lock (gate) {
+                if (handler == null) return;
+                SetConsoleCtrlHandler(handler, false);
+                handler = null;
+            }
+        }
+
+        private static bool OnEvent(uint controlType) {
+            if (controlType != 0 && controlType != 1) return false;   // CTRL_C_EVENT, CTRL_BREAK_EVENT
+            Interlocked.Increment(ref count);
+            return true;
+        }
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool SetConsoleCtrlHandler(ConsoleHandler handler, bool add);
+    }
+
+    /// <summary>
     /// Runs the native host for Start-UI4MEScript. Host log records on stderr
     /// are relayed as plain text: backend output to the matching console stream,
     /// host warnings/errors summarized (all records when verbose). The host's

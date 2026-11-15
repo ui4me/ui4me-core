@@ -31,7 +31,7 @@ function Initialize-UI4MEHelper {
         Add-Type -TypeDefinition $source -Language CSharp -ErrorAction Stop
         $existing = 'UI4ME.Transport' -as [type]
     }
-    if ($null -eq $existing -or $null -eq $existing.GetMethod('Register') -or $null -eq ('UI4ME.MappedBitmap' -as [type]) -or $null -eq ('UI4ME.HostProcess' -as [type])) {
+    if ($null -eq $existing -or $null -eq $existing.GetMethod('Register') -or $null -eq ('UI4ME.MappedBitmap' -as [type]) -or $null -eq ('UI4ME.HostProcess' -as [type]) -or $null -eq ('UI4ME.ConsoleInterrupt' -as [type])) {
         throw 'An incompatible UI4ME helper is already loaded in this process. Start a new PowerShell process.'
     }
     $script:UI4MEHelperLoaded = $true
@@ -1734,6 +1734,8 @@ function Start-UI4MEScript {
     $code = 1
     $finished = $false
     $failed = $false
+    $consoleGuard = $false
+    $forcedCode = $null
     $previousMarker = $env:UI4ME_DIRECT_START
     try {
         $manifest = Join-Path $folder 'app.toml'
@@ -1753,14 +1755,32 @@ function Start-UI4MEScript {
         } finally {
             $env:UI4ME_DIRECT_START = $previousMarker
         }
-        # Short waits keep Ctrl+C responsive; the finally block handles it.
-        while (-not $runner.WaitForExit(200)) { }
+        # Windows: Ctrl+C/Ctrl+Break are consumed here (the host, in the same
+        # console, shuts down by itself); otherwise PowerShell would stop this
+        # script or enter its debugger. Elsewhere Ctrl+C stops the pipeline and
+        # the finally block waits for the host.
+        $consoleGuard = [UI4ME.ConsoleInterrupt]::Install()
+        $interruptClock = $null
+        # Short waits keep Ctrl+C responsive.
+        while (-not $runner.WaitForExit(200)) {
+            if ($consoleGuard -and [UI4ME.ConsoleInterrupt]::Count -gt 0) {
+                if ($null -eq $interruptClock) { $interruptClock = [Diagnostics.Stopwatch]::StartNew() }
+                if ([UI4ME.ConsoleInterrupt]::Count -gt 1 -or $interruptClock.ElapsedMilliseconds -gt $ShutdownTimeoutMilliseconds + 5000) {
+                    $runner.Stop()   # a second interrupt, or the host did not stop in time
+                    $forcedCode = 130
+                    break
+                }
+            }
+        }
         $code = $runner.ExitCode
+        if ($consoleGuard -and [UI4ME.ConsoleInterrupt]::Count -gt 0 -and $code -eq -1073741510) { $code = 130 }
+        if ($null -ne $forcedCode) { $code = $forcedCode }
         $finished = $true
     } catch {
         $failed = $true
         throw
     } finally {
+        if ($consoleGuard) { [UI4ME.ConsoleInterrupt]::Uninstall() }
         $interrupted = -not $finished -and -not $failed
         if ($interrupted) {
             # Neither completed nor failed: the pipeline was stopped (Ctrl+C).
