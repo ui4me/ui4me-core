@@ -213,6 +213,8 @@ enum Via {
     Ref,
     /// Instantiated content (`use`, `feImage`): it also inherits the referencing element's paint.
     Use,
+    /// A paint server or marker the element's (inherited or declared) paint resolves to.
+    Paint,
 }
 
 /// The id an `href` value links to, parsed as usvg parses it (svgtypes `IRI`: leading spaces, `#`,
@@ -571,7 +573,7 @@ fn effective_depth(doc: &roxmltree::Document<'_>) -> Result<u32, Status> {
             );
             // Inherited and declared paint is resolved only where something is painted, and
             // only a paint server (fill, stroke) or a marker (marker-*) is followed.
-            out.extend(paint_targets(e).map(|t| (t, Some(Via::Ref))));
+            out.extend(paint_targets(e).map(|t| (t, Some(Via::Paint))));
         }
         for &(t, via) in &refs[ref_start[e] as usize..ref_start[e + 1] as usize] {
             out.push((t, Some(via)));
@@ -588,8 +590,21 @@ fn effective_depth(doc: &roxmltree::Document<'_>) -> Result<u32, Status> {
     const BLACK: u8 = 2;
     let mut color = vec![WHITE; elements.len()];
     let mut depth = vec![0u32; elements.len()];
-    // Elements converted for e's subtree with every reference instantiated where it is used.
+    // Elements converted for e's subtree with every reference instantiated where it is used. A
+    // pattern counts at every use too (renderer review #7): usvg caches its conversion by id only
+    // when the content converts to something (an empty one is converted again at every use), and
+    // even a cached pattern's content is walked again for every painted element afterwards
+    // (`Tree::collect_paint_servers` via `Node::subroots`) and drawn per element by resvg.
     let mut expanded = vec![0u64; elements.len()];
+    // Painted elements in e's subtree, `use` content included: each resolves the paint a `use`
+    // passes down to its instantiated content.
+    let mut painted = vec![0u64; elements.len()];
+    let too_many = || {
+        err(
+            Code::DecodeFailed,
+            format!("SVG references expand to more than {SVG_MAX_EXPANDED} elements"),
+        )
+    };
     let mut next = Vec::new();
     let mut stack: Vec<(u32, bool)> = vec![(0, false)];
     while let Some((e, exit)) = stack.pop() {
@@ -618,23 +633,40 @@ fn effective_depth(doc: &roxmltree::Document<'_>) -> Result<u32, Status> {
             .map(|t| depth[t as usize])
             .max()
             .unwrap_or(0);
+        // What one painted element costs for the paint e passes down.
+        let passed = paint_targets(e).fold(0u64, |a, t| a.saturating_add(expanded[t as usize]));
+        let instantiates = matches!(elements[e].tag_name().name(), "use" | "feImage");
         let mut below = 0u32;
         let mut size = 1u64;
+        let mut paints_here = u64::from(paints(elements[e].tag_name().name()) && !instantiates);
         for &(s, via) in &next {
             let d = depth[s as usize];
             below = below.max(match via {
                 Some(Via::Use) => d.saturating_add(inherited),
                 _ => d,
             });
-            size = size.saturating_add(expanded[s as usize]);
+            let t = s as usize;
+            let add = match via {
+                // The instantiated content's painted elements each resolve the passed paint.
+                Some(Via::Use) => {
+                    paints_here = paints_here.saturating_add(painted[t]);
+                    expanded[t].saturating_add(painted[t].saturating_mul(passed))
+                }
+                // Counted with the instantiated content above.
+                Some(Via::Paint) if instantiates => 0,
+                None => {
+                    paints_here = paints_here.saturating_add(painted[t]);
+                    expanded[t]
+                }
+                Some(Via::Paint | Via::Ref) => expanded[t],
+            };
+            size = size.saturating_add(add);
         }
         if size > SVG_MAX_EXPANDED {
-            return Err(err(
-                Code::DecodeFailed,
-                format!("SVG references expand to more than {SVG_MAX_EXPANDED} elements"),
-            ));
+            return Err(too_many());
         }
         expanded[e] = size;
+        painted[e] = paints_here;
         let d = below.saturating_add(1);
         if d > SVG_MAX_DEPTH {
             // Every element is inside the root, so the root is at least this deep.

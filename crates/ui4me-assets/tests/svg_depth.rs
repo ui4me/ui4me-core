@@ -401,6 +401,73 @@ fn ordinary_references_are_accepted() {
     decode(svg).expect("root gradient fill decodes");
 }
 
+/// `n` patterns, each holding three rects painted with the previous pattern; `extra` is added to
+/// each rect.
+fn pattern_chain(n: usize, extra: &str) -> String {
+    let mut s = format!(
+        "{OPEN}<pattern id='p0' width='4' height='4'><rect width='1' height='1' stroke='none'/></pattern>"
+    );
+    for i in 1..n {
+        let rect = format!(
+            "<rect width='1' height='1' stroke='none' fill='url(#p{})'{extra}/>",
+            i - 1
+        );
+        s.push_str(&format!(
+            "<pattern id='p{i}' width='4' height='4'>{}</pattern>",
+            rect.repeat(3)
+        ));
+    }
+    s.push_str(&format!(
+        "<rect width='9' height='9' fill='url(#p{})'/></svg>",
+        n - 1
+    ));
+    s
+}
+
+/// Renderer review #7: a pattern counts at every use. usvg caches a converted pattern by id, but
+/// walks its content again for every element painted with it (`Tree::collect_paint_servers`), so a
+/// chain where each pattern paints three shapes with the previous one is exponential even cached
+/// (40 links did not finish in minutes).
+#[test]
+fn a_cached_pattern_chain_is_refused() {
+    let started = std::time::Instant::now();
+    refused(&pattern_chain(40, ""));
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    // A short chain is fine.
+    decode(&pattern_chain(4, "")).expect("a short pattern chain decodes");
+}
+
+/// Renderer review #7: a pattern whose content converts to nothing is not cached, usvg converts it
+/// again at every use (a 13-link chain of such patterns takes 0.4 s, each link triples it).
+#[test]
+fn an_uncached_pattern_chain_is_refused() {
+    // The rects reference a missing filter: usvg drops them after resolving their fill.
+    let s = pattern_chain(30, " filter='url(#missing)'");
+    let started = std::time::Instant::now();
+    refused(&s);
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+}
+
+/// Renderer review #7: paint inherited at a `use` applies to every shape it instantiates. Each
+/// marker here draws a two-path group through a `use` that inherits the previous marker, so usvg
+/// draws marker 0 2^n times (n = 18 took 10.7 s); the count must include it.
+#[test]
+fn paint_inherited_through_use_is_counted_per_instantiated_shape() {
+    let mut s = format!(
+        "{OPEN}<defs><g id='two'><path d='M0 0 L4 4' stroke='black'/><path d='M0 0 L4 4' stroke='black'/></g></defs><marker id='m0' markerWidth='4' markerHeight='4'><path d='M0 0 L4 4' stroke='black'/></marker>"
+    );
+    for i in 1..24 {
+        s.push_str(&format!(
+            "<marker id='m{i}' markerWidth='4' markerHeight='4'><g marker-end='url(#m{})'><use href='#two'/></g></marker>",
+            i - 1
+        ));
+    }
+    s.push_str("<path d='M0 0 L9 9' stroke='black' marker-end='url(#m23)'/></svg>");
+    let started = std::time::Instant::now();
+    refused(&s);
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+}
+
 #[test]
 fn exponential_reference_fan_out_is_refused() {
     // Found by harness_svg_depth: each mask is masked by the previous one and also holds a path
