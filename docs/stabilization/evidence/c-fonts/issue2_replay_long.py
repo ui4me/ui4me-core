@@ -38,6 +38,23 @@ if CSS == "custom":
 if CSS in ("full", "nohas", "custom") or CSS.startswith("slice:"):
     d.add_stylesheet(theme)
 def rss(pid):
+    """Host resident set in KiB: VmRSS on Linux, the working set on Windows."""
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+        class PMC(ctypes.Structure):
+            _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD)] + [
+                (n, ctypes.c_size_t) for n in ("PeakWorkingSetSize", "WorkingSetSize", "QuotaPeakPagedPoolUsage",
+                 "QuotaPagedPoolUsage", "QuotaPeakNonPagedPoolUsage", "QuotaNonPagedPoolUsage", "PagefileUsage", "PeakPagefileUsage")]
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.OpenProcess.restype = wintypes.HANDLE
+        h = k32.OpenProcess(0x1000 | 0x0010, False, pid)  # QUERY_LIMITED_INFORMATION | VM_READ
+        try:
+            pmc = PMC(); pmc.cb = ctypes.sizeof(PMC)
+            if not k32.K32GetProcessMemoryInfo(h, ctypes.byref(pmc), pmc.cb): return -1
+            return pmc.WorkingSetSize // 1024
+        finally:
+            k32.CloseHandle(h)
     for line in open(f"/proc/{pid}/status"):
         if line.startswith("VmRSS:"): return int(line.split()[1])
 def body():
