@@ -130,6 +130,14 @@ fn case(name: &str) -> String {
         "use-chain-at-cap" => use_chain(cap / 2 - 1),
         // The inner document's depth plus the outer document's stays within the cap.
         "nested-image-at-cap" => nested_image(cap / 2, &groups(cap / 2)),
+        // True paint cycles (renderer review #1): a pattern's content inherits the pattern from the
+        // pattern's own ancestors; usvg converts it again before caching it and recurses without end.
+        "raw-pattern-inherits-itself" => format!(
+            "{OPEN}<g fill='url(#p)'><pattern id='p' width='4' height='4' patternUnits='userSpaceOnUse'><rect width='2' height='2'/></pattern><rect width='9' height='9'/></g></svg>"
+        ),
+        "raw-pattern-inherits-itself-through-use" => format!(
+            "{OPEN}<defs><rect id='r' width='2' height='2'/></defs><g fill='url(#p)'><pattern id='p' width='4' height='4' patternUnits='userSpaceOnUse'><use href='#r'/></pattern><rect width='9' height='9'/></g></svg>"
+        ),
         other => panic!("unknown case {other}"),
     }
 }
@@ -155,6 +163,15 @@ fn decode(svg: &str) -> Result<(), Code> {
     Ok(())
 }
 
+/// usvg and resvg alone, without the pre-scan.
+fn decode_raw(svg: &str) -> Result<(), Code> {
+    let tree =
+        usvg::Tree::from_str(svg, &usvg::Options::default()).map_err(|_| Code::DecodeFailed)?;
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(40, 40).unwrap();
+    resvg::render(&tree, Default::default(), &mut pixmap.as_mut());
+    Ok(())
+}
+
 /// Child-process entry: `UI4ME_SVG_PROBE=<case>,<stack KiB>`.
 #[test]
 #[ignore = "child-process entry of the SVG depth tests"]
@@ -164,9 +181,11 @@ fn svg_probe() {
     };
     let (name, kib) = spec.split_once(',').unwrap();
     let (svg, kib) = (case(name), kib.parse::<usize>().unwrap());
+    // `raw-` cases bypass the pre-scan: they show what usvg/resvg themselves do with the document.
+    let raw = name.starts_with("raw-");
     let r = std::thread::Builder::new()
         .stack_size(kib * 1024)
-        .spawn(move || decode(&svg))
+        .spawn(move || if raw { decode_raw(&svg) } else { decode(&svg) })
         .unwrap()
         .join()
         .expect("probe panicked");
@@ -291,8 +310,72 @@ fn reference_cycles_are_refused() {
     refused(&format!(
         "{OPEN}<g fill='url(#p)'><pattern id='p' width='4' height='4'><rect width='2' height='2'/></pattern><rect width='9' height='9'/></g></svg>"
     ));
-    // `use` of its own ancestor.
-    refused(&format!("{OPEN}<g id='g'><use href='#g'/></g></svg>"));
+    // Two `use` elements instantiating each other's group: usvg breaks only a `use` of its own
+    // ancestor (or of a group holding a `use` back to it), not this. (A `use` of its own ancestor
+    // was refused here until renderer review #1; usvg skips it, see the next test.)
+    refused(&format!(
+        "{OPEN}<g id='a'><use href='#b'/></g><g id='b'><use href='#a'/></g></svg>"
+    ));
+}
+
+/// Renderer review #1: documents usvg renders although a naive reference graph has a cycle.
+/// usvg skips the recursive step in each (a marker never re-enters a marker being drawn, a
+/// gradient `href` to itself ends the chain, a `use` of its own ancestor is skipped) or the
+/// content does not inherit the reference at all (a pattern's content sets its own fill).
+#[test]
+fn self_references_usvg_resolves_are_accepted() {
+    let cases = [
+        (
+            "style-sheet marker on the marker's own path",
+            format!(
+                "{OPEN}<style>path{{marker-end:url(#m)}}</style><marker id='m' markerWidth='4' markerHeight='4'><path d='M0 0 L4 4' stroke='black'/></marker><path d='M0 0 L9 9' stroke='black'/></svg>"
+            ),
+        ),
+        (
+            "root pattern fill whose content sets its own fill",
+            "<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' fill='url(#p)'><defs><pattern id='p' width='4' height='4' patternUnits='userSpaceOnUse'><rect width='2' height='2' fill='red'/></pattern></defs><rect width='9' height='9'/></svg>".to_string(),
+        ),
+        (
+            "marker inherited by the content of a marker defined in the same group",
+            format!(
+                "{OPEN}<g marker-end='url(#m)'><marker id='m' markerWidth='4' markerHeight='4'><path d='M0 0 L4 4' stroke='black'/></marker><path d='M0 0 L9 9' stroke='black'/></g></svg>"
+            ),
+        ),
+        (
+            "gradient href to itself",
+            format!(
+                "{OPEN}<linearGradient id='g' href='#g'><stop offset='0' stop-color='red'/><stop offset='1' stop-color='blue'/></linearGradient><rect width='9' height='9' fill='url(#g)'/></svg>"
+            ),
+        ),
+        (
+            "use of its own ancestor",
+            format!("{OPEN}<g id='a'><rect width='3' height='3'/><use href='#a'/></g></svg>"),
+        ),
+    ];
+    let failures: Vec<String> = cases
+        .iter()
+        .filter_map(|(name, svg)| {
+            decode_raw(svg).expect("usvg alone renders it");
+            decode(svg).err().map(|code| format!("{name}: {code:?}"))
+        })
+        .collect();
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// Renderer review #1: the paint cycles the pre-scan still refuses really overflow usvg.
+#[test]
+fn refused_paint_cycles_overflow_usvg_without_the_pre_scan() {
+    let kib = ASSET_WORKER_STACK_BYTES / 1024;
+    for name in [
+        "raw-pattern-inherits-itself",
+        "raw-pattern-inherits-itself-through-use",
+    ] {
+        refused(&case(name));
+        assert!(
+            probe(name, kib).is_err(),
+            "{name}: usvg alone must not complete on the full worker stack"
+        );
+    }
 }
 
 #[test]

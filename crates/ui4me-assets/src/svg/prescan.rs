@@ -16,6 +16,13 @@
 //! reference cycles (usvg breaks only one- and two-step cycles) and
 //! style-sheet selectors with more than [`SVG_MAX_SELECTOR_COMPOUNDS`] compound selectors (matched
 //! recursively by simplecss), all as `DECODE_FAILED` before usvg sees the bytes.
+//!
+//! The reference graph follows usvg's semantics, so a document usvg renders is not refused for a
+//! cycle usvg never enters (renderer review #1): inherited paint is resolved only at painted
+//! elements (shapes, text, `use`), a referenced pattern's or marker's content inherits from that
+//! element's own ancestors, a marker reference inside the marker's own content is never followed
+//! (usvg does not re-enter a marker it is drawing), and the `use` and `href` self-references usvg
+//! skips add no edge.
 
 use crate::decode::SvgNatural;
 pub use crate::policy::{SVG_MAX_DEPTH, SVG_MAX_EXPANDED, SVG_MAX_SELECTOR_COMPOUNDS};
@@ -208,6 +215,45 @@ enum Via {
     Use,
 }
 
+/// The id an `href` value links to, parsed as usvg parses it (svgtypes `IRI`: leading spaces, `#`,
+/// the id up to a space, then only spaces).
+fn iri_id(value: &str) -> Option<&str> {
+    let rest = value.trim_start_matches(' ').strip_prefix('#')?;
+    let end = rest.find(' ').unwrap_or(rest.len());
+    let (id, tail) = rest.split_at(end);
+    (!id.is_empty() && tail.bytes().all(|b| b == b' ')).then_some(id)
+}
+
+/// The `href` usvg follows for a `use`: the unprefixed one, else `xlink:href`.
+fn use_href<'a>(node: roxmltree::Node<'a, '_>) -> Option<&'a str> {
+    let href = |ns: Option<&str>| {
+        node.attributes()
+            .find(|a| a.name() == "href" && a.namespace() == ns)
+            .map(|a| a.value())
+    };
+    href(None).or_else(|| href(Some("http://www.w3.org/1999/xlink")))
+}
+
+/// Elements whose conversion resolves the inherited `fill`, `stroke` and `marker-*` (shapes and
+/// text), and those whose instantiated content inherits them (`use`, `feImage`).
+fn paints(tag: &str) -> bool {
+    matches!(
+        tag,
+        "rect"
+            | "circle"
+            | "ellipse"
+            | "line"
+            | "polyline"
+            | "polygon"
+            | "path"
+            | "text"
+            | "tspan"
+            | "textPath"
+            | "use"
+            | "feImage"
+    )
+}
+
 /// Every `url(#id)` in a property value.
 fn url_ids(value: &str) -> impl Iterator<Item = &str> {
     value.match_indices("url(").filter_map(move |(i, _)| {
@@ -286,6 +332,49 @@ fn effective_depth(doc: &roxmltree::Document<'_>) -> Result<u32, Status> {
             ids.entry(id).or_default().push(i as u32);
         }
     }
+    // `elements` is in document order: e's subtree is e..=last[e].
+    let mut last: Vec<u32> = (0..elements.len() as u32).collect();
+    for i in (1..elements.len()).rev() {
+        if let Some(p) = elements[i].parent_element() {
+            let p = of(p) as usize;
+            last[p] = last[p].max(last[i]);
+        }
+    }
+    let inside = |e: u32, ancestor: u32| e > ancestor && e <= last[ancestor as usize];
+
+    // `use` elements usvg skips as recursive (svgtree `parse_svg_use_element`): a `use` of itself,
+    // or of an element holding a `use` of that element or of this `use`. usvg resolves a `use`
+    // to the first element with the id.
+    let use_target: Vec<u32> = elements
+        .iter()
+        .map(|n| {
+            if n.tag_name().name() != "use" {
+                return NONE;
+            }
+            use_href(*n)
+                .and_then(iri_id)
+                .and_then(|id| ids.get(id))
+                .map_or(NONE, |t| t[0])
+        })
+        .collect();
+    let mut uses_of: HashMap<u32, Vec<u32>> = HashMap::new();
+    for (u, &t) in use_target.iter().enumerate() {
+        if t != NONE && elements[u].tag_name().namespace() == Some(SVG_NS) {
+            uses_of.entry(t).or_default().push(u as u32);
+        }
+    }
+    let used_inside = |of_element: u32, holder: u32| {
+        uses_of
+            .get(&of_element)
+            .is_some_and(|us| us.iter().any(|&v| inside(v, holder)))
+    };
+    let skipped_use: Vec<bool> = use_target
+        .iter()
+        .enumerate()
+        .map(|(u, &t)| {
+            t != NONE && (t == u as u32 || used_inside(t, t) || used_inside(u as u32, t))
+        })
+        .collect();
 
     // Author style sheets, as usvg reads them; only rules that reference something matter here.
     let mut sheet = simplecss::StyleSheet::new();
@@ -320,7 +409,7 @@ fn effective_depth(doc: &roxmltree::Document<'_>) -> Result<u32, Status> {
     // Inherited paint state: an index into `states` (nearest declaration per INHERITED slot).
     let mut states: Vec<[u32; 5]> = vec![[NONE; 5]];
     let mut state_of: Vec<u32> = Vec::with_capacity(elements.len());
-    for node in &elements {
+    for (e, node) in elements.iter().enumerate() {
         ref_start.push(refs.len() as u32);
         let tag = node.tag_name().name();
         let parent_state = node
@@ -372,18 +461,19 @@ fn effective_depth(doc: &roxmltree::Document<'_>) -> Result<u32, Status> {
                     } else {
                         Via::Ref
                     };
-                    if matches!(
-                        tag,
-                        "use"
-                            | "feImage"
-                            | "pattern"
-                            | "linearGradient"
-                            | "radialGradient"
-                            | "filter"
-                            | "textPath"
-                    ) {
+                    let followed = match tag {
+                        "use" => !skipped_use[e],
+                        "feImage" | "pattern" | "linearGradient" | "radialGradient" | "filter"
+                        | "textPath" => true,
+                        _ => false,
+                    };
+                    if followed {
+                        // An `href` to the element itself ends usvg's chain (`HrefIter`) or is
+                        // ignored (`use`, `feImage`, `textPath`).
                         for &t in ids.get(id.trim()).into_iter().flatten() {
-                            refs.push((t, via));
+                            if t != e as u32 {
+                                refs.push((t, via));
+                            }
                         }
                     }
                 }
@@ -411,6 +501,56 @@ fn effective_depth(doc: &roxmltree::Document<'_>) -> Result<u32, Status> {
     }
     ref_start.push(refs.len() as u32);
 
+    // A marker's content is converted only while that marker is being drawn, and usvg never
+    // re-enters a marker on its stack (`State::parent_markers`). So a marker reference from inside
+    // the marker's own subtree is never followed, provided nothing else can reach that content:
+    // no element between the marker and the referencing element is itself a reference target.
+    // `own_marker[e]` is the nearest marker ancestor of e reached that way.
+    let mut referenced = vec![false; elements.len()];
+    for t in refs
+        .iter()
+        .map(|r| r.0)
+        .chain(states.iter().flatten().copied())
+    {
+        if t != NONE {
+            referenced[t as usize] = true;
+        }
+    }
+    let mut own_marker = vec![NONE; elements.len()];
+    for e in 1..elements.len() {
+        if let Some(p) = elements[e].parent_element()
+            && !referenced[e]
+        {
+            let p = of(p);
+            own_marker[e] = if elements[p as usize].tag_name().name() == "marker" {
+                p
+            } else {
+                own_marker[p as usize]
+            };
+        }
+    }
+
+    // The paint servers and markers e's inherited and declared paint makes usvg convert. Paint is
+    // resolved only where something is painted, and only a paint server (`fill`, `stroke`) or a
+    // marker (`marker-*`) is followed.
+    let (elements, own_marker) = (&elements, &own_marker);
+    let paint_targets = |e: usize| {
+        let painted = paints(elements[e].tag_name().name());
+        states[state_of[e] as usize]
+            .iter()
+            .enumerate()
+            .filter(move |&(k, &t)| {
+                painted
+                    && t != NONE
+                    && match elements[t as usize].tag_name().name() {
+                        "pattern" | "linearGradient" | "radialGradient" => k < 2,
+                        "marker" => k >= 2 && own_marker[e] != t,
+                        _ => false,
+                    }
+            })
+            .map(|(_, &t)| t)
+    };
+
     // Longest path over children, references and inherited paint; a back edge is a cycle.
     // `depth[e]` is the effective depth of e's subtree including e.
     let paint_server = |e: usize| {
@@ -429,11 +569,9 @@ fn effective_depth(doc: &roxmltree::Document<'_>) -> Result<u32, Status> {
                     .filter(|c| c.is_element())
                     .map(|c| (of(c), None)),
             );
-            for &t in &states[state_of[e] as usize] {
-                if t != NONE {
-                    out.push((t, Some(Via::Ref)));
-                }
-            }
+            // Inherited and declared paint is resolved only where something is painted, and
+            // only a paint server (fill, stroke) or a marker (marker-*) is followed.
+            out.extend(paint_targets(e).map(|t| (t, Some(Via::Ref))));
         }
         for &(t, via) in &refs[ref_start[e] as usize..ref_start[e + 1] as usize] {
             out.push((t, Some(via)));
@@ -476,10 +614,8 @@ fn effective_depth(doc: &roxmltree::Document<'_>) -> Result<u32, Status> {
         }
         successors(e, &mut next);
         // Paint inherited at a `use` also applies inside the instantiated content.
-        let inherited = states[state_of[e] as usize]
-            .iter()
-            .filter(|&&t| t != NONE)
-            .map(|&t| depth[t as usize])
+        let inherited = paint_targets(e)
+            .map(|t| depth[t as usize])
             .max()
             .unwrap_or(0);
         let mut below = 0u32;
