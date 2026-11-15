@@ -7,8 +7,9 @@
 //! stack: an overflow fails the test cleanly instead of aborting the suite, and the 2x headroom is
 //! what the invariant (audit 03-architecture section 3.3 B) demands.
 //!
-//! `inline-block` is deliberately absent: its shrink-to-fit layout is exponential in nesting depth
-//! (INPUTSEC-06, roadmap 2.5). T1 is about aborts, not time.
+//! `inline-block` and nested `button`s (shrink-to-fit atomic inlines) are included since roadmap 2.5
+//! made their layout polynomial in the nesting depth (INPUTSEC-06); their time is bounded by
+//! `content_stalls.rs`. T1 is about aborts, not time.
 //!
 //! Measuring: `UI4ME_STACK_MEASURE=div,fieldset cargo test --release -p ui4me-renderer --test
 //! stack_depth -- --ignored --nocapture stack_measure` binary-searches the smallest thread stack
@@ -22,7 +23,15 @@ use ui4me_renderer::Document;
 const MAX_DEPTH: usize = 256;
 
 const KINDS: &[&str] = &[
-    "div", "fieldset", "table", "flex", "contents", "grid", "mixed",
+    "div",
+    "fieldset",
+    "table",
+    "flex",
+    "contents",
+    "grid",
+    "mixed",
+    "inline-block",
+    "button",
 ];
 
 /// A document whose deepest node, the text of `#leaf`, sits at DOM depth `depth`.
@@ -70,6 +79,18 @@ fn document(kind: &str, depth: usize) -> String {
                 open.push_str("<div style=\"display:contents\">");
                 close.push("</div>");
                 levels -= 1;
+            }
+            "inline-block" => {
+                open.push_str("<div style=\"display:inline-block\">");
+                close.push("</div>");
+                levels -= 1;
+            }
+            // The parser closes an open button at the next `<button>` unless a table cell (a
+            // scope boundary) lies between them.
+            "button" if levels >= 5 => {
+                open.push_str("<button><table><tbody><tr><td>");
+                close.push("</td></tr></tbody></table></button>");
+                levels -= 5;
             }
             _ => {
                 open.push_str("<div>");
