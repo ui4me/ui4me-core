@@ -10,6 +10,7 @@ import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from verify_linux_artifact import check_distributable, validate_sdist  # noqa: E402
+from version import artifact_names, source_version  # noqa: E402
 
 IMAGE_FILE_MACHINE_AMD64 = 0x8664
 IMAGE_SUBSYSTEM_WINDOWS_CUI = 3
@@ -89,12 +90,13 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('dist_dir', type=Path, nargs='?', default=Path('dist'))
     args = ap.parse_args()
-    sdists = sorted(args.dist_dir.glob('ui4me_core-1.0.1.tar.gz'))
-    wheels = sorted(args.dist_dir.glob('ui4me_core-1.0.1-*win*.whl'))
+    version = source_version()
+    sdists = sorted(args.dist_dir.glob(artifact_names(version)['sdist']))
+    wheels = sorted(args.dist_dir.glob(f'ui4me_core-{version}-*win*.whl'))
     if not sdists or not wheels:
         raise SystemExit('Both the source distribution and a Windows wheel must exist')
     reports = [validate_sdist(x) for x in sdists] + [validate_wheel(x) for x in wheels]
-    print(json.dumps({'version': '1.0.1', 'artifacts': reports, 'status': 'PASS'}, indent=2))
+    print(json.dumps({'version': version, 'artifacts': reports, 'status': 'PASS'}, indent=2))
 
 
 if __name__ == '__main__':

@@ -12,16 +12,15 @@ from pathlib import Path
 try:
     from .verify_linux_artifact import validate_sdist, validate_wheel as validate_linux
     from .verify_windows_artifact import validate_wheel as validate_windows
+    from .version import artifact_names, source_version
 except ImportError:
     from verify_linux_artifact import validate_sdist, validate_wheel as validate_linux
     from verify_windows_artifact import validate_wheel as validate_windows
+    from version import artifact_names, source_version
 
-VERSION = '1.0.1'
-EXPECTED = (
-    f'ui4me_core-{VERSION}.tar.gz',
-    f'ui4me_core-{VERSION}-py3-none-manylinux_2_34_x86_64.whl',
-    f'ui4me_core-{VERSION}-py3-none-win_amd64.whl',
-)
+VERSION = source_version()
+_NAMES = artifact_names(VERSION)
+EXPECTED = (_NAMES['sdist'], _NAMES['linux_wheel'], _NAMES['windows_wheel'])
 
 
 def validate(directory: Path) -> list[tuple[str, str]]:

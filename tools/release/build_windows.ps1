@@ -14,6 +14,8 @@ Invoke-Checked $Python @('-m', 'pip', 'install', '--upgrade', 'build>=1.2', 'set
 # The wheel is built FROM the sdist: proves the source archive alone is a
 # complete build input (no checkout-only files).
 Invoke-Checked $Python @('-m', 'build', '--outdir', $OutDir)
-Invoke-Checked $Python (@('-m', 'twine', 'check') + (Get-ChildItem $OutDir -Filter 'ui4me_core-1.0.1*' | ForEach-Object FullName))
+$version = (& $Python tools/release/version.py).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $version) { throw 'Cannot read the release version (tools/release/version.py)' }
+Invoke-Checked $Python (@('-m', 'twine', 'check') + (Get-ChildItem $OutDir -Filter "ui4me_core-$version*" | ForEach-Object FullName))
 Invoke-Checked $Python @('tools/release/verify_windows_artifact.py', $OutDir)
 Write-Output "Windows wheel and source artifacts are in $OutDir; nothing was uploaded."

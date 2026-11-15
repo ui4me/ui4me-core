@@ -1,4 +1,4 @@
-"""Stage a cross-platform UI4ME.Core PSGallery module from qualified 1.0.1 wheels.
+"""Stage a cross-platform UI4ME.Core PSGallery module from the qualified release wheels.
 
 No recompilation, no publication. The packaged native hosts are the exact
 Linux/Windows host binaries taken from the same published Python release.
@@ -13,12 +13,16 @@ import os
 from pathlib import Path, PurePosixPath
 import shutil
 import stat
+import sys
 import tempfile
 import zipfile
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from version import artifact_names, source_version  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
 MOD = ROOT / 'powershell' / 'UI4ME.Core'
-VERSION = '1.0.1'
+VERSION = source_version()
 HOSTS = {
     'linux': ('linux-x64', 'ui4me_core/_bin/ui4me-host', b'\x7fELF', 'manylinux_2_34_x86_64'),
     'windows': ('win-x64', 'ui4me_core/_bin/ui4me-host.exe', b'MZ', 'win_amd64'),
@@ -108,7 +112,7 @@ def build(linux: Path, windows: Path, output: Path, source_identity: str='') -> 
         for p in sorted(dest.rglob('*')) if p.is_file()
     }
     (dest/'HOST-SOURCE-MANIFEST.json').write_text(json.dumps(reports,indent=2,sort_keys=True)+'\n',encoding='utf-8')
-    archive=output/'UI4ME.Core-1.0.1.zip'
+    archive=output/artifact_names(VERSION)['psgallery_zip']
     with zipfile.ZipFile(archive,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9) as z:
         for path in sorted(dest.rglob('*')):
             if path.is_file():z.write(path,path.relative_to(output).as_posix())
