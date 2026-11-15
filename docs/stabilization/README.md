@@ -7,7 +7,7 @@ Input: the engineering audit of 1.0.1 (`c6fd71d`) in [../audit/](../audit/README
 | [tracker.json](tracker.json) | machine-readable tracker: 30 consolidated findings, 113 specialist findings, tests T1–T16, gates R1–R10 and P1–P18 |
 | [MATRIX.md](MATRIX.md) | generated finding-by-finding matrix (`python3 tools/stabilization_tracker.py render`) |
 | [JOURNAL.md](JOURNAL.md) | engineering journal: changes, root causes, trade-offs, verification commands and results, integrated commits |
-| [RELEASE-READINESS.md](RELEASE-READINESS.md) | gate-by-gate assessment of the integrated build (written at the end of each checkpoint) |
+| `RELEASE-READINESS.md` | gate-by-gate assessment of the integrated build (written at the end of each checkpoint) |
 | `evidence/<workstream>/` | measurements and logs produced by each workstream |
 
 `tools/test_stabilization_tracker.py` runs in the default Python suite. It refuses `FIXED_VERIFIED` without a
