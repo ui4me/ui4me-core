@@ -45,7 +45,9 @@ BeforeAll {
     $script:Shell = (Get-Process -Id $PID).Path
 
     function New-DirectStartInfo {
-        param([string]$Body, [string[]]$Arguments = @(), [hashtable]$Environment = @{}, [hashtable]$Files = @{})
+        # -Launch replaces "-File app.ps1 <Arguments>" (e.g. -Command "& ./app.ps1").
+        param([string]$Body, [string[]]$Arguments = @(), [hashtable]$Environment = @{}, [hashtable]$Files = @{},
+            [string[]]$Launch)
         $folder = Join-Path $TestDrive ('direct ü ' + [guid]::NewGuid().ToString('N').Substring(0, 6))
         [void](New-Item -ItemType Directory -Path $folder)
         $script = Join-Path $folder 'app.ps1'
@@ -63,7 +65,8 @@ BeforeAll {
         $info.StandardOutputEncoding = New-Object Text.UTF8Encoding($false)
         $info.StandardErrorEncoding = New-Object Text.UTF8Encoding($false)
         $info.WorkingDirectory = $folder
-        $all = @('-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $script) + $Arguments
+        $all = @('-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass')
+        if ($Launch) { $all += $Launch } else { $all += @('-File', $script) + $Arguments }
         $info.Arguments = (@($all | ForEach-Object { [UI4ME.HostProcess]::QuoteWindowsArgument($_) }) -join ' ')
         foreach ($k in @($info.EnvironmentVariables.Keys)) { if ($k -like 'UI4ME_*') { $info.EnvironmentVariables.Remove($k) } }
         $info.EnvironmentVariables['UI4ME_TEST_MODE'] = '1'
@@ -88,8 +91,9 @@ BeforeAll {
     }
 
     function Invoke-DirectScript {
-        param([string]$Body, [string[]]$Arguments = @(), [hashtable]$Environment = @{}, [hashtable]$Files = @{})
-        $start = New-DirectStartInfo -Body $Body -Arguments $Arguments -Environment $Environment -Files $Files
+        param([string]$Body, [string[]]$Arguments = @(), [hashtable]$Environment = @{}, [hashtable]$Files = @{},
+            [string[]]$Launch)
+        $start = New-DirectStartInfo -Body $Body -Arguments $Arguments -Environment $Environment -Files $Files -Launch $Launch
         $temp = $start.Temp
         $process = [Diagnostics.Process]::Start($start.Info)
         $stderr = $process.StandardError.ReadToEndAsync()
@@ -145,6 +149,38 @@ Describe 'Start-UI4MEScript roles and validation' {
         [UI4ME.HostProcess]::QuoteWindowsArgument('a b') | Should -BeExactly '"a b"'
         [UI4ME.HostProcess]::QuoteWindowsArgument('say "hi"') | Should -BeExactly '"say \"hi\""'
         [UI4ME.HostProcess]::QuoteWindowsArgument('C:\dir with space\') | Should -BeExactly '"C:\dir with space\\"'
+    }
+    It 'ends the whole process only when it was started for exactly this script (binding review #1)' {
+        $module = Get-Module UI4ME.Core
+        $script = [IO.Path]::GetFullPath((Join-Path $TestDrive 'dir ü/app.ps1'))
+        $folder = Split-Path -Parent $script
+        $cases = @(
+            @{ Line = @('pwsh', '-NoProfile', '-File', $script, '-Name', 'x'); Expected = $true }
+            @{ Line = @('pwsh', '-nologo', '-f', 'app.ps1'); Expected = $true }
+            @{ Line = @('pwsh', '-ExecutionPolicy', 'Bypass', '-FILE', './app.ps1', '-NoExit'); Expected = $true }
+            @{ Line = @('pwsh', '--file', $script); Expected = $true }
+            @{ Line = @('pwsh', $script, 'arg'); Expected = $true }
+            @{ Line = @('pwsh', '-NoExit', '-File', $script); Expected = $false }
+            @{ Line = @('pwsh', '-noe', '-f', $script); Expected = $false }
+            @{ Line = @('pwsh', '-Command', "& '$script'"); Expected = $false }
+            @{ Line = @('pwsh', '-c', '& ./app.ps1'); Expected = $false }
+            @{ Line = @('pwsh', '-EncodedCommand', 'AAAA'); Expected = $false }
+            @{ Line = @('pwsh'); Expected = $false }
+            @{ Line = @('pwsh', '-File', (Join-Path $folder 'menu.ps1')); Expected = $false }
+            @{ Line = @('pwsh', '-ExecutionPolicy', 'app.ps1', '-Command', 'x'); Expected = $false }
+        )
+        foreach ($case in $cases) {
+            $line = $case.Line
+            $actual = & $module { param($s, $l, $d) Test-UI4MEProcessRunsScript -ScriptPath $s -CommandLine $l -Directory $d -Core $true -Windows $false } $script $line $folder
+            $actual | Should -Be $case.Expected -Because ($line -join ' ')
+        }
+        # Windows PowerShell 5.1: a bare script argument is -Command, /Option works, and paths
+        # compare case-insensitively (a POSIX-rooted path stands in when not on Windows).
+        $root = if ($script:TestIsWindows) { 'C:\' } else { '/' }
+        $win = [IO.Path]::Combine($root, 'Apps', 'My App', 'app.ps1')
+        $typed = [IO.Path]::Combine($root, 'apps', 'my app', 'APP.ps1')
+        (& $module { param($s, $t, $r) Test-UI4MEProcessRunsScript -ScriptPath $s -CommandLine @('powershell.exe', '/NoProfile', '-File', $t) -Directory $r -Core $false -Windows $true } $win $typed $root) | Should -BeTrue
+        (& $module { param($s, $r) Test-UI4MEProcessRunsScript -ScriptPath $s -CommandLine @('powershell.exe', $s) -Directory $r -Core $false -Windows $true } $win $root) | Should -BeFalse
     }
     It 'relays host records as plain text' {
         $out = New-Object IO.StringWriter; $err = New-Object IO.StringWriter
@@ -239,6 +275,26 @@ Close-UI4ME -Application $app
             $r.ExitCode | Should -Be 0 -Because $r.Err
             $r.Out | Should -Match "BACKEND app.ps1 $mode"
         }
+    }
+
+    It 'leaves the calling PowerShell session running after the app (binding review #1)' {
+        $body = @'
+$ErrorActionPreference = 'Stop'
+Import-Module '__MODULE__'
+$app = Start-UI4MEScript -Name 'Called app' -Instance multiple
+$window = New-UI4MEWindow -Application $app
+$null = Open-UI4MEHtml -Window $window -Html '<p>x</p>'
+[Console]::Out.WriteLine("BACKEND $([IO.Path]::GetFileName($MyInvocation.MyCommand.Path))")
+Set-UI4MEReady -Application $app
+$null = Request-UI4MEQuit -Application $app
+Wait-UI4ME -Application $app -UntilShutdown
+Close-UI4ME -Application $app
+'@
+        # As from an open prompt or another script: & ./app.ps1, then more commands.
+        $r = Invoke-DirectScript -Body $body -Launch @('-Command', "& './app.ps1'; [Console]::Out.WriteLine('STILL ALIVE after app ' + `$LASTEXITCODE)")
+        $r.ExitCode | Should -Be 0 -Because $r.Err
+        $r.Out | Should -Match 'BACKEND app\.ps1'
+        $r.Out | Should -Match 'STILL ALIVE after app 0'
     }
 
     It 'reads attributes PowerShell reserves as member names from the real host (BIND-PS-01)' {

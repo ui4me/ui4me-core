@@ -93,7 +93,9 @@ The same script runs in two roles:
    errors appear as `ui4me-host error: ...`; set `$env:UI4ME_VERBOSE = '1'` to see every host
    record. When the host exits, the manifest is deleted and the launcher **`exit`s the
    script with the host's exit code**: the code below `Start-UI4MEScript` never runs in the
-   launcher.
+   launcher. A `pwsh -File app.ps1` process ends with that code. Run from an open prompt
+   (`./app.ps1`) or called by another script (`& ./app.ps1`), only the script ends: the
+   code is in `$LASTEXITCODE` and the prompt or the calling script continues.
 2. **Backend** (the host started the script again, with a connection in the environment).
    `Start-UI4MEScript` calls `Connect-UI4ME`, removes the connection variables from the
    environment (processes your script starts do not inherit the secret) and returns the
@@ -114,7 +116,8 @@ Consequences:
   interrupt to the host) and exits with the host's status, 130 for Ctrl+C. A host that shuts
   down in order on Ctrl+C sends `app.shutdown`, so `Wait-UI4ME -UntilShutdown` returns in the
   backend; a 1.0.1 host simply stops. A host still running after `-ShutdownTimeoutMilliseconds`
-  plus five seconds is stopped. If the launcher
+  plus five seconds is stopped. Started from an open prompt or by another script, Ctrl+C
+  returns there once the host has stopped. If the launcher
   process dies, the host is stopped too (a kill-on-close job on Windows; `setpriv
   --pdeathsig` on Linux when `setpriv` is available).
 - **Errors.** An uncaught error in the backend ends it: PowerShell prints the error, the host

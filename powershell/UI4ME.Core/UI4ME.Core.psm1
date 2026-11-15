@@ -1590,6 +1590,52 @@ function Get-UI4MEScriptArguments {
     return ,@()
 }
 
+function Test-UI4MEProcessRunsScript {
+    # True when this pwsh/powershell.exe process was started to run exactly
+    # this script and nothing else (pwsh -File app.ps1, -f, any -File prefix,
+    # pwsh app.ps1), so ending the whole process is ending the script. False
+    # for an open prompt, -Command "& ./app.ps1", -NoExit, or a script that
+    # another script called (pwsh -File menu.ps1 running & ./app.ps1).
+    param([string]$ScriptPath, [string[]]$CommandLine = [Environment]::GetCommandLineArgs(),
+        [string]$Directory = [Environment]::CurrentDirectory, [bool]$Core = ($PSVersionTable.PSEdition -eq 'Core'),
+        [bool]$Windows = $script:UI4MEIsWindows)
+    $comparison = if ($Windows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    $prefix = if ($Windows) { '^(--|-|/)' } else { '^(--|-)' }
+    # Options before the script that take a separate value (skipped, so a value is never the script).
+    $valued = @('ex', 'ep', 'exe', 'exec', 'executionpolicy', 'wd', 'workingdirectory', 'w', 'win', 'windowstyle',
+        'if', 'inp', 'inputformat', 'o', 'of', 'out', 'outputformat', 'psconsolefile', 'version',
+        'config', 'configurationname', 'configurationfile', 'custompipename', 'settings', 'settingsfile')
+    $file = $null
+    for ($i = 1; $i -lt $CommandLine.Count; $i++) {
+        $token = [string]$CommandLine[$i]
+        if ($token -notmatch ($prefix + '([A-Za-z]+)(:.*)?$')) {
+            # pwsh's first positional argument is -File; Windows PowerShell's is -Command.
+            if ($Core -and $token.EndsWith('.ps1', [StringComparison]::OrdinalIgnoreCase)) { $file = $token }
+            break
+        }
+        $option = $Matches[2].ToLowerInvariant()
+        $inline = [bool]$Matches[3]
+        if ('file'.StartsWith($option)) {
+            if ($i + 1 -lt $CommandLine.Count) { $file = [string]$CommandLine[$i + 1] }
+            break
+        }
+        # -NoExit keeps the prompt open; -Command/-EncodedCommand/-CommandWithArgs run a command.
+        if ($option.Length -ge 3 -and 'noexit'.StartsWith($option)) { return $false }
+        if (@('c', 'e', 'ec', 'cwa') -contains $option -or ($option.Length -ge 2 -and 'command'.StartsWith($option)) -or
+                ($option.Length -ge 8 -and 'commandwithargs'.StartsWith($option)) -or
+                ($option.Length -ge 3 -and 'encodedcommand'.StartsWith($option))) {
+            return $false
+        }
+        if (-not $inline -and $valued -contains $option) { $i++ }
+    }
+    if (-not $file) { return $false }
+    try {
+        $full = [IO.Path]::GetFullPath([IO.Path]::Combine($Directory, $file))
+        $target = [IO.Path]::GetFullPath($ScriptPath)
+    } catch { return $false }
+    return [string]::Equals($full, $target, $comparison)
+}
+
 function Get-UI4MEEntryScript {
     # The script this PowerShell process runs (pwsh -File app.ps1), not the
     # file that happens to contain the Start-UI4MEScript call (a dot-sourced
@@ -1737,6 +1783,7 @@ function Start-UI4MEScript {
     $consoleGuard = $false
     $forcedCode = $null
     $previousMarker = $env:UI4ME_DIRECT_START
+    $ownsProcess = Test-UI4MEProcessRunsScript -ScriptPath $ScriptPath
     try {
         $manifest = Join-Path $folder 'app.toml'
         [IO.File]::WriteAllText($manifest, ($lines -join "`n"), (New-Object Text.UTF8Encoding($false)))
@@ -1805,16 +1852,25 @@ function Start-UI4MEScript {
             $runner.Dispose()
         }
         Remove-Item -LiteralPath $folder -Recurse -Force -ErrorAction SilentlyContinue
-        if ($interrupted) {
+        if ($interrupted -and $ownsProcess) {
             # PowerShell would end a stopped script with status 0.
+            [Console]::Out.Flush(); [Console]::Error.Flush()
             [Environment]::Exit($code)
         }
+        # Otherwise (an open prompt, a calling script) the stop simply
+        # continues: the host has shut down and the prompt or caller remains.
     }
-    # Not `exit $code`: a terminal Ctrl+C reaches the host and this process
-    # together, and a pipeline stop arriving while `exit` runs ends PowerShell
-    # with status 0. This process exists only to run the host.
     [Console]::Out.Flush(); [Console]::Error.Flush()
-    [Environment]::Exit($code)
+    if ($ownsProcess) {
+        # Not `exit $code`: a terminal Ctrl+C reaches the host and this process
+        # together, and a pipeline stop arriving while `exit` runs ends PowerShell
+        # with status 0. This process was started only to run this script.
+        [Environment]::Exit($code)
+    }
+    # Started from an open prompt or called by another script (& ./app.ps1):
+    # end only this script, with the host's status in $LASTEXITCODE, and leave
+    # that PowerShell session running (binding review #1).
+    exit $code
 }
 
 function New-UI4MEProject {
