@@ -21,6 +21,33 @@ use ui4me_engine_types::diag::DispatchOrigin;
 use ui4me_engine_types::ids::{DocumentId, NodeId};
 use ui4me_engine_types::status::Status;
 
+/// The key a Ctrl/Meta shortcut matches (F-17b / INTERACT-06): the layout's `key`, unless the
+/// layout produces no Latin letter for it (Cyrillic, Greek, Hebrew, Arabic, ...), when the letter
+/// of the physical key (`code` `KeyA`..`KeyZ`, the US position) stands in for it, as Chromium, GTK
+/// and Qt do. A Latin layout keeps its own letters (Dvorak `key` wins over `code`); named keys and
+/// keys without Ctrl/Meta are untouched.
+pub(crate) fn shortcut_key<'a>(
+    key: &'a str,
+    code: &str,
+    m: Modifiers,
+) -> std::borrow::Cow<'a, str> {
+    use std::borrow::Cow;
+    if !(m.ctrl || m.meta) {
+        return Cow::Borrowed(key);
+    }
+    let mut chars = key.chars();
+    let single_non_latin = matches!((chars.next(), chars.next()), (Some(c), None) if !c.is_ascii());
+    if !single_non_latin {
+        return Cow::Borrowed(key);
+    }
+    match code.strip_prefix("Key").map(str::as_bytes) {
+        Some([c]) if c.is_ascii_uppercase() => {
+            Cow::Owned((c.to_ascii_lowercase() as char).to_string())
+        }
+        _ => Cow::Borrowed(key),
+    }
+}
+
 fn tabindex(d: &Document, n: NodeId) -> Option<i64> {
     d.arena()
         .get(n)

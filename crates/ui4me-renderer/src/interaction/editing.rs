@@ -1492,7 +1492,8 @@ pub(crate) fn keydown(
         insert_text(host, &cx, k, text)?;
         return Ok(true);
     }
-    let key = k.key.as_str();
+    let key = crate::interaction::keyboard::shortcut_key(&k.key, &k.code, m);
+    let key = key.as_ref();
     if ctrl && !m.alt && key.eq_ignore_ascii_case("a") {
         select_all(host, &cx)?;
         return Ok(true);

@@ -14,6 +14,25 @@ use winit::{
     },
 };
 
+/// Whether a key press is the shortcut letter `letter` (lower-case ASCII): the layout's key, or,
+/// when the layout produces a non-Latin character (Cyrillic, Greek, ...), the physical key at the
+/// US position of that letter (F-17b / INTERACT-06; the renderer's `shortcut_key` rule).
+fn is_shortcut_letter(key: &str, physical: &PhysicalKey, letter: char) -> bool {
+    if key.eq_ignore_ascii_case(letter.encode_utf8(&mut [0; 4])) {
+        return true;
+    }
+    let mut chars = key.chars();
+    let non_latin = matches!((chars.next(), chars.next()), (Some(c), None) if !c.is_ascii());
+    let code = match physical {
+        PhysicalKey::Code(code) => format!("{code:?}"),
+        _ => return false,
+    };
+    non_latin
+        && code
+            .strip_prefix("Key")
+            .is_some_and(|c| c.eq_ignore_ascii_case(letter.encode_utf8(&mut [0; 4])))
+}
+
 pub(super) fn update_ime(engine: &Document, native: &mut NativeWindow) {
     let resets = engine.ime_reset_count();
     if resets != native.ime_resets {
@@ -686,7 +705,7 @@ impl Host {
         if event.state.is_pressed()
             && m.control_key()
             && m.shift_key()
-            && key.eq_ignore_ascii_case("q")
+            && is_shortcut_letter(&key, &event.physical_key, 'q')
         {
             self.force_shutdown();
             return;
@@ -1224,6 +1243,28 @@ fn file_filters(accept: &[String]) -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn emergency_quit_letter_falls_back_to_the_physical_key_on_non_latin_layouts() {
+        use winit::keyboard::KeyCode;
+        let q = PhysicalKey::Code(KeyCode::KeyQ);
+        assert!(is_shortcut_letter("q", &q, 'q'));
+        assert!(is_shortcut_letter("Q", &q, 'q'));
+        // Russian layout: the Q position types "й".
+        assert!(is_shortcut_letter("й", &q, 'q'));
+        assert!(is_shortcut_letter("Й", &q, 'q'));
+        // A Latin layout keeps its own letter (AZERTY "a" on the QWERTY Q position).
+        assert!(!is_shortcut_letter("a", &q, 'q'));
+        assert!(is_shortcut_letter(
+            "q",
+            &PhysicalKey::Code(KeyCode::KeyA),
+            'q'
+        ));
+        assert!(!is_shortcut_letter(
+            "й",
+            &PhysicalKey::Code(KeyCode::KeyW),
+            'q'
+        ));
+    }
     #[test]
     fn ime_hints_use_inputmode_and_never_offer_password_completions() {
         let (h, p) = ime_policy(

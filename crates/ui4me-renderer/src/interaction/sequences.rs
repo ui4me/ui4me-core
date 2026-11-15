@@ -604,8 +604,10 @@ fn run_item_inner(host: &mut dyn DispatchHost, item: &InputItem) -> Result<(), S
             }
             // Clipboard shortcuts where no text control has the focus: the event reaches application code.
             if !k.is_composing
-                && let Some(c) =
-                    crate::interaction::editing::clipboard_command(&k.key, item.modifiers)
+                && let Some(c) = crate::interaction::editing::clipboard_command(
+                    &crate::interaction::keyboard::shortcut_key(&k.key, &k.code, item.modifiers),
+                    item.modifiers,
+                )
             {
                 crate::interaction::editing::document_clipboard(
                     host,

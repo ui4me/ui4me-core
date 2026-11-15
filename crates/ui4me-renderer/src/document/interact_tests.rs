@@ -387,3 +387,87 @@ fn a_role_button_element_gets_no_synthetic_click() {
     }
 }
 
+// ---------------------------------------------------------------------------------------------
+// T10 shortcuts on non-Latin layouts (F-17b / INTERACT-06)
+
+/// Ctrl+`key` with physical `code`, down and up.
+fn ctrl_key(d: &mut Document, key: &str, code: &str) -> Vec<Value> {
+    let mut ev = d.handle_input(key_input(key, code, true, false, true)).unwrap();
+    ev.extend(d.handle_input(key_input(key, code, false, false, true)).unwrap());
+    ev
+}
+fn selection(d: &mut Document, id: &str) -> (u64, u64) {
+    let s = d.control_selection(Some(id), None).unwrap();
+    (
+        s["start"].as_u64().unwrap_or(u64::MAX),
+        s["end"].as_u64().unwrap_or(u64::MAX),
+    )
+}
+
+#[test]
+fn shortcuts_fall_back_to_the_physical_key_on_a_non_latin_layout() {
+    let mut d = doc(
+        "<!doctype html><input id=i value='hello world'>",
+        400,
+        300,
+    );
+    d.focus("i").unwrap();
+    assert_eq!(focused(&d), "i");
+    d.drain_events();
+    // Russian layout: Ctrl+A is key "ф" on code KeyA, Ctrl+C is "с" (U+0441) on KeyC.
+    ctrl_key(&mut d, "ф", "KeyA");
+    assert_eq!(selection(&mut d, "i"), (0, 11), "Ctrl+A selects all");
+    let ev = ctrl_key(&mut d, "с", "KeyC");
+    assert_eq!(count(&ev, "copy", "i"), 1, "Ctrl+C copies: {:?}", types(&ev));
+    let ev = ctrl_key(&mut d, "ч", "KeyX");
+    assert_eq!(count(&ev, "cut", "i"), 1, "Ctrl+X cuts: {:?}", types(&ev));
+    // Greek layout: Ctrl+Z is "ζ" on KeyZ and undoes the cut.
+    ctrl_key(&mut d, "ζ", "KeyZ");
+    assert_eq!(d.get_value("i").unwrap(), "hello world", "Ctrl+Z undoes");
+}
+
+#[test]
+fn shortcuts_keep_the_layout_letter_on_a_latin_layout() {
+    // Dvorak: the key labelled "a" is on the QWERTY "A" position, but the key labelled "c" is
+    // on QWERTY "I". The layout letter wins: Ctrl+"c" on KeyI copies, the code is not consulted.
+    let mut d = doc("<!doctype html><input id=i value='hello'>", 400, 300);
+    d.focus("i").unwrap();
+    d.drain_events();
+    let ev = ctrl_key(&mut d, "c", "KeyI");
+    assert_eq!(count(&ev, "copy", "i"), 1, "{:?}", types(&ev));
+    // A Latin key on the KeyC position that is not a shortcut letter does not copy.
+    let ev = ctrl_key(&mut d, "j", "KeyC");
+    assert_eq!(count(&ev, "copy", "i"), 0, "{:?}", types(&ev));
+}
+
+#[test]
+fn document_clipboard_shortcuts_fall_back_to_the_physical_key() {
+    // No text control focused: Ctrl+C still reaches application code as `copy`.
+    let mut d = doc("<!doctype html><button id=b>B</button>", 400, 300);
+    d.focus("b").unwrap();
+    d.drain_events();
+    let ev = ctrl_key(&mut d, "с", "KeyC");
+    assert_eq!(count(&ev, "copy", "b"), 1, "{:?}", types(&ev));
+}
+
+#[test]
+fn shortcut_key_maps_only_non_latin_letters_with_ctrl_or_meta() {
+    use crate::interaction::frame::Modifiers;
+    use crate::interaction::keyboard::shortcut_key;
+    let ctrl = Modifiers {
+        ctrl: true,
+        ..Modifiers::default()
+    };
+    let meta = Modifiers {
+        meta: true,
+        ..Modifiers::default()
+    };
+    assert_eq!(shortcut_key("ф", "KeyA", ctrl), "a");
+    assert_eq!(shortcut_key("Ф", "KeyA", meta), "a");
+    assert_eq!(shortcut_key("ф", "KeyA", Modifiers::default()), "ф");
+    assert_eq!(shortcut_key("a", "KeyS", ctrl), "a");
+    assert_eq!(shortcut_key("Enter", "Enter", ctrl), "Enter");
+    assert_eq!(shortcut_key("ö", "Semicolon", ctrl), "ö");
+    assert_eq!(shortcut_key("ö", "Digit1", ctrl), "ö");
+}
+
