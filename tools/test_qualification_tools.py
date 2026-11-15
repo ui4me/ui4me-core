@@ -73,6 +73,10 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(row['exit_code'], 124)
         self.assertIn('timed out', row['reasons'][0])
         pid = int(marker.read_text())
+        if os.name == 'nt':
+            # os.kill(pid, 0) terminates the process on Windows; taskkill /T
+            # already stopped the tree, so only the exit status is checked.
+            return
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
             try:
