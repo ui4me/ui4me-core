@@ -526,6 +526,9 @@ impl Document {
         if crate::interaction::editing::text_kind(self.pipeline.document(), n).is_some() {
             return self.set_value(element, text);
         }
+        if !text.is_empty() {
+            check_depth(model_depth(self.pipeline.document(), n), 1, "set_text")?;
+        }
         self.pipeline.set_text_content(n, text)?;
         self.after_mutation(true);
         Ok(())
@@ -2470,15 +2473,19 @@ fn validate_input_type(kind: InputType) -> std::result::Result<(), Status> {
     Ok(())
 }
 /// Validate the proposed connected tree before any fragment hooks or revision.
+///
+/// `fragment` is the parsed staging fragment and the node whose children its children become
+/// (`container`): the fragment is counted at the container's depth, so its children land exactly
+/// one level below it (F-06: an `insert_html` fragment used to be measured as if at the root).
 fn validate_document(
     d: &Model,
     replacing: Option<NodeId>,
-    fragment: Option<NodeId>,
+    fragment: Option<(NodeId, NodeId)>,
     hosted: bool,
 ) -> std::result::Result<(), Status> {
     let mut ids = BTreeSet::new();
     let mut count = 0;
-    let mut replacement_depth = 0;
+    let mut container_depth = None;
     let mut stack = vec![(d.document_node(), 0usize)];
     let mut phase = 0;
     loop {
@@ -2514,8 +2521,16 @@ fn validate_document(
                     }
                 }
             }
+            if phase == 0 && fragment.is_some_and(|(_, c)| c == n) {
+                container_depth = Some(depth);
+            }
             if phase == 0 && Some(n) == replacing {
-                replacement_depth = depth + 1;
+                // The replaced children (or template contents) are not part of the result.
+                if let Some((_, c)) = fragment
+                    && c != n
+                {
+                    container_depth = Some(depth + 1);
+                }
                 continue;
             }
             for &child in d.children(n)? {
@@ -2527,12 +2542,69 @@ fn validate_document(
         }
         if phase == 0 {
             phase = 1;
-            if let Some(f) = fragment {
-                stack.push((f, replacement_depth));
+            if let Some((f, container)) = fragment {
+                let depth = container_depth.unwrap_or_else(|| model_depth(d, container));
+                stack.push((f, depth));
                 continue;
             }
         }
         break;
+    }
+    Ok(())
+}
+/// DOM depth of `n` as [`validate_document`] counts it: the document node is 0 and the contents
+/// of a connected `template` sit one level below the template. O(depth), plus a document scan only
+/// for a node inside template contents.
+fn model_depth(d: &Model, n: NodeId) -> usize {
+    let mut depth = 0;
+    let mut at = n;
+    loop {
+        while let Ok(Some(p)) = d.parent(at) {
+            depth += 1;
+            at = p;
+        }
+        if at == d.document_node()
+            || d.node_kind(at).ok() != Some(ui4me_document::node::NodeKind::DocumentFragment)
+        {
+            return depth;
+        }
+        let owner = d
+            .arena()
+            .subtree(d.document_node())
+            .into_iter()
+            .find(|&t| d.template_contents(t).ok().flatten() == Some(at));
+        match owner {
+            Some(t) => {
+                depth += 1;
+                at = t;
+            }
+            None => return depth,
+        }
+    }
+}
+/// Levels of the subtree rooted at `n` (a leaf is 1), template contents included as one level.
+fn subtree_height(d: &Model, n: NodeId) -> usize {
+    let mut height = 0;
+    let mut stack = vec![(n, 1usize)];
+    while let Some((node, h)) = stack.pop() {
+        height = height.max(h);
+        if let Ok(kids) = d.children(node) {
+            stack.extend(kids.iter().map(|&k| (k, h + 1)));
+        }
+        if let Some(contents) = d.template_contents(node).ok().flatten() {
+            stack.push((contents, h + 1));
+        }
+    }
+    height
+}
+/// F-06: refuse an operation that would place a node deeper than [`MAX_DEPTH`] (checked before
+/// any mutation, so a rejection changes nothing).
+fn check_depth(parent_depth: usize, height: usize, what: &str) -> Result<()> {
+    if parent_depth + height > MAX_DEPTH {
+        return Err(limit(format!(
+            "{what} would nest the document deeper than {MAX_DEPTH} levels"
+        ))
+        .into());
     }
     Ok(())
 }
@@ -2740,6 +2812,9 @@ fn apply_op(d: &mut Model, op: &DomOp, hosted: bool, nodes: bool) -> Result<()> 
                     "Use set_value for form controls; it is not a batch operation",
                 ));
             }
+            if !text.is_empty() {
+                check_depth(model_depth(d, n), 1, "set_text")?;
+            }
             d.set_text_content(n, text)?;
         }
         DomOp::AppendText { element, text } => {
@@ -2751,6 +2826,7 @@ fn apply_op(d: &mut Model, op: &DomOp, hosted: bool, nodes: bool) -> Result<()> 
             if text.is_empty() {
                 return Ok(());
             }
+            check_depth(model_depth(d, n), 1, "append_text")?;
             // Extend the last text node while it is small, so a long stream stays O(chunk).
             let last = d.children(n)?.last().copied();
             match last.filter(|&l| d.text_data(l).is_ok_and(|t| t.len() < STREAM_NODE_BYTES)) {
@@ -2822,15 +2898,22 @@ fn apply_op(d: &mut Model, op: &DomOp, hosted: bool, nodes: bool) -> Result<()> 
             if matches!(position, "beforebegin" | "afterend") {
                 check_movable(d, n, "insert_html beside")?;
             }
+            // The node whose children the fragment's children become.
+            let container = if matches!(position, "beforebegin" | "afterend") {
+                d.parent(n)?.unwrap_or(n)
+            } else {
+                n
+            };
             d.insert_adjacent_html_checked(n, position, html, |d, f| {
-                validate_document(d, None, Some(f), hosted)
+                validate_document(d, None, Some((f, container)), hosted)
             })?;
         }
         DomOp::ReplaceChildrenHtml { element, html } => {
             check_html(html)?;
             let n = resolve(d, element)?;
+            let container = d.template_contents(n)?.unwrap_or(n);
             d.set_inner_html_checked(n, html, |d, f| {
-                validate_document(d, Some(n), Some(f), hosted)
+                validate_document(d, Some(n), Some((f, container)), hosted)
             })?;
         }
         DomOp::RemoveElement { element } => {
@@ -2867,6 +2950,7 @@ fn apply_op(d: &mut Model, op: &DomOp, hosted: bool, nodes: bool) -> Result<()> 
                 "afterbegin" => (t, d.children(t)?.first().copied()),
                 _ => (t, None),
             };
+            check_depth(model_depth(d, parent), subtree_height(d, n), "move_element")?;
             if before != Some(n) {
                 d.insert_before(parent, n, before)?;
             }

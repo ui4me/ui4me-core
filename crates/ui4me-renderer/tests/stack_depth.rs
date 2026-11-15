@@ -230,3 +230,174 @@ fn stack_measure() {
         println!("| {kind} | {} | {} | {per} |", show(sa), show(sb));
     }
 }
+
+// ---- F-06 (RENDER-03): the depth limit cannot be bypassed by mutations.
+
+/// Deep documents are only renderable on the engine stack; run a test body on half of it.
+fn on_half_engine_stack(body: fn()) {
+    let r = std::thread::Builder::new()
+        .stack_size(ui4me_renderer::ENGINE_STACK_BYTES / 2)
+        .spawn(body)
+        .unwrap()
+        .join();
+    if let Err(panic) = r {
+        std::panic::resume_unwind(panic);
+    }
+}
+
+/// `<section id=c{i}>` chains of `len` nested `<div id=c{i}d{k}>`; `c{i}` sits at depth 3, its
+/// innermost div at depth 3 + len.
+fn chains(n: usize, len: usize) -> Document {
+    let mut s = String::from("<!doctype html><html><body>");
+    for c in 0..n {
+        s.push_str(&format!("<section id=c{c}>"));
+        for k in 0..len {
+            s.push_str(&format!("<div id=c{c}d{k}>"));
+        }
+        s.push_str(&"</div>".repeat(len));
+        s.push_str("</section>");
+    }
+    s.push_str("</body></html>");
+    Document::parse_hosted(&s, None, 800, 600).expect("chain document")
+}
+
+fn size_limit(r: ui4me_renderer::Result<()>) -> String {
+    let e = r.expect_err("expected SIZE_LIMIT");
+    assert!(e.message.starts_with("SIZE_LIMIT"), "{}", e.message);
+    assert_eq!(e.code, 5, "{}", e.message);
+    e.message
+}
+
+fn html(d: &Document) -> String {
+    d.get_html(None, None, true).unwrap()
+}
+
+#[test]
+fn move_element_rejects_depth_over_limit() {
+    on_half_engine_stack(move_element_rejects_depth_over_limit_body);
+}
+
+fn move_element_rejects_depth_over_limit_body() {
+    // c0's innermost div is at depth 3 + 200 = 203; c1 (section + 200 divs) is 201 levels high.
+    let mut d = chains(2, 200);
+    d.render(800, 600, 1.0).unwrap();
+    let before = html(&d);
+    size_limit(d.move_element("c1", "c0d199", "beforeend"));
+    assert_eq!(html(&d), before, "a rejected move changes nothing");
+    // A subtree `levels` high: <article id=a{levels}> holding levels - 1 divs, the innermost #z{levels}.
+    let subtree = |levels: usize| {
+        let mut s = format!("<article id=a{levels}>");
+        for k in 0..levels - 1 {
+            s.push_str(&if k == levels - 2 {
+                format!("<div id=z{levels}>")
+            } else {
+                "<div>".into()
+            });
+        }
+        s.push_str(&"</div>".repeat(levels - 1));
+        s + "</article>"
+    };
+    d.replace_children_html("c1", &(subtree(54) + &subtree(53)))
+        .unwrap();
+    // Parent depth 203 + 54 levels = 257: refused; 203 + 53 = 256: accepted.
+    size_limit(d.move_element("a54", "c0d199", "beforeend"));
+    d.move_element("a53", "c0d199", "beforeend").unwrap();
+    d.render(800, 600, 1.0).unwrap();
+    // The innermost moved div is at the maximum depth: nothing may go below it.
+    size_limit(d.set_text("z53", "x"));
+    size_limit(d.insert_html("z53", "beforeend", "<i></i>"));
+    Document::parse_hosted(&html(&d), None, 800, 600).expect("within the limit");
+}
+
+#[test]
+fn move_chains_cannot_exceed_the_limit() {
+    on_half_engine_stack(move_chains_cannot_exceed_the_limit_body);
+}
+
+fn move_chains_cannot_exceed_the_limit_body() {
+    // The audit's bypass: chain moves accumulated ~600 levels and a cold render aborted.
+    let mut d = chains(4, 100);
+    // c1 into c0 (deepest 204) fits; c2 into the moved c1 would reach 305; c3 into c2 fits.
+    d.move_element("c1", "c0d99", "beforeend").unwrap();
+    size_limit(d.move_element("c2", "c1d99", "beforeend"));
+    d.move_element("c3", "c2d99", "beforeend").unwrap();
+    // Still editable by markup anywhere (every node is within the limit).
+    d.insert_html("c0", "afterbegin", "<p>x</p>").unwrap();
+    let mut cold = Document::parse_hosted(&html(&d), None, 800, 600).expect("still valid");
+    cold.render(800, 600, 1.0).unwrap();
+}
+
+#[test]
+fn insert_html_counts_insertion_depth() {
+    on_half_engine_stack(insert_html_counts_insertion_depth_body);
+}
+
+fn insert_html_counts_insertion_depth_body() {
+    // c0d246 is at depth 3 + 247 = 250: a fragment 6 levels high reaches 256, 7 is refused.
+    let mut d = chains(1, 247);
+    let deep = |n: usize| format!("{}{}", "<b>".repeat(n - 1), "x") + &"</b>".repeat(n - 1);
+    let before = html(&d);
+    size_limit(d.insert_html("c0d246", "beforeend", &deep(7)));
+    size_limit(d.insert_html("c0d246", "afterbegin", &deep(7)));
+    assert_eq!(html(&d), before, "a rejected insert changes nothing");
+    // Beside the element the fragment starts one level higher.
+    size_limit(d.insert_html("c0d246", "afterend", &deep(8)));
+    d.insert_html("c0d246", "afterend", &deep(7)).unwrap();
+    d.insert_html("c0d246", "beforeend", &deep(6)).unwrap();
+    d.render(800, 600, 1.0).unwrap();
+    // The result is a valid document of exactly the maximum depth.
+    Document::parse_hosted(&html(&d), None, 800, 600).expect("within the limit");
+}
+
+#[test]
+fn replace_children_html_counts_from_the_element() {
+    on_half_engine_stack(replace_children_html_counts_from_the_element_body);
+}
+
+fn replace_children_html_counts_from_the_element_body() {
+    let mut d = chains(1, 247); // c0d246 at depth 250
+    let deep = |n: usize| format!("{}{}", "<b>".repeat(n - 1), "x") + &"</b>".repeat(n - 1);
+    size_limit(d.replace_children_html("c0d246", &deep(7)));
+    d.replace_children_html("c0d246", &deep(6)).unwrap();
+    Document::parse_hosted(&html(&d), None, 800, 600).expect("within the limit");
+}
+
+#[test]
+fn text_below_the_deepest_element_is_refused() {
+    on_half_engine_stack(text_below_the_deepest_element_is_refused_body);
+}
+
+fn text_below_the_deepest_element_is_refused_body() {
+    // c0d252 is at depth 256: it may exist, but it cannot get a text child.
+    let mut d = chains(1, 253);
+    size_limit(d.set_text("c0d252", "x"));
+    size_limit(d.append_text("c0d252", "x"));
+    d.set_text("c0d252", "").unwrap();
+    d.set_text("c0d251", "x").unwrap();
+}
+
+#[test]
+fn a_rejected_move_rolls_back_its_batch() {
+    on_half_engine_stack(a_rejected_move_rolls_back_its_batch_body);
+}
+
+fn a_rejected_move_rolls_back_its_batch_body() {
+    use ui4me_renderer::DomOp;
+    let mut d = chains(2, 200);
+    let before = html(&d);
+    let ops = [
+        DomOp::SetAttribute {
+            element: "c0d0".into(),
+            name: "title".into(),
+            value: Some("changed".into()),
+        },
+        DomOp::MoveElement {
+            element: "c1".into(),
+            target: "c0d199".into(),
+            position: "beforeend".into(),
+        },
+    ];
+    let e = d.apply_batch(&ops).expect_err("batch must fail");
+    assert!(e.message.contains("SIZE_LIMIT"), "{}", e.message);
+    assert_eq!(html(&d), before);
+}
