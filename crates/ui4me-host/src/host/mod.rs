@@ -224,6 +224,7 @@ pub struct Host {
     /// them this host has handled.
     termination: Option<Arc<crate::termination::Termination>>,
     termination_seen: usize,
+    termination_started: Option<Instant>,
     /// HOST-15: the policy requests sent for pending decisions (for a retry after "busy"), and
     /// the retries waiting for their backoff.
     decision_requests: HashMap<String, (&'static str, Value)>,
@@ -573,6 +574,7 @@ impl Host {
             virtual_time_ms: None,
             termination: None,
             termination_seen: 0,
+            termination_started: None,
             decision_requests: HashMap::new(),
             decision_retries: Vec::new(),
             pump_more: false,
@@ -1360,8 +1362,18 @@ impl Host {
     /// deadline short enough for process managers and session ends. A second request while
     /// already shutting down forces the quit.
     fn terminate(&mut self, request: crate::termination::Request) {
+        let first = *self.termination_started.get_or_insert_with(Instant::now);
         match self.lifecycle.phase() {
             Phase::Stopped => {}
+            // One Ctrl+C often arrives twice: the terminal signals the host's process group and
+            // a direct-start launcher forwards its own SIGINT as SIGTERM a moment later. Only a
+            // request after this grace period is the user insisting.
+            Phase::Quitting if first.elapsed() < crate::termination::REPEAT_GRACE => {
+                tracing::debug!(
+                    source = request.source,
+                    "repeated termination request ignored"
+                );
+            }
             Phase::Quitting => {
                 tracing::warn!(
                     source = request.source,
@@ -1665,6 +1677,7 @@ mod tests {
             virtual_time_ms: None,
             termination: None,
             termination_seen: 0,
+            termination_started: None,
             decision_requests: HashMap::new(),
             decision_retries: Vec::new(),
             pump_more: false,
@@ -1834,8 +1847,14 @@ mod tests {
             exit_code: 130,
         });
         let request = termination.take_new(&mut host.termination_seen).remove(0);
+        host.terminate(request.clone());
+        assert!(
+            !host.force_quit,
+            "an immediate repeat (terminal + launcher) is the same request"
+        );
+        host.termination_started = Some(Instant::now() - crate::termination::REPEAT_GRACE);
         host.terminate(request);
-        assert!(host.force_quit, "second request forces the quit");
+        assert!(host.force_quit, "a later second request forces the quit");
     }
 
     /// HOST-15 (T15): an error answer to a policy request is no decision, never a veto and

@@ -18,6 +18,10 @@ type Wake = Arc<dyn Fn() + Send + Sync>;
 /// about 5 s for a Windows console close or session end) before they kill everything.
 pub const DEADLINE: Duration = Duration::from_millis(3_000);
 
+/// A further request within this time after the first is treated as the same one (a terminal
+/// Ctrl+C plus the launcher's forwarded signal); a later one forces the quit.
+pub const REPEAT_GRACE: Duration = Duration::from_millis(1_000);
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Request {
     /// For logs: `SIGTERM`, `CTRL_C_EVENT`, `WM_QUERYENDSESSION`, …
