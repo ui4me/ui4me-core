@@ -62,3 +62,19 @@ Baseline failure of the new tests (`content_stalls.rs`, layout files stashed):
 incremental-vs-cold oracle tests, stack_depth, content_stalls) passes after.
 
 Residual: the work is still O(atomic depth x subtree) in places (~53 ms for a 250-deep chain).
+
+## T1 stack cost of the new kinds (`UI4ME_STACK_MEASURE=div,inline-block,button ... stack_measure`)
+
+| kind | min stack @64 (KiB) | min stack @256 (KiB) | per DOM level (KiB) |
+|---|---|---|---|
+| div | 799 | 2959 | 11.2 |
+| inline-block | 799 | 3007 | 11.5 |
+| button (button + table cell units) | 799 | 2959 | 11.2 |
+
+Well inside the 16 MiB half-engine stack T1 uses.
+
+## Full verification (Linux, after all h-stalls commits)
+
+`python3 tools/verify.py --keep-going --jobs 3`: fmt, check, test, python, headless, renderer, faults
+all PASS. `cargo clippy --locked --workspace --all-targets -- -D warnings` clean.
+`tools/windows_source_check.py` PASS.
