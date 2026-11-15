@@ -482,6 +482,16 @@ impl Host {
             .filter(|w| !w.closing)
             .and_then(|w| w.document.as_mut())
             .map(|d| {
+                let dropped = d.engine.dropped_event_count();
+                if dropped > d.dropped_events_reported {
+                    tracing::warn!(
+                        document = %d.id,
+                        refused = dropped - d.dropped_events_reported,
+                        total = dropped,
+                        "Document event queue full during one turn; events were not delivered"
+                    );
+                    d.dropped_events_reported = dropped;
+                }
                 (
                     d.id.clone(),
                     d.engine.drain_events(),

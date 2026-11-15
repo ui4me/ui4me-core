@@ -46,9 +46,7 @@ impl Document {
         self.identified(hit)
     }
     fn drag_event(&mut self, value: Value) {
-        if self.events.len() < MAX_EVENTS {
-            self.events.push(value);
-        }
+        self.queue_event(value);
     }
     fn end_drag(&mut self, dropped_on: Option<String>) {
         if let Some((source, _)) = self.drag.active.take() {

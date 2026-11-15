@@ -39,7 +39,11 @@ pub const MAX_PIXELS: usize = 16_777_216;
 const MAX_HTML: usize = 1024 * 1024;
 const MAX_NODES: usize = 65_536;
 const MAX_DEPTH: usize = 256;
-const MAX_EVENTS: usize = 1024;
+/// Events queued between two host drains (one GUI turn). Sized for the 10,000-event burst gate
+/// (R3) with headroom; the transport's 8 MiB per-connection byte cap is the real backpressure.
+/// An event refused here is counted (`dropped_event_count`) and reported by the host, never
+/// dropped silently.
+pub(crate) const MAX_EVENTS: usize = 16_384;
 const BLINK: Duration = Duration::from_millis(500);
 static NEXT_DOCUMENT: AtomicU32 = AtomicU32::new(1);
 static CLIPBOARD: Mutex<Option<String>> = Mutex::new(None);
@@ -190,6 +194,7 @@ pub struct Document {
     interaction: InteractionRuntime,
     resources: SharedResources,
     events: Vec<Value>,
+    dropped_events: u64,
     errors: VecDeque<Value>,
     clipboard: Box<dyn Clipboard>,
     cursor: String,
@@ -408,6 +413,7 @@ impl Document {
             interaction,
             resources,
             events: Vec::new(),
+            dropped_events: 0,
             errors: VecDeque::new(),
             clipboard: Box::new(MemoryClipboard),
             cursor: "default".into(),
@@ -470,6 +476,20 @@ impl Document {
     }
     pub fn needs_repaint(&self) -> bool {
         self.repaint || self.pipeline.state() == PipelineState::Dirty
+    }
+    /// Queue one event for the backend; refuse (and count) it when the per-turn queue is full.
+    pub(crate) fn queue_event(&mut self, value: Value) -> bool {
+        if self.events.len() < MAX_EVENTS {
+            self.events.push(value);
+            true
+        } else {
+            self.dropped_events += 1;
+            false
+        }
+    }
+    /// Total events refused because the per-turn queue was full (monotonic).
+    pub fn dropped_event_count(&self) -> u64 {
+        self.dropped_events
     }
     pub fn drain_events(&mut self) -> Vec<Value> {
         // Queued element tasks (dialog `close`, `toggle`) run at the end of each host operation.
@@ -2024,6 +2044,7 @@ impl DispatchHost for Document {
             1
         };
         if self.events.len() + needed > MAX_EVENTS {
+            self.dropped_events += needed as u64;
             return Err(dispatch::CallbackError::new("Document event queue is full"));
         }
         self.events.push(value.clone());
@@ -2330,9 +2351,8 @@ impl DispatchHost for Document {
             .parse(href.trim())
             .ok()
             .map(|u| u.to_string());
-        if self.events.len() < MAX_EVENTS {
-            self.events.push(json!({"type":"link_activated","element":element,"href":href,"url":resolved,"node":crate::document::public_dom::node_ref(self.id(), link)}));
-        }
+        let node = crate::document::public_dom::node_ref(self.id(), link);
+        self.queue_event(json!({"type":"link_activated","element":element,"href":href,"url":resolved,"node":node}));
     }
     fn ime_reset(&mut self, _id: DocumentId) {
         // Clearing the request alone is not enough: a following `ime_update` for the next focused
@@ -2986,6 +3006,8 @@ mod hosted;
 pub use hosted::{ClipboardRequest, ImeSurrounding};
 mod drag;
 pub(crate) mod editable;
+#[cfg(test)]
+mod event_queue_tests;
 pub mod file_input;
 #[cfg(test)]
 mod focus_pointer_tests;

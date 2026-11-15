@@ -626,9 +626,8 @@ impl Document {
     /// Pointer/keyboard handling after the engine processed the input (its events are `events`).
     /// Queue `selectionchange` when the selection differs from `before`.
     fn note_selection_change(&mut self, before: (Option<SelPoint>, Option<SelPoint>)) {
-        if before != (self.selection.anchor, self.selection.focus) && self.events.len() < 1024 {
-            self.events
-                .push(serde_json::json!({"type": "selectionchange"}));
+        if before != (self.selection.anchor, self.selection.focus) {
+            self.queue_event(serde_json::json!({"type": "selectionchange"}));
         }
     }
     /// While dragging a selection past the edge of the scroll container that holds the anchor

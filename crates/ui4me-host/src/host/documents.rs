@@ -27,6 +27,8 @@ pub(super) struct HostedDocument {
     pub(super) a11y_key: Option<(ui4me_renderer::AccessibilityKey, String)>,
     /// Accessibility trees built for this document (a work counter, F-16b / INTERACT-04).
     pub(super) a11y_builds: u64,
+    /// Renderer event-queue refusals already reported (see `Document::dropped_event_count`).
+    pub(super) dropped_events_reported: u64,
     pub(super) source: Option<PathBuf>,
     pub(super) asset_root: Option<PathBuf>,
     pub(super) viewport: (u32, u32, f64),
@@ -313,6 +315,7 @@ impl Host {
             a11y: None,
             a11y_key: None,
             a11y_builds: 0,
+            dropped_events_reported: 0,
             viewport: (width, height, scale),
             native_refresh_pending: false,
             bitmaps: Default::default(),
