@@ -201,9 +201,12 @@ impl Document {
         let nodes_before = self.arena.live_count();
         let mut arena = std::mem::replace(&mut self.arena, Arena::new());
         let scratch = arena.alloc(NodeData::DocumentFragment { template: None });
+        // While the parse runs the arena holds the scratch root and the tree builder's synthetic
+        // `html` element, one node more than the staging fragment that replaces them: the in-parse
+        // stop allows that node so it fires exactly when the check below would (renderer review #2).
         let sink = ArenaSink::with_root(arena, scratch)
             .with_max_depth(self.limits.parse_depth)
-            .with_max_nodes(self.limits.nodes);
+            .with_max_nodes(self.limits.nodes.saturating_add(1));
         let parser = parse_fragment_for_element(sink, parse_opts(quirks), context, false, form);
         let out = match super::feed(parser, html, self.limits.parse_depth != u64::MAX) {
             Ok(out) => out,

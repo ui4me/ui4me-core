@@ -255,16 +255,18 @@ impl TreeSink for ArenaSink {
     }
 
     fn create_comment(&self, text: StrTendril) -> NodeId {
-        self.arena
-            .borrow_mut()
-            .alloc(NodeData::Comment(text.to_string()))
+        let mut a = self.arena.borrow_mut();
+        let id = a.alloc(NodeData::Comment(text.to_string()));
+        self.count_node(&a);
+        id
     }
 
     /// The HTML parser never creates processing instructions; kept as a comment if it does.
     fn create_pi(&self, target: StrTendril, data: StrTendril) -> NodeId {
-        self.arena
-            .borrow_mut()
-            .alloc(NodeData::Comment(format!("?{target} {data}")))
+        let mut a = self.arena.borrow_mut();
+        let id = a.alloc(NodeData::Comment(format!("?{target} {data}")));
+        self.count_node(&a);
+        id
     }
 
     fn append(&self, parent: &NodeId, child: NodeOrText<NodeId>) {
@@ -385,5 +387,31 @@ impl TreeSink for ArenaSink {
     /// FR-018: declarative shadow roots are never attached; the template stays ordinary.
     fn allow_declarative_shadow_roots(&self, _intended_parent: &NodeId) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Renderer review #3: comments (and processing instructions) count toward the node-limit
+    /// stop, so a comment flood stops a capped parse early instead of being parsed to the end.
+    #[test]
+    fn comments_count_toward_the_node_stop() {
+        let base = Arena::new().live_count();
+        let sink = ArenaSink::new(Arena::new()).with_max_nodes(base as u64 + 9);
+        for _ in 0..10 {
+            sink.create_comment(StrTendril::from_slice("c"));
+        }
+        assert_eq!(sink.over_limit(), Some(Stop::TooManyNodes));
+        let sink = ArenaSink::new(Arena::new()).with_max_nodes(base as u64 + 9);
+        for _ in 0..10 {
+            sink.create_pi(StrTendril::from_slice("t"), StrTendril::from_slice("d"));
+        }
+        assert_eq!(sink.over_limit(), Some(Stop::TooManyNodes));
+        // Within the limit nothing stops.
+        let sink = ArenaSink::new(Arena::new()).with_max_nodes(base as u64 + 9);
+        sink.create_comment(StrTendril::from_slice("c"));
+        assert_eq!(sink.over_limit(), None);
     }
 }

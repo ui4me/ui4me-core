@@ -570,6 +570,56 @@ fn prevent_default_shortcut_rules_match_the_physical_key_on_a_non_latin_layout()
     assert_eq!(count(&ev, "copy", "i"), 1, "{:?}", types(&ev));
 }
 
+/// Renderer review #4: AltGr arrives as Ctrl+Alt on Windows. AltGr+A on a Polish layout types
+/// "ą" (code KeyA); it is not the Ctrl+A shortcut (the engine's own shortcuts require no Alt), so a
+/// rule for Ctrl+"a" with Alt unspecified must not report it default-prevented.
+#[test]
+fn prevent_default_shortcut_rules_ignore_altgr_characters() {
+    let mut d = doc("<!doctype html><input id=i value='x'>", 400, 300);
+    d.set_default_action(
+        DefaultActionRule {
+            element: "i".into(),
+            event: "keydown".into(),
+            key: Some("a".into()),
+            shift: None,
+            ctrl: Some(true),
+            alt: None,
+            meta: None,
+        },
+        true,
+    )
+    .unwrap();
+    d.focus("i").unwrap();
+    d.drain_events();
+    let altgr = |d: &mut Document, key: &str| {
+        d.handle_input(Input::Key {
+            key: key.into(),
+            code: "KeyA".into(),
+            pressed: true,
+            repeat: false,
+            shift: false,
+            ctrl: true,
+            alt: true,
+            meta: false,
+        })
+        .unwrap()
+    };
+    let prevented = |ev: &[Value]| {
+        ev.iter()
+            .any(|e| e["type"] == "keydown" && e["default_prevented"] == true)
+    };
+    let ev = altgr(&mut d, "ą");
+    assert!(
+        ev.iter().any(|e| e["type"] == "keydown"),
+        "{:?}",
+        types(&ev)
+    );
+    assert!(!prevented(&ev), "AltGr+ą is not Ctrl+A: {ev:?}");
+    // Ctrl+Alt+A itself still matches the rule (Alt is unspecified).
+    let ev = altgr(&mut d, "a");
+    assert!(prevented(&ev), "Ctrl+Alt+a matches: {ev:?}");
+}
+
 #[test]
 fn shortcut_key_maps_only_non_latin_letters_with_ctrl_or_meta() {
     use crate::interaction::frame::Modifiers;
@@ -589,6 +639,12 @@ fn shortcut_key_maps_only_non_latin_letters_with_ctrl_or_meta() {
     assert_eq!(shortcut_key("Enter", "Enter", ctrl), "Enter");
     assert_eq!(shortcut_key("ö", "Semicolon", ctrl), "ö");
     assert_eq!(shortcut_key("ö", "Digit1", ctrl), "ö");
+    let altgr = Modifiers {
+        ctrl: true,
+        alt: true,
+        ..Modifiers::default()
+    };
+    assert_eq!(shortcut_key("ą", "KeyA", altgr), "ą");
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -647,6 +703,58 @@ fn release_outside_the_button_produces_no_click() {
         "{:?}",
         types(&ev)
     );
+}
+
+/// Renderer review #5: a focusable container is not activatable. A text-selection drag between
+/// two paragraphs of an open dialog (or a `tabindex` panel) produces no click, so the common
+/// `if (e.target === dialog) dialog.close()` backdrop pattern does not close the dialog.
+#[test]
+fn a_drag_between_children_of_a_focusable_container_produces_no_click() {
+    for container in [
+        "<dialog id=c open style='margin:0;padding:10px'>",
+        "<div id=c tabindex=0>",
+    ] {
+        let end = if container.starts_with("<dialog") {
+            "</dialog>"
+        } else {
+            "</div>"
+        };
+        let mut d = doc(
+            &format!(
+                "<!doctype html><style>body{{margin:0;font:16px sans-serif}}</style>{container}\
+                 <p id=p1>First paragraph</p><p id=p2>Second paragraph</p>{end}"
+            ),
+            400,
+            300,
+        );
+        let (x1, y1) = centre(&mut d, "p1");
+        let (x2, y2) = centre(&mut d, "p2");
+        let mut ev = ptr(&mut d, true, x1, y1);
+        ev.extend(ptr(&mut d, false, x2, y2));
+        assert_eq!(
+            ev.iter().filter(|e| e["type"] == "click").count(),
+            0,
+            "{container}: {:?}",
+            types(&ev)
+        );
+    }
+}
+
+/// A large link card: press and release on different parts of it click the link (as browsers do
+/// for a press and release without a link drag).
+#[test]
+fn press_and_release_on_different_parts_of_a_link_card_click_the_link() {
+    let mut d = doc(
+        "<!doctype html><style>body{margin:0;font:16px sans-serif}a{display:block}</style>\
+         <a id=a href='#x'><h3 id=t>Title</h3><p id=s>Summary</p></a>",
+        400,
+        300,
+    );
+    let (x1, y1) = centre(&mut d, "t");
+    let (x2, y2) = centre(&mut d, "s");
+    let mut ev = ptr(&mut d, true, x1, y1);
+    ev.extend(ptr(&mut d, false, x2, y2));
+    assert_eq!(count(&ev, "click", "a"), 1, "{:?}", types(&ev));
 }
 
 #[test]

@@ -59,7 +59,9 @@ recorded in `docs/stabilization/RELEASE-READINESS.md` pass.
 - Enter on a focused link activates it: `click`, then `link_activated`.
 - Editing and clipboard shortcuts (Ctrl+A, Ctrl+C, …) work on non-Latin keyboard layouts, matched by physical key.
 - A click whose press and release land on different parts of one control (for example a button's icon, then its
-  padding) clicks the control. Their nearest activatable common ancestor receives it.
+  padding) clicks the control. Their nearest common ancestor receives it when it, or an ancestor, has activation
+  behaviour (a button, label, summary, link or activatable input); a drag across plain content, also inside an open
+  dialog or a `tabindex` element, produces no click.
 - Caret, IME, selection and accessibility geometry follow CSS transforms and `position: fixed` ancestors.
 - The accessibility tree is no longer rebuilt on every repaint tick (caret blink, animations).
 - Window focus loss cancels a pointer press in progress.

@@ -8,7 +8,7 @@ use super::*;
 use crate::pipeline::paged::{PageOptions, PagedDocument};
 
 /// Most pages one pagination may hold (bounded work and memory).
-pub const MAX_PAGES: usize = 2000;
+pub const MAX_PAGES: usize = crate::layout::fragmentation::paged::MAX_PAGES;
 /// Most device pixels one rendered page may have (about 300 dpi on A3).
 pub const MAX_PAGE_PIXELS: u64 = 5000 * 7100;
 

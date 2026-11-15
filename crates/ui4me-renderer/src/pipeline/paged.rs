@@ -869,6 +869,14 @@ impl DocumentPipeline {
             cache: HashMap::new(),
         };
         let layout = crate::layout::coordinator::layout_paged(&src, &mut geom, 1.0, &mut text)?;
+        if layout.too_many_pages {
+            return Err(
+                Status::new(Code::SizeLimit, Stage::Layout).with_message(format!(
+                    "the document paginates into more than {} pages",
+                    crate::layout::fragmentation::paged::MAX_PAGES
+                )),
+            );
+        }
         let total = layout.pages.len() as u32;
         let mut pages = Vec::with_capacity(layout.pages.len());
         for (k, p) in layout.pages.into_iter().enumerate() {

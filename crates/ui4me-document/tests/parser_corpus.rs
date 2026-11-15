@@ -403,3 +403,59 @@ fn a_capped_parse_stops_at_the_node_limit() {
     let whole = Document::create(id, &sc, "about:blank", uncapped).map(|_| ());
     assert_eq!(capped.map_err(|e| e.code), whole.map_err(|e| e.code));
 }
+
+/// Renderer review #2: at the node-limit boundary a capped parse (hosted documents always cap the
+/// parse depth) accepts exactly what an uncapped one accepts. A fragment parse holds a scratch
+/// root and the synthetic `html` element while it runs, one node more than the staging fragment
+/// it leaves, and used to stop one node early.
+#[test]
+fn capped_and_uncapped_parses_agree_at_the_node_limit() {
+    use ui4me_document::limits::DomLimits;
+    let id = ui4me_engine_types::ids::DocumentId::from_raw(ui4me_engine_types::ids::RawId {
+        index: 7,
+        generation: std::num::NonZeroU32::MIN,
+    });
+    let limits = |nodes: u64, capped: bool| DomLimits {
+        nodes,
+        parse_depth: if capped { 512 } else { u64::MAX },
+        ..Default::default()
+    };
+    // Document parses: html, head, body, then three p + text = 10 nodes with the document.
+    let html = "<!doctype html><body><p>a</p><p>b</p><p>c</p>";
+    let size = Document::create(id, html, "about:blank", limits(1_000, false))
+        .unwrap()
+        .arena()
+        .live_count() as u64;
+    for nodes in size - 2..=size + 2 {
+        let capped = Document::create(id, html, "about:blank", limits(nodes, true)).is_ok();
+        let whole = Document::create(id, html, "about:blank", limits(nodes, false)).is_ok();
+        assert_eq!(
+            capped, whole,
+            "document parse, limit {nodes} (needs {size})"
+        );
+        assert_eq!(whole, nodes >= size, "limit {nodes}");
+    }
+    // Fragment parses (insertAdjacentHTML / innerHTML): a document of 5 live nodes plus a 5-node
+    // fragment fits a limit of 11 (the staging fragment node is counted until it is emptied).
+    let base = "<!doctype html><body id=b>";
+    let fragment = "<p>a</p><p>b</p><i></i>";
+    let fits = |nodes: u64, capped: bool| {
+        let mut d = Document::create(id, base, "about:blank", limits(nodes, capped)).unwrap();
+        assert_eq!(d.arena().live_count(), 5);
+        let b = d.element_by_id("b").unwrap();
+        let adjacent = d.insert_adjacent_html(b, "beforeend", fragment).is_ok();
+        let mut d = Document::create(id, base, "about:blank", limits(nodes, capped)).unwrap();
+        let b = d.element_by_id("b").unwrap();
+        let inner = d.set_inner_html(b, fragment).is_ok();
+        assert_eq!(adjacent, inner, "limit {nodes}, capped {capped}");
+        inner
+    };
+    for nodes in 9..=13 {
+        assert_eq!(
+            fits(nodes, true),
+            fits(nodes, false),
+            "fragment, limit {nodes}"
+        );
+        assert_eq!(fits(nodes, false), nodes >= 11, "fragment, limit {nodes}");
+    }
+}

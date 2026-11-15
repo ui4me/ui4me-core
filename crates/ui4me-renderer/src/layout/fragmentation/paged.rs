@@ -34,6 +34,10 @@ use crate::layout::box_tree::{BoxId, BoxTag, BoxTree};
 
 /// Layouts of a paged document at most, while the page geometry it assumed changes (named / blank pages).
 pub const MAX_PAGE_PASSES: usize = 6;
+/// Most pages one pagination may hold (bounded work and memory). The paged layout stops as soon as
+/// the flow breaks into more, before it builds any page (renderer review #8: a document of huge
+/// nested headings built 2000 pages per pass before it was refused).
+pub const MAX_PAGES: usize = 2000;
 
 /// One page box (CSS px): its size and margins (top, right, bottom, left).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -119,6 +123,8 @@ pub struct PagedLayout {
     pub diagnostics: Vec<ui4me_engine_types::diag::ErrorRecord>,
     /// Layouts of the whole flow it took (geometry passes times width runs).
     pub layouts: u32,
+    /// The flow breaks into more than [`MAX_PAGES`] pages: `pages` is empty.
+    pub too_many_pages: bool,
 }
 
 impl PagedLayout {
