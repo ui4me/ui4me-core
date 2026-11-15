@@ -575,6 +575,22 @@ reply.
   returns; they never run nested inside it.
 - A long-running callback delays later events. Keep callbacks short; split long work into
   steps that run between `Wait-UI4ME -TimeoutMilliseconds ...` calls, or run it in a job.
+- **Only subscribed events are queued.** A document event with no `Register-UI4MEDocumentEvent`
+  handler for its type on that document, and a notification method without a
+  `Register-UI4MENotification` callback, is discarded as it arrives
+  (`$app.Transport.FilteredNotifications`) and never takes a queue place. Register handlers
+  right after loading a document; an event that arrives before its handler is not delivered.
+- **When callbacks fall far behind, events are dropped, but never lifecycle notifications.**
+  At most 128 messages wait for the runspace (and 128 during one callback). Beyond that,
+  high-frequency events (`pointermove`, `mousemove`, `pointerover`/`out`, `mouseover`/`out`,
+  `wheel`, `scroll`, `selectionchange`, `dragover`, CSS `transition*`/`animation*`, window
+  `resized`/`scale_changed`) are dropped first, oldest first; other events (`click`,
+  `input`, ...) only when none of those is queued. Window `close_requested`/`closed`,
+  `document.error`, `app.activated`, `request.cancelled`, preference changes and the
+  shutdown are never dropped, and their bookkeeping is applied as soon as they arrive: a
+  window whose `closed` event was received is stale (`UI4ME.StaleObjectException`) even while
+  a callback is still running. The first drop of each burst writes one `UI4ME: event
+  callbacks are behind ...` line to standard error.
 - **Lifecycle requests are still answered while a callback waits.** `Set-UI4MEBeforeClose`
   and `Set-UI4MEBeforeQuit` policies and `app.shutdown` are handled inside such waits. A
   click handler that waits for a native dialog therefore does not stop the user from closing
@@ -649,8 +665,8 @@ The wire protocol is described in [protocol](https://github.com/ui4me/ui4me-core
 | Selector query page (`Find-UI4MEElement`, `Get-UI4MENodes`, `Get-UI4MENodeChildren`) | 1-4096 entries |
 | Event subscriptions per document | 256 |
 | Outstanding requests | 128 |
-| Queued host notifications/requests | 128 messages and 8 MiB. Overflowing notifications are dropped and counted (`$app.Transport.DroppedNotifications`); overflowing requests get error `-32005`. Window close, quit and shutdown requests are always admitted. |
-| Deferred notifications during one callback | 128 (excess counted in `$app.DroppedNotifications`) |
+| Queued host notifications/requests | 128 messages and 8 MiB of subscribed notifications and requests. When full, the oldest queued high-frequency event makes room; otherwise overflowing notifications are dropped and counted (`$app.Transport.DroppedNotifications`) and overflowing requests get error `-32005`. Window close, quit and shutdown requests and control notifications (window `closed`/`close_requested`, `document.error`, `app.shutdown`, `app.activated`, `request.cancelled`, `desktop.preferences_changed`) are always admitted. |
+| Deferred notifications during one callback | 128, with the same priorities (excess counted in `$app.DroppedNotifications`); control notifications are always kept |
 | Nested callback depth | 32 |
 | Resource registration | 256 entries, 1 MiB per call; 16 MiB, 64 bundles per document |
 | Live bitmaps | 8 per document, 64 MiB total, 4096 px per side, 2 or 3 slots |

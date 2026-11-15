@@ -61,7 +61,7 @@ Rules enforced by the host:
 * At most 128 requests may be pending. Reusing the ID of a request that is still pending (a native dialog, external open or clipboard read) is a protocol violation: the host disconnects and fails the application.
 * A result that would not fit in a 2 MiB frame is replaced by an `unavailable` error. A notification that would not fit is dropped (a `document.event` that is too large is reported as `document.error` instead).
 
-Buffers: the host queues at most 128 outgoing messages / 8 MiB per connection, and a peer that does not read its messages is disconnected. Incoming messages share a 256-event / 8 MiB queue; when it is full the host stops reading from the connection (backpressure) until the GUI thread catches up. The Python client caps its own outgoing queue at 256 frames; both clients allow at most 128 pending requests, and the PowerShell client queues at most 128 incoming messages / 8 MiB (see the [PowerShell limits](powershell-api.md#limits)).
+Buffers: the host queues at most 128 outgoing messages / 8 MiB per connection, and a peer that does not read its messages is disconnected. Incoming messages share a 256-event / 8 MiB queue; when it is full the host stops reading from the connection (backpressure) until the GUI thread catches up. The Python client caps its own outgoing queue at 256 frames; both clients allow at most 128 pending requests. Both clients queue at most 128 incoming messages for their callbacks (PowerShell also 8 MiB; see the [PowerShell limits](powershell-api.md#limits)), never apply backpressure to the host, and drop by delivery class when callbacks fall behind (see the checklist below).
 
 ## Backend environment
 
@@ -304,6 +304,14 @@ Drops onto a document are delivered as `document.event`.
 * Use string request IDs that are unique while pending; send `request.cancel` when abandoning a request.
 * Create a window and send `app.ready` within `startup_timeout_ms`.
 * On `app.shutdown`, finish quickly and exit the process.
-* Treat document and node identities as short-lived; expect `-32004` after reloads.
+* Treat document and node identities as short-lived; expect `-32004` after reloads. Both reference bindings turn `-32004` on a window or document call into their stale-handle error and retire the handle.
+* **Never drop control messages.** Classify every host message on the reader before it waits for a callback:
+  * *control*: the requests `window.before_close` and `app.before_quit`; the notifications `app.shutdown`, `app.activated`, `request.cancelled`, `document.error`, `desktop.preferences_changed`, and `window.event` with `type` `closed` or `close_requested`;
+  * *coalescible*: `document.event` of type `pointermove`, `pointerover`, `pointerout`, `mousemove`, `mouseover`, `mouseout`, `wheel`, `scroll`, `selectionchange`, `dragover`, `drag_feedback`, `transition*` or `animation*`, and `window.event` `resized` or `scale_changed`;
+  * *discrete*: everything else (`click`, `input`, `keydown`, …).
+
+  Control messages bypass any bound on the callback queue. Apply their bookkeeping as they arrive, before user code sees them: a window whose `closed` event was received, or a document that received a fatal `document.error`, is stale immediately, even while a callback is blocked. When a bounded queue is full, evict the oldest queued coalescible message first and drop a discrete one only when none is queued; keep everything else in arrival order. Count every drop and report the first drop of a burst once. Discarding events no callback subscribed to before they are queued is allowed (both reference bindings do) and is not a drop.
+* Do not block the reader to slow the host down: a backend that stops reading is disconnected, and a slow callback must cost dropped events, not the connection.
+* A callback failure must never end a callback worker or leave a host request unanswered; answer a failed policy request with an error (the host treats it as deny).
 
 See also: [lifecycle](../concepts/lifecycle.md), [architecture](../concepts/architecture.md), [host CLI and manifest](host-cli.md).

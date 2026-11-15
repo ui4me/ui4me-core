@@ -141,6 +141,9 @@ Describe 'UI4ME.Core transport against a local peer' {
     }
 
     It 'bounds queued notifications at 128 and counts drops instead of failing' {
+        # Only notifications with a callback are queued at all (BIND-PS-02);
+        # 1.0.1 queued these even without one.
+        Register-UI4MENotification -Application $script:app -Method 'test.tick' -Callback { }
         $before = $script:app.Transport.DroppedNotifications
         $request = Start-UI4MERpc -Application $script:app -Method 'mock.flood_notifications' -Parameters @{ count = 400 }
         Start-Sleep -Milliseconds 1500   # not pumping: the reader must apply the bound
@@ -149,6 +152,18 @@ Describe 'UI4ME.Core transport against a local peer' {
         ($script:app.Transport.DroppedNotifications - $before) | Should -Be 272
         $script:app.Transport.QueuedMessages | Should -Be 0
         $script:app.Transport.IsDisconnected | Should -BeFalse
+        Register-UI4MENotification -Application $script:app -Method 'test.tick' -Callback $null
+    }
+
+    It 'discards notifications nobody subscribed to on arrival, without dropping or queueing them' {
+        $dropped = $script:app.Transport.DroppedNotifications
+        $filtered = $script:app.Transport.FilteredNotifications
+        $request = Start-UI4MERpc -Application $script:app -Method 'mock.flood_notifications' -Parameters @{ count = 400 }
+        Start-Sleep -Milliseconds 1000
+        $null = Wait-UI4MERpc -Request $request
+        ($script:app.Transport.FilteredNotifications - $filtered) | Should -Be 400
+        $script:app.Transport.DroppedNotifications | Should -Be $dropped
+        $script:app.Transport.QueuedMessages | Should -Be 0
     }
 
     It 'rejects host requests beyond the queue bound with -32005 and answers the rest' {

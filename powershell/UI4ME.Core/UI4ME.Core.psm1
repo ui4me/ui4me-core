@@ -88,12 +88,19 @@ function Assert-UI4MEWindow {
     param($Window)
     if (-not (Test-UI4METype $Window 'UI4ME.Window')) { throw 'Expected a UI4ME.Window from New-UI4MEWindow' }
     Assert-UI4MEApplication $Window.Application
+    if (-not $Window.Closed -and $Window.Application.Transport.IsWindowClosed($Window.Id)) {
+        # The host's "closed" event already arrived but was not pumped yet.
+        Set-UI4MEWindowClosed $Window.Application $Window.Id
+    }
     if ($Window.Closed) { throw (New-UI4MEStaleError "UI4ME window $($Window.Id) is closed") }
 }
 function Assert-UI4MEDocument {
     param($Document)
     if (-not (Test-UI4METype $Document 'UI4ME.Document')) { throw 'Expected a UI4ME.Document from Open-UI4MEFile or Open-UI4MEHtml' }
     Assert-UI4MEWindow $Document.Window
+    if (-not $Document.Retired -and $Document.Window.Application.Transport.IsDocumentFailed($Document.Id)) {
+        Set-UI4MEDocumentFailed $Document
+    }
     if ($Document.Retired -or $null -eq $Document.Window.Document -or
         -not [object]::ReferenceEquals($Document.Window.Document, $Document)) {
         throw (New-UI4MEStaleError 'This UI4ME document was replaced, unloaded, or its window closed')
@@ -164,7 +171,7 @@ function Invoke-UI4MEDocumentHandlers {
     $target = Get-UI4MEField $EventObject 'element'
     $route = @(Get-UI4MEField $EventObject 'path' @())
     foreach ($entry in @($Document.Handlers.ToArray())) {
-        if ($Document.Retired) { break }
+        if ($Document.Retired -and -not $Document.Failing) { break }
         if ($entry.Type -ne $kind) { continue }
         if (-not $entry.Element -or $entry.Element -eq $target -or $route -contains $entry.Element) {
             try { $null = Invoke-UI4MECallback $Application $entry.Callback @($EventObject) }
@@ -180,21 +187,24 @@ function Invoke-UI4MENotification {
     switch -Exact ($method) {
         'app.shutdown' { $Application.ShutdownRequested = $true }
         'window.event' {
-            $windowId = Get-UI4MEField $params 'window_id'
-            if ($windowId -and $Application.Windows.ContainsKey($windowId) -and
-                (Get-UI4MEField $params 'type') -eq 'closed') {
-                $win = $Application.Windows[$windowId]
-                $win.Closed = $true
-                if ($null -ne $win.Document) { Remove-UI4MEDocumentState $win.Document }
-                [void]$Application.Windows.Remove($windowId)
-            }
+            # Usually already applied when the message was received (Invoke-UI4MEPump).
+            if ((Get-UI4MEField $params 'type') -eq 'closed') { Set-UI4MEWindowClosed $Application (Get-UI4MEField $params 'window_id') }
         }
         { $_ -eq 'document.event' -or $_ -eq 'document.error' } {
-            $windowId = Get-UI4MEField $params 'window_id'
-            if (-not $windowId -or -not $Application.Windows.ContainsKey($windowId)) { break }
-            $win = $Application.Windows[$windowId]
-            $doc = $win.Document
-            if ($win.Closed -or $null -eq $doc -or $doc.Retired -or $doc.Id -ne (Get-UI4MEField $params 'document_id')) { break }
+            $documentId = Get-UI4MEField $params 'document_id'
+            if ($method -eq 'document.error' -and $documentId -and $Application.Failing.ContainsKey($documentId)) {
+                # A fatal error marked stale on arrival: still tell its handlers.
+                $doc = $Application.Failing[$documentId]
+                [void]$Application.Failing.Remove($documentId)
+                $win = $doc.Window
+                if ($win.Closed) { Remove-UI4MEDocumentState $doc; break }
+            } else {
+                $windowId = Get-UI4MEField $params 'window_id'
+                if (-not $windowId -or -not $Application.Windows.ContainsKey($windowId)) { break }
+                $win = $Application.Windows[$windowId]
+                $doc = $win.Document
+                if ($win.Closed -or $null -eq $doc -or $doc.Retired -or $doc.Id -ne $documentId) { break }
+            }
             if ($method -eq 'document.event') {
                 $evt = Get-UI4MEField $params 'event'
                 if ($null -ne $evt -and $evt -is [psobject]) { Invoke-UI4MEDocumentHandlers $Application $doc $evt }
@@ -226,6 +236,74 @@ function ConvertTo-UI4MEDecision {
     param([object[]]$Output)
     if ($Output.Count -eq 0) { return $false }
     return [bool]$Output[$Output.Count - 1]
+}
+
+function Set-UI4MEWindowClosed {
+    # Bookkeeping for the host's "closed" event, applied as soon as it is
+    # received (before user callbacks, even while one is running).
+    param($Application, [string]$WindowId)
+    if (-not $WindowId -or -not $Application.Windows.ContainsKey($WindowId)) { return }
+    $win = $Application.Windows[$WindowId]
+    $win.Closed = $true
+    [void]$Application.Windows.Remove($WindowId)
+    [void]$Application.BeforeClose.Remove($WindowId)
+    if ($null -ne $win.Document) { Remove-UI4MEDocumentState $win.Document }
+}
+
+function Set-UI4MEDocumentFailed {
+    # A fatal document.error was received: the document is stale at once; its
+    # handlers still receive the error when the notification is dispatched.
+    param($Document)
+    if ($Document.Retired) { return }
+    $Document.Retired = $true
+    $Document.Failing = $true
+    $Document.Window.Application.Failing[$Document.Id] = $Document
+}
+
+function Invoke-UI4MEReceived {
+    # Applies control bookkeeping for a notification as it is taken from the transport.
+    param($Application, $Message)
+    switch -Exact ($Message.Method) {
+        'app.shutdown' { $Application.ShutdownRequested = $true }
+        'window.event' {
+            if ((Get-UI4MEField $Message.Params 'type') -eq 'closed') { Set-UI4MEWindowClosed $Application (Get-UI4MEField $Message.Params 'window_id') }
+        }
+        'document.error' {
+            if ((Get-UI4MEField $Message.Params 'fatal' $false) -eq $true) {
+                $windowId = Get-UI4MEField $Message.Params 'window_id'
+                if ($windowId -and $Application.Windows.ContainsKey($windowId)) {
+                    $doc = $Application.Windows[$windowId].Document
+                    if ($null -ne $doc -and $doc.Id -eq (Get-UI4MEField $Message.Params 'document_id')) { Set-UI4MEDocumentFailed $doc }
+                }
+            }
+        }
+    }
+}
+
+function Add-UI4MEDeferred {
+    # Defers a notification that arrived while a callback runs. Control
+    # notifications are always kept; at the cap the oldest coalescible one is
+    # evicted first, otherwise the new one is dropped (and counted).
+    param($Application, $Message)
+    if ($Message.Class -eq 'control' -or $Application.Deferred.Count -lt $script:MaximumDeferred) {
+        $Application.Deferred.Enqueue($Message)
+        return
+    }
+    $kept = New-Object 'System.Collections.Generic.Queue[object]'
+    $evicted = $false
+    foreach ($queued in $Application.Deferred) {
+        if (-not $evicted -and $queued.Class -eq 'coalescible') { $evicted = $true; continue }
+        $kept.Enqueue($queued)
+    }
+    $Application.DroppedNotifications++
+    if ($evicted) {
+        $kept.Enqueue($Message)
+        $Application.Deferred.Clear()
+        foreach ($queued in $kept) { $Application.Deferred.Enqueue($queued) }
+    }
+    if ($Application.DroppedNotifications -eq 1 -or ($Application.DroppedNotifications % 1000) -eq 0) {
+        Write-UI4MELog "a callback is running for long; $($Application.DroppedNotifications) deferred event(s) dropped so far (window lifecycle events are never dropped)"
+    }
 }
 
 function Invoke-UI4MEHostRequest {
@@ -274,6 +352,8 @@ function Invoke-UI4MEPump {
         Set-UI4MEDisconnected $Application
         throw (New-Object -TypeName 'UI4ME.DisconnectedException' -ArgumentList $Application.Transport.Failure)
     }
+    $notice = $Application.Transport.TakeDropNotice()
+    if ($null -ne $notice) { Write-UI4MELog $notice }
     if ($null -eq $message) { return $false }
     switch -Exact ($message.Kind) {
         'response' {
@@ -281,13 +361,9 @@ function Invoke-UI4MEPump {
         }
         'request' { Invoke-UI4MEHostRequest $Application $message }
         default {
-            if ($message.Method -eq 'app.shutdown') { $Application.ShutdownRequested = $true }
-            if ($Application.Dispatching) {
-                if ($Application.Deferred.Count -ge $script:MaximumDeferred) { $Application.DroppedNotifications++ }
-                else { $Application.Deferred.Enqueue($message) }
-            } else {
-                Invoke-UI4MENotification $Application $message
-            }
+            Invoke-UI4MEReceived $Application $message
+            if ($Application.Dispatching) { Add-UI4MEDeferred $Application $message }
+            else { Invoke-UI4MENotification $Application $message }
         }
     }
     return $true
@@ -314,6 +390,8 @@ function Connect-UI4ME {
     }
     Initialize-UI4MEHelper
     $transport = New-Object -TypeName 'UI4ME.Transport' -ArgumentList @($Endpoint, $ConnectTimeoutMilliseconds)
+    # Notifications without a callback are discarded on the reader thread.
+    $transport.EnableInterestFiltering()
     $app = [pscustomobject]@{
         Transport = $transport
         Hello = $null
@@ -321,6 +399,7 @@ function Connect-UI4ME {
         Replies = @{}
         Pending = @{}
         Deferred = (New-Object 'System.Collections.Generic.Queue[object]')
+        Failing = @{}
         NextId = [long]0
         Depth = 0
         MaxDepth = 32
@@ -486,6 +565,15 @@ function Wait-UI4ME {
                 if ($Application.ShutdownRequested) { break }
                 throw
             }
+        }
+        if (-not $Application.Dispatching) {
+            # Deliver what the host sent before (and with) the shutdown, such as
+            # the last window's "closed" event deferred behind a running
+            # callback, for up to two seconds, as the Python binding does.
+            $clock = [Diagnostics.Stopwatch]::StartNew()
+            try {
+                while ($clock.ElapsedMilliseconds -lt 2000 -and (Invoke-UI4MEPump $Application 0)) { }
+            } catch [UI4ME.DisconnectedException] { $null = $_ }
         }
         return
     }
@@ -655,6 +743,7 @@ function Register-UI4MENotification {
     Assert-UI4MEApplication $Application
     if ($null -eq $Callback) { [void]$Application.Notifications.Remove($Method) }
     else { $Application.Notifications[$Method] = $Callback }
+    $Application.Transport.SetNotificationInterest([string[]]@($Application.Notifications.Keys))
 }
 
 # ---------------------------------------------------------------- documents --
@@ -663,7 +752,7 @@ function New-UI4MEDocumentObject {
     param($Window, $Result)
     $id = [string](Get-UI4MEField $Result 'document_id')
     if ([string]::IsNullOrEmpty($id)) { throw 'The host did not return a document_id' }
-    $doc = [pscustomobject]@{ Window = $Window; Id = $id; Retired = $false
+    $doc = [pscustomobject]@{ Window = $Window; Id = $id; Retired = $false; Failing = $false
         Handlers = (New-Object System.Collections.ArrayList); Bitmaps = (New-Object System.Collections.ArrayList) }
     $doc.PSObject.TypeNames.Insert(0, 'UI4ME.Document')
     # Retire the previous facade only after the atomic replacement succeeded.
@@ -674,10 +763,25 @@ function New-UI4MEDocumentObject {
 
 function Remove-UI4MEDocumentState {
     param($Document)
-    if ($null -eq $Document -or $Document.Retired) { return }
+    if ($null -eq $Document -or ($Document.Retired -and -not $Document.Failing)) { return }
     $Document.Retired = $true
+    $Document.Failing = $false
+    [void]$Document.Window.Application.Failing.Remove($Document.Id)
     $Document.Handlers.Clear()
+    Update-UI4MEDocumentInterest $Document
     foreach ($bitmap in @($Document.Bitmaps.ToArray())) { Remove-UI4MELiveBitmap -Bitmap $bitmap -Quiet }
+}
+
+function Update-UI4MEDocumentInterest {
+    # Tells the transport which event types this document has handlers for;
+    # other document events are discarded on arrival (BIND-PS-02).
+    param($Document)
+    $types = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    if (-not $Document.Retired) { foreach ($entry in $Document.Handlers) { [void]$types.Add([string]$entry.Type) } }
+    $list = New-Object 'System.Collections.Generic.List[string]'
+    $list.AddRange($types)
+    try { $Document.Window.Application.Transport.SetDocumentInterest($Document.Id, $list.ToArray()) }
+    catch [ObjectDisposedException] { $null = $_ }
 }
 
 function Open-UI4MEHtml {
@@ -741,6 +845,7 @@ function Register-UI4MEDocumentEvent {
     $sub = [pscustomobject]@{ Document = $Document; Type = $Type; Element = $Element; Callback = $Callback }
     $sub.PSObject.TypeNames.Insert(0, 'UI4ME.Subscription')
     [void]$Document.Handlers.Add($sub)
+    Update-UI4MEDocumentInterest $Document
     return $sub
 }
 
@@ -750,6 +855,7 @@ function Unregister-UI4MEDocumentEvent {
     param([Parameter(Mandatory)]$Subscription)
     if (-not (Test-UI4METype $Subscription 'UI4ME.Subscription')) { throw 'Expected a UI4ME.Subscription' }
     [void]$Subscription.Document.Handlers.Remove($Subscription)
+    Update-UI4MEDocumentInterest $Subscription.Document
 }
 
 function Invoke-UI4MEDocumentCommand {
