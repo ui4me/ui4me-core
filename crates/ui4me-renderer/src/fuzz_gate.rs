@@ -8,9 +8,19 @@
 //!
 //! Environment: `UI4ME_FUZZ_SEED` (u64, default 1), `UI4ME_FUZZ_ITERS` (cases, default 2000),
 //! `UI4ME_FUZZ_SECS` (wall budget, 0 = iterations only), `UI4ME_FUZZ_TIMEOUT_MS` (per-case
-//! watchdog, default 30000), `UI4ME_FUZZ_OUT` (failing-case directory, default the temp dir).
-//! Every case runs on a worker thread with an 8 MiB stack; a panic or a watchdog timeout is a
-//! finding, the case is saved to `UI4ME_FUZZ_OUT` and the harness fails at the end.
+//! watchdog, default 30000), `UI4ME_FUZZ_OUT` (failing-case directory, default the temp dir),
+//! `UI4ME_FUZZ_STACK_KIB` (worker stack, KiB). Every case runs on a worker thread whose stack
+//! defaults to **half** the production stack of the thread the harness emulates (F-01/F-03:
+//! [`crate::ENGINE_STACK_BYTES`] / 2 for documents, half the asset-worker stack for SVG decoding),
+//! so a recursion regression that eats the 2x headroom aborts the run. Set it lower (for example
+//! `UI4ME_FUZZ_STACK_KIB=1024`) to hunt for the deepest recursion. A panic or a watchdog timeout
+//! is a finding, the case is saved to `UI4ME_FUZZ_OUT` and the harness fails at the end; a stack
+//! overflow aborts the process, so the case being run is written first to
+//! `<name>-seed<seed>-running.txt` in `UI4ME_FUZZ_OUT` (left behind only by an abort).
+//!
+//! Nightly (F-22): `UI4ME_FUZZ_SECS=120 cargo test -p ui4me-renderer --lib --release fuzz_ --
+//! --ignored --nocapture --test-threads=1` runs every harness (`fuzz_gate::harness_*`,
+//! `fuzz_resources::harness_*`) for 120 s each.
 use super::*;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -262,10 +272,10 @@ struct Worker {
     tx: mpsc::Sender<Job>,
 }
 impl Worker {
-    fn new() -> Self {
+    fn new(stack_kib: u64) -> Self {
         let (tx, rx) = mpsc::channel::<Job>();
         std::thread::Builder::new()
-            .stack_size(8 * 1024 * 1024)
+            .stack_size(stack_kib as usize * 1024)
             .spawn(move || {
                 while let Ok(job) = rx.recv() {
                     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job.run));
@@ -283,8 +293,19 @@ impl Worker {
 }
 
 /// Run `cases` generated cases (or until the time budget). `make(rng, n)` returns the saved
-/// description of the case and its body; the body runs under the watchdog.
-pub fn run_cases(name: &str, mut make: impl FnMut(&mut Rng, u64) -> (String, CaseFn)) {
+/// description of the case and its body; the body runs under the watchdog, on half the engine
+/// stack (see the module documentation).
+pub fn run_cases(name: &str, make: impl FnMut(&mut Rng, u64) -> (String, CaseFn)) {
+    run_cases_on(name, crate::ENGINE_STACK_BYTES as u64 / 2 / 1024, make);
+}
+
+/// [`run_cases`] with the worker stack (KiB) used unless `UI4ME_FUZZ_STACK_KIB` is set.
+pub fn run_cases_on(
+    name: &str,
+    default_stack_kib: u64,
+    mut make: impl FnMut(&mut Rng, u64) -> (String, CaseFn),
+) {
+    let stack_kib = env_u64("UI4ME_FUZZ_STACK_KIB", default_stack_kib);
     let seed = env_u64("UI4ME_FUZZ_SEED", 1);
     let iters = env_u64("UI4ME_FUZZ_ITERS", 2000);
     let secs = env_u64("UI4ME_FUZZ_SECS", 0);
@@ -295,7 +316,8 @@ pub fn run_cases(name: &str, mut make: impl FnMut(&mut Rng, u64) -> (String, Cas
     std::fs::create_dir_all(&out).ok();
     let mut rng = Rng::new(seed ^ name.bytes().fold(7u64, |a, b| a * 31 + u64::from(b)));
     let started = Instant::now();
-    let mut worker = Worker::new();
+    let mut worker = Worker::new(stack_kib);
+    let running = out.join(format!("{name}-seed{seed}-running.txt"));
     let mut failures: Vec<Failure> = Vec::new();
     let mut n = 0u64;
     let mut longest = Duration::ZERO;
@@ -311,6 +333,8 @@ pub fn run_cases(name: &str, mut make: impl FnMut(&mut Rng, u64) -> (String, Cas
             break;
         }
         let (desc, body) = make(&mut rng, n);
+        // An overflow aborts the process before anything below runs: keep the input on disk.
+        std::fs::write(&running, format!("case {n}\n{desc}")).ok();
         let (dtx, drx) = mpsc::channel();
         let t0 = Instant::now();
         worker
@@ -336,13 +360,14 @@ pub fn run_cases(name: &str, mut make: impl FnMut(&mut Rng, u64) -> (String, Cas
             eprintln!("FINDING {kind} in {name} case {n}: {detail}\n  saved {path:?}");
             failures.push(Failure { kind, detail });
             if kind == "hang" {
-                worker = Worker::new(); // the stuck thread is abandoned
+                worker = Worker::new(stack_kib); // the stuck thread is abandoned
             }
         }
         n += 1;
     }
+    std::fs::remove_file(&running).ok();
     eprintln!(
-        "fuzz {name}: seed {seed}, {n} cases in {:.1}s, slowest {:?}, {} finding(s)",
+        "fuzz {name}: seed {seed}, {n} cases in {:.1}s on a {stack_kib} KiB stack, slowest {:?}, {} finding(s)",
         started.elapsed().as_secs_f64(),
         longest,
         failures.len()
@@ -905,6 +930,136 @@ fn dom_sequence(rng: &mut Rng, steps: usize) {
         );
     }
     exercise(&mut d, rng);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Harness 4 (F-01, F-06): deep content and depth-limit bypass attempts
+// ---------------------------------------------------------------------------------------------
+
+/// Opening/closing markup of one nesting unit and the DOM levels it adds. `inline-block`, buttons
+/// (atomic inlines) and multicol are left out: their layout is exponential in nesting depth
+/// (INPUTSEC-06, roadmap 2.5), which would only time out.
+const UNITS: &[(&str, &str, usize)] = &[
+    ("<div>", "</div>", 1),
+    ("<fieldset>", "</fieldset>", 1),
+    ("<fieldset><legend>l</legend>", "</fieldset>", 1),
+    ("<table><tbody><tr><td>", "</td></tr></tbody></table>", 4),
+    ("<div style='display:flex'>", "</div>", 1),
+    ("<div style='display:grid'>", "</div>", 1),
+    ("<div style='display:contents'>", "</div>", 1),
+    ("<ul><li>", "</li></ul>", 2),
+    ("<span>", "</span>", 1),
+    ("<details open><summary>s</summary>", "</details>", 1),
+];
+
+/// A random chain of about `levels` DOM levels whose innermost element is `<i id={leaf}>`.
+fn chain(rng: &mut Rng, levels: usize, leaf: &str) -> String {
+    let (mut open, mut close, mut n) = (String::new(), Vec::new(), 0);
+    while n < levels {
+        let (o, c, k) = *rng.pick(UNITS);
+        open.push_str(o);
+        close.push(c);
+        n += k;
+    }
+    open.push_str(&format!("<i id={leaf}>x</i>"));
+    for c in close.iter().rev() {
+        open.push_str(c);
+    }
+    open
+}
+
+#[test]
+#[ignore = "fuzz harness; see module docs"]
+fn harness_depth_chains() {
+    run_cases("depth", move |rng, _| {
+        let case_seed = rng.next();
+        (
+            format!("depth chain seed {case_seed}; replay with this harness and UI4ME_FUZZ_SEED"),
+            Box::new(move || depth_sequence(&mut Rng::new(case_seed))),
+        )
+    });
+}
+
+fn depth_sequence(rng: &mut Rng) {
+    // Several chains in one document, most of them near the 256 limit.
+    let mut html = String::from("<!doctype html><body><div id=root>");
+    let chains = 1 + rng.below(4);
+    for c in 0..chains {
+        let levels = if rng.chance(70) {
+            200 + rng.below(70)
+        } else {
+            rng.below(200)
+        };
+        html.push_str(&format!(
+            "<section id=s{c}>{}</section>",
+            chain(rng, levels, &format!("l{c}"))
+        ));
+    }
+    html.push_str("</div>");
+    let Some(mut d) = ok(Document::parse_hosted(&html, None, 640, 480)) else {
+        return;
+    };
+    if rng.chance(50) {
+        // With and without a first frame: a cold box build after the mutations is the case the
+        // audit's bypass needed to abort.
+        d.render(640, 480, 1.0).unwrap();
+    }
+    let mut ids: Vec<String> = (0..chains)
+        .flat_map(|c| [format!("s{c}"), format!("l{c}")])
+        .collect();
+    ids.push("root".into());
+    let positions = ["beforebegin", "afterbegin", "beforeend", "afterend"];
+    let mut fresh = 0;
+    for _ in 0..1 + rng.below(24) {
+        let a = rng.pick(&ids).clone();
+        let b = rng.pick(&ids).clone();
+        let pos = *rng.pick(&positions);
+        match rng.below(6) {
+            0 | 1 => {
+                let _ = ok(d.move_element(&a, &b, pos));
+            }
+            2 => {
+                fresh += 1;
+                let leaf = format!("f{fresh}");
+                let levels = rng.below(300);
+                if ok(d.insert_html(&a, pos, &chain(rng, levels, &leaf))).is_some() {
+                    ids.push(leaf);
+                }
+            }
+            3 => {
+                fresh += 1;
+                let leaf = format!("f{fresh}");
+                let levels = rng.below(300);
+                if ok(d.replace_children_html(&a, &chain(rng, levels, &leaf))).is_some() {
+                    ids.push(leaf);
+                }
+            }
+            4 => {
+                let _ = ok(d.set_text(&a, "t"));
+            }
+            _ => {
+                let _ = ok(d.append_text(&a, "t"));
+            }
+        }
+        if rng.chance(30) {
+            let _ = ok(d.render(640, 480, 1.0));
+        }
+    }
+    let _ = ok(d.render(640, 480, 1.0));
+    let _ = ok(d.accessibility_tree());
+    // Every node is within the limit, so the serialised document loads again and renders cold.
+    let html = d.get_html(None, None, true).unwrap();
+    match Document::parse_hosted(&html, None, 640, 480) {
+        Ok(mut cold) => {
+            let _ = ok(cold.render(640, 480, 1.0));
+            let _ = ok(cold.accessibility_tree());
+        }
+        Err(e) => assert!(
+            !e.message.contains("depth limit"),
+            "a mutation sequence exceeded the depth limit: {}",
+            e.message
+        ),
+    }
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -5,7 +5,12 @@
 //!
 //!     UI4ME_FUZZ_SECS=300 nice cargo test -p ui4me-renderer --lib --release \
 //!         fuzz_resources::harness -- --ignored --nocapture --test-threads=1
-use super::fuzz_gate::{Rng, mutate, run_cases};
+//!
+//! `harness_svg_depth` (F-03) decodes generated deep SVG (nested groups, `clip-path`/`mask`/`use`
+//! chains in attributes and style sheets, reference cycles, nested `data:` images) on the fuzz
+//! worker itself, whose stack defaults to half the asset-worker stack (`UI4ME_FUZZ_STACK_KIB`
+//! overrides it, e.g. 1024), and every fourth case through a document (the real asset workers).
+use super::fuzz_gate::{Rng, mutate, run_cases, run_cases_on};
 use super::*;
 use std::io::Read as _;
 use std::net::TcpListener;
@@ -361,6 +366,174 @@ fn harness_images() {
         "peak memory grew by more than 1.5 GiB: {hwm0} -> {hwm} KiB"
     );
     std::fs::remove_dir_all(&dir).ok();
+}
+
+// ---------------------------------------------------------------------------------------------
+// F-03: deep image SVG
+// ---------------------------------------------------------------------------------------------
+
+const SVG_OPEN: &str = "<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='40' height='40'>";
+
+/// One generated deep SVG document; `budget` bounds nested `data:` images.
+fn deep_svg(rng: &mut Rng, budget: usize) -> String {
+    let n = match rng.below(4) {
+        0 => rng.below(60),
+        1 => 100 + rng.below(60), // around the 128 cap
+        2 => rng.below(800),
+        _ => rng.below(3000),
+    }
+    .max(1);
+    let mut s = String::from(SVG_OPEN);
+    match rng.below(8) {
+        0 => {
+            let tag = *rng.pick(&["g", "svg", "a", "switch", "symbol", "mask", "clipPath"]);
+            s.push_str(&format!("<{tag}>").repeat(n));
+            s.push_str("<rect width='9' height='9'/>");
+            s.push_str(&format!("</{tag}>").repeat(n));
+        }
+        1 | 2 => {
+            // A reference chain through an attribute, optionally closed into a cycle.
+            let (tag, attr) = *rng.pick(&[
+                ("clipPath", "clip-path"),
+                ("mask", "mask"),
+                ("filter", "filter"),
+                ("pattern", "fill"),
+                ("marker", "marker-end"),
+            ]);
+            let cycle = rng.chance(20);
+            for i in 0..n {
+                let prev = if i > 0 {
+                    i - 1
+                } else if cycle {
+                    n - 1
+                } else {
+                    usize::MAX
+                };
+                let link = if prev == usize::MAX {
+                    String::new()
+                } else {
+                    format!(" {attr}='url(#r{prev})'")
+                };
+                let body = if tag == "filter" {
+                    "<feGaussianBlur stdDeviation='1'/>".to_string()
+                } else {
+                    format!("<path d='M0 0 L9 9'{link}/>")
+                };
+                s.push_str(&format!("<{tag} id='r{i}'{link}>{body}</{tag}>"));
+            }
+            s.push_str(&format!(
+                "<path d='M0 0 L9 9' stroke='black' {attr}='url(#r{})'/>",
+                n - 1
+            ));
+        }
+        3 => {
+            // `use` chains (and cycles).
+            s.push_str("<defs><rect id='u0' width='9' height='9'/>");
+            for i in 1..n {
+                let target = if rng.chance(2) { n - 1 } else { i - 1 };
+                s.push_str(&format!("<g id='u{i}'><use href='#u{target}'/></g>"));
+            }
+            s.push_str(&format!("</defs><use xlink:href='#u{}'/>", n - 1));
+        }
+        4 => {
+            // The chain through a style sheet.
+            s.push_str("<style>");
+            for i in 1..n {
+                s.push_str(&format!("#c{i}{{clip-path:url(#c{})}}", i - 1));
+            }
+            s.push_str(&format!(".t{{clip-path:url(#c{})}}</style>", n - 1));
+            for i in 0..n {
+                s.push_str(&format!(
+                    "<clipPath id='c{i}'><rect width='9' height='9'/></clipPath>"
+                ));
+            }
+            s.push_str("<rect class='t' width='9' height='9'/>");
+        }
+        5 => {
+            // Selector complexity (simplecss matches recursively).
+            let sel = vec!["g"; n].join(*rng.pick(&[" ", " > ", " + ", " ~ "]));
+            s.push_str(&format!(
+                "<style>{sel}{{fill:red}}</style><g><rect width='9' height='9'/></g>"
+            ));
+        }
+        6 if budget > 0 => {
+            // A nested data: image inside groups, its content another generated document.
+            let inner = deep_svg(rng, budget - 1);
+            let url: String = inner
+                .bytes()
+                .map(|b| {
+                    if b.is_ascii_alphanumeric() {
+                        (b as char).to_string()
+                    } else {
+                        format!("%{b:02X}")
+                    }
+                })
+                .collect();
+            let k = rng.below(140);
+            s.push_str(&"<g>".repeat(k));
+            s.push_str(&format!(
+                "<image width='9' height='9' href='data:image/svg+xml,{url}'/>"
+            ));
+            s.push_str(&"</g>".repeat(k));
+        }
+        _ => {
+            // Inherited paint into a pattern deep below groups.
+            let k = rng.below(200);
+            s.push_str(&format!(
+                "<defs><pattern id='p' width='4' height='4'>{}<rect width='2' height='2'/>{}</pattern></defs><g fill='url(#p)'>{}<rect width='9' height='9'/>{}</g>",
+                "<g>".repeat(k),
+                "</g>".repeat(k),
+                "<g>".repeat(n % 200),
+                "</g>".repeat(n % 200)
+            ));
+        }
+    }
+    s.push_str("</svg>");
+    s
+}
+
+#[test]
+#[ignore = "fuzz harness; see module docs"]
+fn harness_svg_depth() {
+    use ui4me_assets::decode::{SvgOptions, SvgRenderer};
+    use ui4me_assets::svg::usvg_adapter::UsvgRenderer;
+    let stack_kib = ui4me_assets::worker::ASSET_WORKER_STACK_BYTES as u64 / 2 / 1024;
+    run_cases_on("svg-depth", stack_kib, move |rng, n| {
+        let mut svg = deep_svg(rng, 2);
+        if rng.chance(25) {
+            svg = mutate(rng, &svg, &[], 400_000);
+        }
+        let via_document = n % 4 == 3;
+        let desc = format!("via_document={via_document} len={}\n{svg}", svg.len());
+        (
+            desc,
+            Box::new(move || {
+                if via_document {
+                    let html = format!(
+                        "<!doctype html><img id=i width=40 height=40 src='data:image/svg+xml;base64,{}'>",
+                        b64(svg.as_bytes())
+                    );
+                    let mut d = Document::parse_hosted(&html, None, 120, 80).unwrap();
+                    settle(&mut d, 120, 80);
+                    let _ = d.diagnostics();
+                    return;
+                }
+                let r = UsvgRenderer;
+                match r.parse(svg.as_bytes(), &SvgOptions::default()) {
+                    Ok(parsed) => {
+                        let _ = r.rasterize(&parsed.tree, 40, 40);
+                    }
+                    Err(e) => assert!(
+                        !matches!(
+                            e.code,
+                            ui4me_engine_types::codes_generated::Code::InternalInvariant
+                        ),
+                        "unexpected SVG error {e:?}"
+                    ),
+                }
+            }),
+        )
+    });
 }
 
 // ---------------------------------------------------------------------------------------------
