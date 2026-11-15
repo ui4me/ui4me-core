@@ -684,3 +684,42 @@ fn accessibility_key_follows_a_transform_animation() {
     d.render(400, 300, 1.0).unwrap();
     assert_ne!(key_of(&mut d), k);
 }
+
+// ---------------------------------------------------------------------------------------------
+// INTERACT-10: pointer capture ends when the window loses focus
+
+#[test]
+fn window_focus_loss_cancels_the_pointer_and_releases_capture() {
+    let mut d = doc(
+        "<!doctype html><style>body{margin:0}#c{width:200px;height:100px}</style><div id=c>cap</div>",
+        400,
+        300,
+    );
+    ptr(&mut d, true, 50.0, 50.0);
+    d.set_pointer_capture("c", 1, true).unwrap();
+    d.handle_input(Input::PointerMoved { x: 60.0, y: 60.0 })
+        .unwrap();
+    assert_eq!(d.pointer_capture().as_deref(), Some("c"));
+    let ev = d.handle_input(Input::Focus(false)).unwrap();
+    let t = types(&ev);
+    let cancel = t.iter().position(|e| e == "pointercancel@c");
+    let lost = t.iter().position(|e| e == "lostpointercapture@c");
+    assert!(
+        cancel.is_some() && cancel < lost,
+        "pointercancel then lostpointercapture: {t:?}"
+    );
+    assert_eq!(d.pointer_capture(), None);
+    // The next buttonless move goes to what is under the pointer, not to the old capture target.
+    let ev = d
+        .handle_input(Input::PointerMoved { x: 300.0, y: 250.0 })
+        .unwrap();
+    assert_eq!(count(&ev, "pointermove", "c"), 0, "{:?}", types(&ev));
+    // Without a capture, focus loss dispatches no pointer events.
+    d.handle_input(Input::Focus(true)).unwrap();
+    let ev = d.handle_input(Input::Focus(false)).unwrap();
+    assert!(
+        !ev.iter().any(|e| e["type"] == "pointercancel"),
+        "{:?}",
+        types(&ev)
+    );
+}

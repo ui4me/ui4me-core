@@ -680,12 +680,38 @@ fn run_item_inner(host: &mut dyn DispatchHost, item: &InputItem) -> Result<(), S
         // platform has already committed or cleared its preedit, 011 Clarification Q3).
         InputKind::WindowFocus { focused: false } => {
             // A press or drag in progress ends: the matching release will not arrive here.
-            eng(host, doc, |ix, d| {
+            let (captured, at) = eng(host, doc, |ix, d| {
                 ix.set_active(d, None);
-                if let Ok(s) = ix.doc_state(doc) {
-                    s.pointer = PointerState::default();
-                }
+                let Ok(s) = ix.doc_state(doc) else {
+                    return (None, None);
+                };
+                s.pointer = PointerState::default();
+                // The pointer capture ends with the press (INTERACT-10): the OS took the pointer.
+                let c = std::mem::take(&mut s.capture);
+                let target = c
+                    .target
+                    .or(c.pending.flatten())
+                    .filter(|&n| d.arena().is_connected(n));
+                (target, s.hover.last_pointer)
             })?;
+            if let Some(c) = captured {
+                // Pointer Events: the user agent cancels the pointer (`pointercancel`), then the
+                // capture is released (`lostpointercapture`), both at the capture target.
+                let (x, y) = at.unwrap_or((0.0, 0.0));
+                let mut p = PointerData::mouse(x, y, -1);
+                p.buttons = 0;
+                for ty in ["pointercancel", "lostpointercapture"] {
+                    run_dispatch(
+                        host,
+                        doc,
+                        c,
+                        pointer_event(ty, &p, item.modifiers),
+                        true,
+                        origin,
+                        ts,
+                    )?;
+                }
+            }
             crate::interaction::editing::on_pointer_up(host, doc);
             crate::interaction::editing::ime::finish(host, doc, false, item.modifiers, origin, ts)?
         }
