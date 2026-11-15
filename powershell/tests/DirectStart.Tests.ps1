@@ -41,13 +41,17 @@ BeforeAll {
     }
     $script:Shell = (Get-Process -Id $PID).Path
 
-    function Invoke-DirectScript {
-        param([string]$Body, [string[]]$Arguments = @(), [hashtable]$Environment = @{})
+    function New-DirectStartInfo {
+        param([string]$Body, [string[]]$Arguments = @(), [hashtable]$Environment = @{}, [hashtable]$Files = @{})
         $folder = Join-Path $TestDrive ('direct ü ' + [guid]::NewGuid().ToString('N').Substring(0, 6))
         [void](New-Item -ItemType Directory -Path $folder)
         $script = Join-Path $folder 'app.ps1'
-        $text = $Body.Replace('__MODULE__', $script:ModuleManifest.Replace("'", "''"))
-        [IO.File]::WriteAllText($script, $text, (New-Object Text.UTF8Encoding($true)))
+        $Files = @{} + $Files
+        $Files['app.ps1'] = $Body
+        foreach ($name in $Files.Keys) {
+            $text = $Files[$name].Replace('__MODULE__', $script:ModuleManifest.Replace("'", "''"))
+            [IO.File]::WriteAllText((Join-Path $folder $name), $text, (New-Object Text.UTF8Encoding($true)))
+        }
         $info = New-Object Diagnostics.ProcessStartInfo
         $info.FileName = $script:Shell
         $info.UseShellExecute = $false
@@ -66,7 +70,14 @@ BeforeAll {
         [void](New-Item -ItemType Directory -Path $temp)
         foreach ($k in 'TMPDIR', 'TEMP', 'TMP') { $info.EnvironmentVariables[$k] = $temp }
         foreach ($k in $Environment.Keys) { $info.EnvironmentVariables[$k] = $Environment[$k] }
-        $process = [Diagnostics.Process]::Start($info)
+        return [pscustomobject]@{ Info = $info; Temp = $temp }
+    }
+
+    function Invoke-DirectScript {
+        param([string]$Body, [string[]]$Arguments = @(), [hashtable]$Environment = @{}, [hashtable]$Files = @{})
+        $start = New-DirectStartInfo -Body $Body -Arguments $Arguments -Environment $Environment -Files $Files
+        $temp = $start.Temp
+        $process = [Diagnostics.Process]::Start($start.Info)
         $stderr = $process.StandardError.ReadToEndAsync()
         $stdout = $process.StandardOutput.ReadToEnd()
         if (-not $process.WaitForExit(120000)) { $process.Kill(); throw 'Direct-start script did not finish' }
@@ -183,5 +194,92 @@ Close-UI4ME -Application $app
         $r = Invoke-DirectScript -Body $script:AppBody
         $r.ExitCode | Should -Be 0
         @($r.Leftovers | Where-Object { $_ -like 'ui4me-start-*' }).Count | Should -Be 0
+    }
+}
+
+Describe 'Start-UI4MEScript robustness with the real native host (headless test mode)' -Skip:$script:SkipNative {
+    It 'starts from a helper function in a dot-sourced file and from a module function (BIND-PS-06)' {
+        $helper = @'
+function Start-MyApp { Start-UI4MEScript -Name 'Helper app' -Instance multiple }
+'@
+        $module = @'
+function Start-ModuleApp { Start-UI4MEScript -Name 'Module app' -Instance multiple }
+Export-ModuleMember -Function Start-ModuleApp
+'@
+        $body = @'
+param([string]$Mode)
+$ErrorActionPreference = 'Stop'
+Import-Module '__MODULE__'
+if ($Mode -eq 'module') { Import-Module (Join-Path $PSScriptRoot 'MyApp.psm1'); $app = Start-ModuleApp }
+else { . (Join-Path $PSScriptRoot 'helper.ps1'); $app = Start-MyApp }
+$window = New-UI4MEWindow -Application $app
+$null = Open-UI4MEHtml -Window $window -Html '<p>x</p>'
+[Console]::Out.WriteLine("BACKEND $([IO.Path]::GetFileName($MyInvocation.MyCommand.Path)) $Mode")
+Set-UI4MEReady -Application $app
+$null = Request-UI4MEQuit -Application $app
+Wait-UI4ME -Application $app -UntilShutdown
+Close-UI4ME -Application $app
+'@
+        foreach ($mode in 'helper', 'module') {
+            $r = Invoke-DirectScript -Body $body -Arguments @('-Mode', $mode) -Files @{ 'helper.ps1' = $helper; 'MyApp.psm1' = $module }
+            $r.ExitCode | Should -Be 0 -Because $r.Err
+            $r.Out | Should -Match "BACKEND app.ps1 $mode"
+        }
+    }
+
+    It 'reads attributes PowerShell reserves as member names from the real host (BIND-PS-01)' {
+        $body = @'
+$ErrorActionPreference = 'Stop'
+Import-Module '__MODULE__'
+$app = Start-UI4MEScript -Name 'Attributes' -Instance multiple
+$window = New-UI4MEWindow -Application $app
+$doc = Open-UI4MEHtml -Window $window -Html "<div id='x' psbase='1' psobject='2' pstypenames='3' title='t'>x</div>"
+$a = Get-UI4MEAttributes -Document $doc -Element x
+[Console]::Out.WriteLine("ATTRS " + (@($a.Keys | ForEach-Object { "$_=$($a[$_])" }) -join ';'))
+$raw = Invoke-UI4MEDocumentCommand -Document $doc -Operation get_attributes -Parameters @{ element = 'x' }
+[Console]::Out.WriteLine("RAW $($raw.attributes['psbase'])")
+[Console]::Out.WriteLine("STILL $(Get-UI4MEDocumentText -Document $doc -Element x)")
+Set-UI4MEReady -Application $app
+$null = Request-UI4MEQuit -Application $app
+Wait-UI4ME -Application $app -UntilShutdown
+Close-UI4ME -Application $app
+'@
+        $r = Invoke-DirectScript -Body $body
+        $r.ExitCode | Should -Be 0 -Because $r.Err
+        $r.Out | Should -Match 'ATTRS id=x;psbase=1;psobject=2;pstypenames=3;title=t'
+        $r.Out | Should -Match 'RAW 1'
+        $r.Out | Should -Match 'STILL x'
+    }
+
+    It 'exits with status 130 when interrupted with SIGINT (BIND-PS-07)' -Skip:$script:TestIsWindows {
+        $body = @'
+$ErrorActionPreference = 'Stop'
+Import-Module '__MODULE__'
+$app = Start-UI4MEScript -Name 'Interrupted' -Instance multiple
+$window = New-UI4MEWindow -Application $app
+$null = Open-UI4MEHtml -Window $window -Html '<p>x</p>'
+Set-UI4MEReady -Application $app
+[Console]::Out.WriteLine('READY')
+Wait-UI4ME -Application $app -UntilShutdown
+'@
+        $start = New-DirectStartInfo -Body $body
+        $process = [Diagnostics.Process]::Start($start.Info)
+        try {
+            $stderr = $process.StandardError.ReadToEndAsync()
+            $ready = $false
+            $deadline = [DateTime]::UtcNow.AddSeconds(60)
+            while (-not $ready -and [DateTime]::UtcNow -lt $deadline) {
+                $line = $process.StandardOutput.ReadLineAsync()
+                if (-not $line.Wait(60000) -or $null -eq $line.Result) { break }
+                $ready = $line.Result -eq 'READY'
+            }
+            $ready | Should -BeTrue -Because 'the backend must start'
+            & kill -INT $process.Id
+            $process.WaitForExit(30000) | Should -BeTrue
+            $process.ExitCode | Should -Be 130 -Because $stderr.Result
+            @(Get-ChildItem -LiteralPath $start.Temp -Force | Where-Object Name -like 'ui4me-start-*').Count | Should -Be 0
+        } finally {
+            if (-not $process.HasExited) { $process.Kill() }
+        }
     }
 }

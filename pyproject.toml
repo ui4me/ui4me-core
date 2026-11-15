@@ -54,7 +54,7 @@ where = ["python"]
 include = ["ui4me_core*"]
 
 [tool.setuptools.package-data]
-ui4me_core = ["_bin/*", "_skills/ui4me-python/*", "_skills/ui4me-python/references/*", "_skills/ui4me-python/examples/*"]
+ui4me_core = ["py.typed", "_bin/*", "_skills/ui4me-python/*", "_skills/ui4me-python/references/*", "_skills/ui4me-python/examples/*"]
 
 # The manylinux wheel build (RELEASE-18: one definition instead of copies in
 # three workflows and the docs). `python -m cibuildwheel --platform linux

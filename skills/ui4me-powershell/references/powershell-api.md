@@ -78,7 +78,7 @@ Start-UI4MEScript [-Name] [-AppId] [-Version] [-Icon] [-Instance single|multiple
 | `-ShutdownTimeoutMilliseconds` | 100-120000. How long an orderly shutdown may take before the host stops the backend. |
 | `-MaxWindows` | 1-64. Maximum number of windows this application may open. |
 | `-ArgumentList` | Arguments for the backend run (default: see below). |
-| `-ScriptPath` | Names the script when it cannot be detected. |
+| `-ScriptPath` | The `.ps1` file the host runs again as the backend. Default: the script this PowerShell process was started with (`pwsh -File app.ps1`), also when `Start-UI4MEScript` is called from a function in a dot-sourced helper or in your own module; for a script started from an open prompt, the outermost `.ps1` on the call stack. |
 
 Invalid values throw before anything starts.
 
@@ -110,7 +110,11 @@ Consequences:
   open prompt (`./app.ps1 -Name x`) passes none unless you give `-ArgumentList`.
 - The backend has no console input, so `Read-Host` cannot be used. Output still reaches your
   terminal through the launcher.
-- **Lifetime.** Ctrl+C in the launcher stops the host (exit code 130). If the launcher
+- **Lifetime.** After Ctrl+C the launcher waits for the host (on Linux it forwards the
+  interrupt to the host) and exits with the host's status, 130 for Ctrl+C. A host that shuts
+  down in order on Ctrl+C sends `app.shutdown`, so `Wait-UI4ME -UntilShutdown` returns in the
+  backend; a 1.0.1 host simply stops. A host still running after `-ShutdownTimeoutMilliseconds`
+  plus five seconds is stopped. If the launcher
   process dies, the host is stopped too (a kill-on-close job on Windows; `setpriv
   --pdeathsig` on Linux when `setpriv` is available).
 - **Errors.** An uncaught error in the backend ends it: PowerShell prints the error, the host
@@ -233,7 +237,8 @@ Platform notes: on Wayland a client cannot focus, position or un-minimize its ow
 deadline while still answering lifecycle requests. `-FileName` applies to `SaveFile`,
 `-Multiple` to `OpenFiles`. Filters: `@(@{ name = 'Images'; extensions = @('png', 'jpg') })`;
 extensions have no leading dot (`'*'` matches everything). `-NoWait` returns a
-`UI4ME.Request` immediately: `Wait-UI4MERpc` gives the result, and `Stop-UI4MERpc` asks the
+`UI4ME.Request` immediately: `Wait-UI4MERpc` gives the result (without a deadline by default,
+like the dialog itself; pass `-TimeoutMilliseconds` to set one), and `Stop-UI4MERpc` asks the
 host to close the native dialog.
 
 **Frameless windows.** With `-Decorations $false`, mark a title-bar area in HTML with
@@ -276,6 +281,7 @@ values. Keep behavior in PowerShell and use `<input>`/`<textarea>` for editing.
 | --- | --- |
 | `Get-UI4MEDocumentText -Document -Element` / `Set-UI4MEDocumentText -Document -Element -Text` | Read/replace the element's text content. `Set-UI4MEDocumentText` never parses HTML, so it is safe for user input. |
 | `Set-UI4MEDocumentAttribute -Document -Element -Name [-Value ''] [-Remove]` | Set or remove an attribute (`-Value ''` sets a boolean attribute such as `disabled`). |
+| `Get-UI4MEAttributes -Document (-Element \| -Node)` | All attributes of an element as an ordered dictionary (`$a['title']`), sorted by name. Works for every attribute name, including names PowerShell reserves for its own members (`psbase`, `psobject`, ...). |
 | `Set-UI4MEClass -Document -Element -Name [-Remove]` | Add or remove a class. |
 | `Set-UI4MEDocumentHtml -Document -Element -Html [-Position replace\|beforebegin\|afterbegin\|beforeend\|afterend]` | Replace the children with (default), or insert, **trusted** HTML. |
 | `Remove-UI4MEElement -Document -Element` | Remove an element and its subtree. |
@@ -560,8 +566,14 @@ to work, so catch `UI4ME.RpcException` around them.
 
 Errors thrown inside event and notification callbacks are written to standard error (shown
 by the launcher, or in the host log) as `UI4ME: event handler for 'click' failed: ...`; the
-application keeps running. A policy callback that throws counts as a failed decision: the
-window stays open or the application keeps running.
+application keeps running and the other handlers for the same event still run. A policy
+callback that throws counts as a failed decision: the window stays open or the application
+keeps running.
+
+Leave a callback with `return`. `break` or `continue` outside a loop in a callback ends only
+that callback (with a `UI4ME:` warning on standard error, and no output, so a policy vetoes);
+in 1.0.1 it escaped into the module and could skip other handlers or end a wait. `exit` in a
+callback ends the backend process with that code, as anywhere in PowerShell.
 
 ## Callbacks, ordering and closures
 
@@ -575,6 +587,22 @@ reply.
   returns; they never run nested inside it.
 - A long-running callback delays later events. Keep callbacks short; split long work into
   steps that run between `Wait-UI4ME -TimeoutMilliseconds ...` calls, or run it in a job.
+- **Only subscribed events are queued.** A document event with no `Register-UI4MEDocumentEvent`
+  handler for its type on that document, and a notification method without a
+  `Register-UI4MENotification` callback, is discarded as it arrives
+  (`$app.Transport.FilteredNotifications`) and never takes a queue place. Register handlers
+  right after loading a document; an event that arrives before its handler is not delivered.
+- **When callbacks fall far behind, events are dropped, but never lifecycle notifications.**
+  At most 128 messages wait for the runspace (and 128 during one callback). Beyond that,
+  high-frequency events (`pointermove`, `mousemove`, `pointerover`/`out`, `mouseover`/`out`,
+  `wheel`, `scroll`, `selectionchange`, `dragover`, CSS `transition*`/`animation*`, window
+  `resized`/`scale_changed`) are dropped first, oldest first; other events (`click`,
+  `input`, ...) only when none of those is queued. Window `close_requested`/`closed`,
+  `document.error`, `app.activated`, `request.cancelled`, preference changes and the
+  shutdown are never dropped, and their bookkeeping is applied as soon as they arrive: a
+  window whose `closed` event was received is stale (`UI4ME.StaleObjectException`) even while
+  a callback is still running. The first drop of each burst writes one `UI4ME: event
+  callbacks are behind ...` line to standard error.
 - **Lifecycle requests are still answered while a callback waits.** `Set-UI4MEBeforeClose`
   and `Set-UI4MEBeforeQuit` policies and `app.shutdown` are handled inside such waits. A
   click handler that waits for a native dialog therefore does not stop the user from closing
@@ -608,8 +636,12 @@ not your script. Pass collections or other objects in as captured locals (as abo
 state in a hashtable).
 
 **Policy callbacks** (`Set-UI4MEBeforeClose`, `Set-UI4MEBeforeQuit`) decide by their *last*
-output value: `$true` allows, `$false` or no output vetoes. Earlier output in the block is
-ignored. A policy callback that throws counts as a failed decision.
+output value, which must be a boolean: `$true` allows; `$false`, no output, or any
+non-boolean last value vetoes. Earlier output in the block is ignored. A non-boolean last
+value (the string `'false'` or `'true'`, a number such as the index that `$list.Add(...)`
+returns) vetoes and writes a `UI4ME:` warning; in 1.0.1 it was converted with `[bool]`, so
+`'false'` allowed. End the block with `$true` or `$false`, and discard other output with
+`$null = ...`. A policy callback that throws counts as a failed decision.
 
 ## Raw protocol
 
@@ -617,11 +649,11 @@ ignored. A policy callback that throws counts as a failed decision.
 | --- | --- |
 | `Invoke-UI4MERpc -Application -Method [-Parameters @{}] [-TimeoutMilliseconds 15000]` | Call any host method and return its result. `dialog.*` methods wait without a deadline by default; `-1` waits forever. Events keep being processed while waiting. |
 | `Start-UI4MERpc -Application -Method [-Parameters @{}]` | Send a request without waiting; returns a `UI4ME.Request`. |
-| `Wait-UI4MERpc -Request [-TimeoutMilliseconds 15000]` | Wait for a request's result while pumping. On timeout the request is cancelled and `UI4ME.RpcTimeoutException` is thrown. A request can be awaited once. |
+| `Wait-UI4MERpc -Request [-TimeoutMilliseconds 15000]` | Wait for a request's result while pumping. The default is 15 seconds, or no deadline for `dialog.*` requests (as with `Invoke-UI4MERpc`). On timeout the request is cancelled and `UI4ME.RpcTimeoutException` is thrown. A request can be awaited once. |
 | `Stop-UI4MERpc -Request` | Ask the host to cancel (for example, close a native dialog). Not a rollback. |
 | `Send-UI4MENotification -Application -Method [-Parameters @{}]` | Send a notification (no reply). |
 | `Register-UI4MENotification -Application -Method -Callback` | One callback per host notification method (see [Application commands](#application-commands)). |
-| `$app.ShutdownRequested`, `$app.Transport.DroppedNotifications` | Shutdown requested by the host; notifications dropped because the bounded queue overflowed. |
+| `$app.ShutdownRequested`, `$app.Transport.DroppedNotifications` | Shutdown requested by the host; notifications dropped because the bounded queue overflowed (`DroppedCoalescible` + `DroppedDiscrete`; `DroppedControl` is always 0). `$app.Transport.FilteredNotifications` counts unsubscribed notifications discarded on arrival. |
 
 The wire protocol is described in [protocol](https://github.com/ui4me/ui4me-core/blob/main/docs/reference/protocol.md); normal applications do not need it.
 
@@ -632,6 +664,7 @@ The wire protocol is described in [protocol](https://github.com/ui4me/ui4me-core
 | `UI4ME_ENDPOINT`, `UI4ME_TOKEN` | Set by the host for its backend only. Never set them yourself. |
 | `UI4ME_HOST_BINARY` | Use this native host instead of the bundled one (for example a source build). Point it only at a trusted file. |
 | `UI4ME_VERBOSE` | `1` makes the `Start-UI4MEScript` launcher print every host log record, not only warnings and errors. |
+| `XDG_CACHE_HOME` | Linux: where a private, hash-verified copy of the bundled host is kept (`ui4me/powershell/<version>/`, default `~/.cache`) when the module was installed for all users and the installed host is not executable by this user (see `Get-UI4MEHostPath`). |
 | `UI4ME_TEST_MODE` | `1` runs the host headless (no windows on screen), for protocol tests without a desktop. A headless app does not quit on its own; your test must call `Request-UI4MEQuit`. Testing aid only. |
 
 ## Limits
@@ -649,8 +682,8 @@ The wire protocol is described in [protocol](https://github.com/ui4me/ui4me-core
 | Selector query page (`Find-UI4MEElement`, `Get-UI4MENodes`, `Get-UI4MENodeChildren`) | 1-4096 entries |
 | Event subscriptions per document | 256 |
 | Outstanding requests | 128 |
-| Queued host notifications/requests | 128 messages and 8 MiB. Overflowing notifications are dropped and counted (`$app.Transport.DroppedNotifications`); overflowing requests get error `-32005`. Window close, quit and shutdown requests are always admitted. |
-| Deferred notifications during one callback | 128 (excess counted in `$app.DroppedNotifications`) |
+| Queued host notifications/requests | 128 messages and 8 MiB of subscribed notifications and requests. When full, the oldest queued high-frequency event makes room; otherwise overflowing notifications are dropped and counted (`$app.Transport.DroppedNotifications`) and overflowing requests get error `-32005`. Window close, quit and shutdown requests and control notifications (window `closed`/`close_requested`, `document.error`, `app.shutdown`, `app.activated`, `request.cancelled`, `desktop.preferences_changed`) are always admitted. |
+| Deferred notifications during one callback | 128, with the same priorities (excess counted in `$app.DroppedNotifications`); control notifications are always kept |
 | Nested callback depth | 32 |
 | Resource registration | 256 entries, 1 MiB per call; 16 MiB, 64 bundles per document |
 | Live bitmaps | 8 per document, 64 MiB total, 4096 px per side, 2 or 3 slots |
@@ -665,7 +698,7 @@ paging (`-Offset`/`-Limit`) instead.
 | --- | --- |
 | `New-UI4MEProject -Path [-Name 'UI4ME PowerShell App'] [-AppId org.example.PowerShellApp] [-WindowsPowerShell] [-Force]` | Generate `app.ps1` (uses `Start-UI4MEScript`; run it directly), `index.html`, `style.css` and an optional `app.toml` whose backend runs `app.ps1` with `pwsh`, or `powershell.exe` with `-WindowsPowerShell`. `app.ps1` is saved as UTF-8 with a BOM. Refuses to overwrite these files without `-Force`. Returns the folder. |
 | `Start-UI4MEHost -Manifest [-NoWait]` | Run an `app.toml` through the native host and wait for it to exit (throws on a nonzero exit code). `-NoWait` returns the host process object instead. |
-| `Get-UI4MEHostPath` | Path of the bundled native host for this platform (`UI4ME_HOST_BINARY` overrides it). Restores the Linux execute bit if package extraction dropped it. x64 only. Run `& (Get-UI4MEHostPath) doctor` to check the runtime and desktop session, or `--version` for the host version. |
+| `Get-UI4MEHostPath` | Path of the bundled native host for this platform (`UI4ME_HOST_BINARY` overrides it). Restores the Linux execute bit (for all users) if package extraction dropped it; when it cannot, because the module was installed for all users and this user does not own the file, it returns a private copy in `$XDG_CACHE_HOME/ui4me/powershell/<version>/` (default `~/.cache`), used only while its SHA-256 equals the installed host's. x64 only. Run `& (Get-UI4MEHostPath) doctor` to check the runtime and desktop session, or `--version` for the host version. |
 | `Install-UI4MESkill [-Action install\|status\|uninstall] [-Agents all] [-Scope user\|project] [-ProjectPath] [-Force] [-DryRun]` | Install, inspect or remove the bundled `ui4me-powershell` coding-agent skill. `-Agents` takes `all` or any of `claude`, `codex`, `opencode`, `copilot`, `cursor`, `gemini` (array or comma list). `-ProjectPath` (an existing folder) is required with `-Scope project`. Never replaces or removes a folder it did not install, or that was edited since, without `-Force`. `-DryRun` reports what it would do. Returns one object per agent (`Agent`, `Scope`, `State`, `Path`, `Action`). See [agent skills](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/agent-skills.md). |
 
 Skill locations: user scope `~/.claude/skills`, `~/.agents/skills` (Codex),

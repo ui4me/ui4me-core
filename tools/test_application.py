@@ -151,9 +151,12 @@ class FacadeTests(unittest.TestCase):
         def broken(_):
             raise ValueError("Application callback failed")
         self.document.on("error", broken)
-        with patch("ui4me_core.application.print"), self.assertRaises(ValueError):
+        # A failing handler is reported (with its traceback) instead of
+        # propagating, so later handlers and the cleanup still run (BIND-03).
+        with patch("ui4me_core.application.print"), patch("sys.stderr") as stderr:
             self.rpc.notifications["document.error"]({"window_id": self.window.id,
                 "document_id": self.document.id, "message": "Paint failed", "fatal": True})
+        self.assertIn("Application callback failed", "".join(str(c) for c in stderr.mock_calls))
         self.assertIsNone(self.window.document)
         self.assertFalse(self.window.closed)
         with self.assertRaises(StaleDocumentError):
@@ -175,6 +178,70 @@ class FacadeTests(unittest.TestCase):
                 patch.dict("os.environ", {"UI4ME_ENDPOINT": "fixture", "UI4ME_TOKEN": "fixture"}):
             with Application.from_environment():
                 factory.assert_called_once_with(ordered_notifications=True)
+
+
+class StartupFailureTests(unittest.TestCase):
+    def test_failed_first_load_keeps_startup_alive_and_a_fallback_window_works(self):
+        rpc = FakeRpc()
+        app = Application(rpc)
+        rpc.fail_load = True
+        with self.assertRaises(RpcError) as raised:
+            app.open_html('<p onclick="x">bad</p>')
+        empty = raised.exception.window
+        # Closing a window before app.ready would cancel the application.
+        self.assertNotIn("window.request_close", [call[0] for call in rpc.calls])
+        rpc.fail_load = False
+        fallback = app.open_html("<p>fallback</p>")
+        app.ready()
+        closes = [call[1] for call in rpc.calls if call[0] == "window.request_close"]
+        self.assertEqual(closes, [{"window_id": empty.id}])
+        self.assertFalse(fallback.closed)
+
+    def test_failed_first_load_window_can_be_reused(self):
+        rpc = FakeRpc()
+        app = Application(rpc)
+        rpc.fail_load = True
+        with self.assertRaises(RpcError) as raised:
+            app.open_html("bad")
+        rpc.fail_load = False
+        raised.exception.window.load_html("<p>fallback</p>")
+        app.ready()
+        self.assertNotIn("window.request_close", [call[0] for call in rpc.calls])
+
+    def test_failed_load_after_ready_closes_the_window(self):
+        rpc = FakeRpc()
+        app = Application(rpc)
+        app.open_html("<p>main</p>")
+        app.ready()
+        rpc.fail_load = True
+        with self.assertRaises(RpcError):
+            app.open_html("bad")
+        self.assertEqual([call[0] for call in rpc.calls][-1], "window.request_close")
+
+    def test_quit_before_run_is_an_orderly_shutdown(self):
+        rpc = FakeRpc()
+        app = Application(rpc)
+        app.open_html("<p>x</p>")
+        original = rpc.call
+
+        def call(method, params=None, **options):
+            if method == "app.ready":
+                rpc.shutdown_requested.set()
+                raise RpcError(-32008, "Application is shutting down or failed")
+            return original(method, params, **options)
+
+        rpc.call = call
+        ran = []
+        app.on_shutdown(lambda: ran.append(True))
+        app.run()
+        self.assertEqual(ran, [True])
+
+    def test_other_ready_failures_still_raise(self):
+        rpc = FakeRpc()
+        app = Application(rpc)
+        rpc.call = lambda method, params=None, **options: (_ for _ in ()).throw(RpcError(-32008, "no window"))
+        with self.assertRaises(RpcError):
+            app.run()  # -32008 without a following shutdown is a real error
 
 
 class CompletionFacadeTests(unittest.TestCase):

@@ -66,7 +66,7 @@ Buffers and limits (host side):
 * **Outgoing (host to backend): bytes only.** Each connection has one ordered queue bounded by 8 MiB of encoded frames (header included). There is no message-count limit, so a burst of thousands of small notifications (for example the transition events of a colour-scheme switch) is queued, not refused. The host never drops or reorders outgoing messages: responses, host requests, lifecycle notifications (`app.shutdown`, `window.event`, `request.cancelled`, `document.error`, …) and `document.event` notifications are delivered in the order they were produced; under a burst they are delayed, not lost. Each frame is written to the socket or pipe with a single write.
 * **A backend is disconnected only when it falls behind by bytes or time**: when 8 MiB are queued and unsent, or when one frame cannot be written for 10 seconds. In practice that means a backend that has stopped reading; a slow reader that catches up between bursts is never disconnected. The host then fails the application as for any lost connection.
 * **Incoming (backend to host): messages and bytes.** Incoming messages share a 256-event / 8 MiB queue; when it is full the host stops reading from the connection (backpressure) until the GUI thread catches up. This never disconnects.
-* Client side: the Python client caps its own outgoing queue at 256 frames; both clients allow at most 128 pending requests, and the PowerShell client queues at most 128 incoming messages / 8 MiB (see the [PowerShell limits](powershell-api.md#limits)). A binding must read continuously and must not block its reader on application callbacks.
+* Client side: the Python client caps its own outgoing queue at 256 frames; both clients allow at most 128 pending requests. Both clients queue at most 128 incoming messages for their callbacks (PowerShell also 8 MiB; see the [PowerShell limits](powershell-api.md#limits)), never apply backpressure to the host, and drop by delivery class when callbacks fall behind (see the checklist below). A binding must read continuously and must not block its reader on application callbacks.
 
 ## Backend environment
 
@@ -333,6 +333,14 @@ A headless host runs the same frame pump as a native window, without a surface: 
 * Use string request IDs that are unique while pending; send `request.cancel` when abandoning a request.
 * Create a window and send `app.ready` within `startup_timeout_ms`.
 * On `app.shutdown`, finish quickly and exit the process.
-* Treat document and node identities as short-lived; expect `-32004` after reloads.
+* Treat document and node identities as short-lived; expect `-32004` after reloads. Both reference bindings turn `-32004` on a window or document call into their stale-handle error and retire the handle.
+* **Never drop control messages.** Classify every host message on the reader before it waits for a callback:
+  * *control*: the requests `window.before_close` and `app.before_quit`; the notifications `app.shutdown`, `app.activated`, `request.cancelled`, `document.error`, `desktop.preferences_changed`, and `window.event` with `type` `closed` or `close_requested`;
+  * *coalescible*: `document.event` of type `pointermove`, `pointerover`, `pointerout`, `mousemove`, `mouseover`, `mouseout`, `wheel`, `scroll`, `selectionchange`, `dragover`, `drag_feedback`, `transition*` or `animation*`, and `window.event` `resized` or `scale_changed`;
+  * *discrete*: everything else (`click`, `input`, `keydown`, …).
+
+  Control messages bypass any bound on the callback queue. Apply their bookkeeping as they arrive, before user code sees them: a window whose `closed` event was received, or a document that received a fatal `document.error`, is stale immediately, even while a callback is blocked. When a bounded queue is full, evict the oldest queued coalescible message first and drop a discrete one only when none is queued; keep everything else in arrival order. Count every drop and report the first drop of a burst once. Discarding events no callback subscribed to before they are queued is allowed (both reference bindings do) and is not a drop.
+* Do not block the reader to slow the host down: a backend that stops reading is disconnected, and a slow callback must cost dropped events, not the connection.
+* A callback failure must never end a callback worker or leave a host request unanswered; answer a failed policy request with an error (the host treats it as deny).
 
 See also: [lifecycle](../concepts/lifecycle.md), [architecture](../concepts/architecture.md), [host CLI and manifest](host-cli.md).

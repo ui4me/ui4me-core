@@ -14,7 +14,7 @@ Describe 'UI4ME.Core manifest and exports' {
         $declared = @($m.ExportedFunctions.Keys | Sort-Object)
         $actual = @((Get-Command -Module UI4ME.Core -CommandType Function).Name | Sort-Object)
         ($actual -join ',') | Should -Be ($declared -join ',')
-        $actual.Count | Should -Be 83
+        $actual.Count | Should -Be 84   # 1.0.1 had 83; Get-UI4MEAttributes was added (BIND-PS-01)
     }
     It 'documents every exported command with a synopsis or help' {
         foreach ($c in Get-Command -Module UI4ME.Core) {
@@ -59,6 +59,16 @@ Describe 'UI4ME JSON codec' {
         $v = [UI4ME.Json]::Parse('{"A":1,"a":2}')
         $v['A'] | Should -Be 1
         $v['a'] | Should -Be 2
+    }
+    It 'keeps members whose names PowerShell reserves, and the empty name (BIND-PS-01)' {
+        $v = [UI4ME.Json]::Parse('{"psbase":1,"":2,"a":3,"PSObject":{"PSTypeNames":4},"psadapted":5,"psextended":6}')
+        $v | Should -BeOfType ([System.Collections.IDictionary])
+        $v['psbase'] | Should -Be 1
+        $v[''] | Should -Be 2
+        $v['a'] | Should -Be 3
+        $v['PSObject']['PSTypeNames'] | Should -Be 4
+        & (Get-Module UI4ME.Core) { param($o) Get-UI4MEField $o 'psextended' } $v | Should -Be 6
+        ([UI4ME.Json]::Parse('{"plain":{"b":1}}')).plain.b | Should -Be 1   # ordinary objects stay PSObjects
     }
     It 'rejects invalid input' {
         foreach ($bad in @('{"a":1,"a":2}', '[1,]', '{"a":NaN}', '"\x"', "`"a`nb`"", '01', '1.', '{"a":1} x', '[' * 200 + ']' * 200)) {
@@ -164,6 +174,23 @@ Describe 'Install-UI4MESkill' {
 
 Describe 'Get-UI4MEHostPath' {
     AfterEach { Remove-Item Env:UI4ME_HOST_BINARY -ErrorAction SilentlyContinue }
+    It 'runs a hash-verified private copy when the installed host cannot be made executable (BIND-PS-11)' -Skip:$script:TestIsWindows {
+        $source = Join-Path $TestDrive 'installed-host'
+        [IO.File]::WriteAllText($source, "#!/bin/sh`necho cached-host-ran`n")
+        $saved = $env:XDG_CACHE_HOME
+        $env:XDG_CACHE_HOME = Join-Path $TestDrive 'cache'
+        try {
+            $copy = & (Get-Module UI4ME.Core) { param($s) Copy-UI4MEHostToCache $s } $source
+            $copy | Should -BeLike (Join-Path $env:XDG_CACHE_HOME 'ui4me/powershell/*/ui4me-host')
+            & $copy | Should -Be 'cached-host-ran'
+            # Reused while it matches; replaced when it does not.
+            [IO.File]::WriteAllText($copy, "#!/bin/sh`necho tampered`n")
+            $again = & (Get-Module UI4ME.Core) { param($s) Copy-UI4MEHostToCache $s } $source
+            $again | Should -Be $copy
+            & $again | Should -Be 'cached-host-ran'
+            @(Get-ChildItem -LiteralPath (Split-Path $copy) -Force).Count | Should -Be 1   # no temporary files left
+        } finally { $env:XDG_CACHE_HOME = $saved }
+    }
     It 'honors UI4ME_HOST_BINARY and reports a missing override' {
         $fake = Join-Path $TestDrive 'host-bin'
         Set-Content -LiteralPath $fake -Value 'x'

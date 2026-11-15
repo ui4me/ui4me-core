@@ -1,6 +1,9 @@
 """The ui4me-host console script must hand control to the native host."""
 import os
+import stat
 import sys
+import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -34,6 +37,54 @@ class LauncherTests(unittest.TestCase):
     def test_no_arguments_prints_usage(self):
         with mock.patch.object(sys, "argv", ["ui4me-host"]):
             self.assertEqual(launcher.main(), 2)
+
+
+
+class HostDiscoveryTests(unittest.TestCase):
+    """BIND-04: without a packaged host, never resolve to the console script."""
+
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name)
+        self.package = self.root / "pkg"  # an installed ui4me_core without _bin
+        self.package.mkdir()
+        self.name = "ui4me-host.exe" if os.name == "nt" else "ui4me-host"
+
+    def put(self, folder, content):
+        folder = self.root / folder
+        folder.mkdir()
+        target = folder / self.name
+        target.write_bytes(content)
+        target.chmod(target.stat().st_mode | stat.S_IXUSR)
+        return target
+
+    def discover(self, *folders):
+        env = {"PATH": os.pathsep.join(str(self.root / f) for f in folders)}
+        with mock.patch.dict(os.environ, env, clear=False), \
+                mock.patch.object(launcher.importlib.resources, "files", return_value=self.package):
+            os.environ.pop("UI4ME_HOST_BINARY", None)
+            return launcher.host_binary()
+
+    def wrapper(self):
+        if os.name == "nt":  # pip/uv launcher: a PE stub with a zip appended
+            return b"MZ" + b"\0" * 200 + b"PK\x03\x04 __main__.py PK\x05\x06" + b"\0" * 18
+        return b"#!/usr/bin/python3\nfrom ui4me_core.launcher import main\nmain()\n"
+
+    def native(self):
+        return (b"MZ" if os.name == "nt" else b"\x7fELF") + b"\0" * 256
+
+    def test_console_script_on_path_is_refused_quickly(self):
+        self.put("scripts", self.wrapper())
+        started = time.monotonic()
+        with self.assertRaisesRegex(FileNotFoundError, "Python wrapper"):
+            self.discover("scripts")
+        self.assertLess(time.monotonic() - started, 1.0)
+
+    def test_native_host_later_on_path_is_found(self):
+        self.put("scripts", self.wrapper())
+        native = self.put("native", self.native())
+        self.assertEqual(self.discover("scripts", "native"), native)
 
 
 if __name__ == "__main__":

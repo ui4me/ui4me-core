@@ -13,7 +13,8 @@ $utf8 = New-Object Text.UTF8Encoding($false, $true)
 $stream = $null; $server = $null; $listener = $null
 $bitmapFiles = New-Object System.Collections.ArrayList
 $unix = [Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT
-$stats = @{ cancels = New-Object System.Collections.ArrayList; codes = New-Object System.Collections.ArrayList; notifications = 0 }
+$stats = @{ cancels = New-Object System.Collections.ArrayList; codes = New-Object System.Collections.ArrayList; notifications = 0
+    decisions = New-Object System.Collections.ArrayList }
 
 function Read-Bytes([IO.Stream]$s, [int]$count) {
     $buf = New-Object byte[] $count
@@ -66,6 +67,12 @@ try {
     }
     $text = @{}
     $wid = 'w-1'; $did = 'd-0'; $documents = 0
+    $config = @{ close_burst = 0; close_type = 'pointermove' }
+    function Send-Burst([int]$Count, [string]$Type, [int]$Start) {
+        for ($i = 0; $i -lt $Count; $i++) {
+            Notify 'document.event' @{ window_id = $wid; document_id = $did; event = @{ type = $Type; element = "e$($Start + $i)"; seq = $Start + $i; path = @("e$($Start + $i)", 'root') } }
+        }
+    }
     while ($true) {
         $m = Read-Envelope
         if ($null -eq $m) { break }
@@ -88,9 +95,34 @@ try {
             'document.load' { $documents++; $did = 'd-' + $documents; Respond $id @{ document_id = $did; window_id = $wid } }
             'document.unload' { Respond $id @{ unloaded = $true } }
             'app.ready' { Respond $id @{ ready = $true } }
-            'mock.stats' { Respond $id @{ cancels = $stats.cancels.ToArray(); codes = $stats.codes.ToArray(); notifications = $stats.notifications } }
+            'mock.stats' { Respond $id @{ cancels = $stats.cancels.ToArray(); codes = $stats.codes.ToArray(); notifications = $stats.notifications; decisions = $stats.decisions.ToArray() } }
             'mock.echo' { Respond $id @{ params = $m.params } }
             'mock.never' { }  # never answered: exercises timeout and cancellation
+            'mock.configure' { foreach ($k in @($m.params.PSObject.Properties.Name)) { $config[$k] = $m.params.$k }; Respond $id @{ ok = $true } }
+            'mock.burst' {
+                # Reply first, then a burst; optionally a click and the window's closed event.
+                Respond $id @{ ok = $true }
+                Send-Burst ([int]$m.params.count) ([string]$m.params.type) 0
+                if ($m.params.PSObject.Properties['click'] -and $m.params.click) {
+                    Notify 'document.event' @{ window_id = $wid; document_id = $did; event = @{ type = 'click'; element = 'after-burst'; path = @('after-burst') } }
+                }
+                if ($m.params.PSObject.Properties['close'] -and $m.params.close) { Notify 'window.event' @{ window_id = $wid; type = 'closed'; data = @{} } }
+                if ($m.params.PSObject.Properties['shutdown'] -and $m.params.shutdown) { Notify 'app.shutdown' @{ deadline_ms = 5000 } }
+            }
+            'mock.click_then_reply' {
+                # A click, then the client's next request (expected: mock.flood_notifications) is
+                # served inline, then this request is answered.
+                Notify 'document.event' @{ window_id = $wid; document_id = $did; event = @{ type = 'click'; element = 'inline'; path = @('inline') } }
+                $next = Read-Envelope
+                for ($i = 0; $i -lt [int]$next.params.count; $i++) { Notify 'test.tick' @{ n = $i } }
+                Respond $next.id @{ sent = [int]$next.params.count }
+                Respond $id @{ ok = $true }
+            }
+            'dialog.open_files' {
+                # Answers after a delay, like a user picking a file.
+                Start-Sleep -Milliseconds ([int]$m.params.title)
+                Respond $id @{ cancelled = $false; paths = @('/tmp/picked.txt') }
+            }
             'mock.late' {
                 # Answers the previous never-answered request after it was cancelled.
                 Respond $m.params.target @{ late = $true }
@@ -136,14 +168,22 @@ try {
                         Notify 'document.error' @{ window_id = $wid; document_id = $did; message = 'Renderer failed'; fatal = $true }
                     }
                     'echo' { Respond $id @{ command = $cmd } }
+                    'get_attributes' { Respond $id @{ attributes = [ordered]@{ psbase = '1'; PSObject = '2'; '' = '3'; title = 't'; pstypenames = '5' } } }
                     default { Respond $id @{ updated = $true; op = $cmd.op } }
                 }
             }
             'window.request_close' {
+                # With mock.configure close_burst=N, the close happens in the middle of a 3N-event burst.
+                $burst = [int]$config.close_burst
+                Send-Burst $burst $config.close_type 0
+                if ($burst) { Notify 'window.event' @{ window_id = $wid; type = 'close_requested'; data = @{ reason = 'backend_request' } } }
                 Write-Envelope @{ jsonrpc = '2.0'; id = 'decision-close'; method = 'window.before_close'; params = @{ window_id = $wid; reason = 'backend_request' } }
                 $decision = Await-Response 'decision-close'
+                [void]$stats.decisions.Add($(if ($decision.PSObject.Properties['result']) { $decision.result.allow } else { 'error' }))
                 Respond $id @{ requested = $true }
+                Send-Burst $burst $config.close_type $burst
                 if ($decision.result.allow) { Notify 'window.event' @{ window_id = $wid; type = 'closed' } }
+                Send-Burst $burst $config.close_type (2 * $burst)
             }
             'window.get' { Respond $id @{ window_id = $wid; title = 'Mock' } }
             'host.capabilities' { Respond $id @{ native = $false } }

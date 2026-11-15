@@ -88,12 +88,19 @@ function Assert-UI4MEWindow {
     param($Window)
     if (-not (Test-UI4METype $Window 'UI4ME.Window')) { throw 'Expected a UI4ME.Window from New-UI4MEWindow' }
     Assert-UI4MEApplication $Window.Application
+    if (-not $Window.Closed -and $Window.Application.Transport.IsWindowClosed($Window.Id)) {
+        # The host's "closed" event already arrived but was not pumped yet.
+        Set-UI4MEWindowClosed $Window.Application $Window.Id
+    }
     if ($Window.Closed) { throw (New-UI4MEStaleError "UI4ME window $($Window.Id) is closed") }
 }
 function Assert-UI4MEDocument {
     param($Document)
     if (-not (Test-UI4METype $Document 'UI4ME.Document')) { throw 'Expected a UI4ME.Document from Open-UI4MEFile or Open-UI4MEHtml' }
     Assert-UI4MEWindow $Document.Window
+    if (-not $Document.Retired -and $Document.Window.Application.Transport.IsDocumentFailed($Document.Id)) {
+        Set-UI4MEDocumentFailed $Document
+    }
     if ($Document.Retired -or $null -eq $Document.Window.Document -or
         -not [object]::ReferenceEquals($Document.Window.Document, $Document)) {
         throw (New-UI4MEStaleError 'This UI4ME document was replaced, unloaded, or its window closed')
@@ -145,11 +152,24 @@ function Invoke-UI4MECallback {
     $Application.Depth++
     $wasDispatching = $Application.Dispatching
     $Application.Dispatching = $true
-    try { return ,@(& $Callback @Arguments) }
-    finally {
+    $output = @()
+    $completed = $false
+    try {
+        # A `break` or `continue` outside a loop in the callback would unwind
+        # to the nearest enclosing loop: one of this module's. This sentinel
+        # loop contains it, so other handlers and the pump keep running.
+        foreach ($sentinel in 1) {
+            $output = @(& $Callback @Arguments)
+            $completed = $true
+        }
+    } finally {
         $Application.Dispatching = $wasDispatching
         $Application.Depth--
     }
+    if (-not $completed) {
+        Write-UI4MELog "a callback used 'break' or 'continue' outside a loop; use 'return' to leave a UI4ME callback (its output was discarded)"
+    }
+    return ,$output
 }
 
 function Invoke-UI4MEDocumentHandlers {
@@ -164,7 +184,7 @@ function Invoke-UI4MEDocumentHandlers {
     $target = Get-UI4MEField $EventObject 'element'
     $route = @(Get-UI4MEField $EventObject 'path' @())
     foreach ($entry in @($Document.Handlers.ToArray())) {
-        if ($Document.Retired) { break }
+        if ($Document.Retired -and -not $Document.Failing) { break }
         if ($entry.Type -ne $kind) { continue }
         if (-not $entry.Element -or $entry.Element -eq $target -or $route -contains $entry.Element) {
             try { $null = Invoke-UI4MECallback $Application $entry.Callback @($EventObject) }
@@ -180,21 +200,24 @@ function Invoke-UI4MENotification {
     switch -Exact ($method) {
         'app.shutdown' { $Application.ShutdownRequested = $true }
         'window.event' {
-            $windowId = Get-UI4MEField $params 'window_id'
-            if ($windowId -and $Application.Windows.ContainsKey($windowId) -and
-                (Get-UI4MEField $params 'type') -eq 'closed') {
-                $win = $Application.Windows[$windowId]
-                $win.Closed = $true
-                if ($null -ne $win.Document) { Remove-UI4MEDocumentState $win.Document }
-                [void]$Application.Windows.Remove($windowId)
-            }
+            # Usually already applied when the message was received (Invoke-UI4MEPump).
+            if ((Get-UI4MEField $params 'type') -eq 'closed') { Set-UI4MEWindowClosed $Application (Get-UI4MEField $params 'window_id') }
         }
         { $_ -eq 'document.event' -or $_ -eq 'document.error' } {
-            $windowId = Get-UI4MEField $params 'window_id'
-            if (-not $windowId -or -not $Application.Windows.ContainsKey($windowId)) { break }
-            $win = $Application.Windows[$windowId]
-            $doc = $win.Document
-            if ($win.Closed -or $null -eq $doc -or $doc.Retired -or $doc.Id -ne (Get-UI4MEField $params 'document_id')) { break }
+            $documentId = Get-UI4MEField $params 'document_id'
+            if ($method -eq 'document.error' -and $documentId -and $Application.Failing.ContainsKey($documentId)) {
+                # A fatal error marked stale on arrival: still tell its handlers.
+                $doc = $Application.Failing[$documentId]
+                [void]$Application.Failing.Remove($documentId)
+                $win = $doc.Window
+                if ($win.Closed) { Remove-UI4MEDocumentState $doc; break }
+            } else {
+                $windowId = Get-UI4MEField $params 'window_id'
+                if (-not $windowId -or -not $Application.Windows.ContainsKey($windowId)) { break }
+                $win = $Application.Windows[$windowId]
+                $doc = $win.Document
+                if ($win.Closed -or $null -eq $doc -or $doc.Retired -or $doc.Id -ne $documentId) { break }
+            }
             if ($method -eq 'document.event') {
                 $evt = Get-UI4MEField $params 'event'
                 if ($null -ne $evt -and $evt -is [psobject]) { Invoke-UI4MEDocumentHandlers $Application $doc $evt }
@@ -223,9 +246,85 @@ function Invoke-UI4MENotification {
 }
 
 function ConvertTo-UI4MEDecision {
-    param([object[]]$Output)
+    # A policy allows only with an explicit $true as its last output. No
+    # output, $false and anything else (a string such as 'false', a number
+    # from $list.Add(...)) keep the window open / the app running.
+    param([object[]]$Output, [string]$Name = 'policy')
     if ($Output.Count -eq 0) { return $false }
-    return [bool]$Output[$Output.Count - 1]
+    $last = $Output[$Output.Count - 1]
+    if ($last -is [bool]) { return [bool]$last }
+    if ($last -is [System.Management.Automation.SwitchParameter]) { return $last.IsPresent }
+    $shown = if ($null -eq $last) { '$null' } else { "$($last.GetType().Name) '$last'" }
+    Write-UI4MELog "$Name returned $shown as its last output, not `$true or `$false; treated as a veto. End the scriptblock with `$true to allow."
+    return $false
+}
+
+function Set-UI4MEWindowClosed {
+    # Bookkeeping for the host's "closed" event, applied as soon as it is
+    # received (before user callbacks, even while one is running).
+    param($Application, [string]$WindowId)
+    if (-not $WindowId -or -not $Application.Windows.ContainsKey($WindowId)) { return }
+    $win = $Application.Windows[$WindowId]
+    $win.Closed = $true
+    [void]$Application.Windows.Remove($WindowId)
+    [void]$Application.BeforeClose.Remove($WindowId)
+    if ($null -ne $win.Document) { Remove-UI4MEDocumentState $win.Document }
+}
+
+function Set-UI4MEDocumentFailed {
+    # A fatal document.error was received: the document is stale at once; its
+    # handlers still receive the error when the notification is dispatched.
+    param($Document)
+    if ($Document.Retired) { return }
+    $Document.Retired = $true
+    $Document.Failing = $true
+    $Document.Window.Application.Failing[$Document.Id] = $Document
+}
+
+function Invoke-UI4MEReceived {
+    # Applies control bookkeeping for a notification as it is taken from the transport.
+    param($Application, $Message)
+    switch -Exact ($Message.Method) {
+        'app.shutdown' { $Application.ShutdownRequested = $true }
+        'window.event' {
+            if ((Get-UI4MEField $Message.Params 'type') -eq 'closed') { Set-UI4MEWindowClosed $Application (Get-UI4MEField $Message.Params 'window_id') }
+        }
+        'document.error' {
+            if ((Get-UI4MEField $Message.Params 'fatal' $false) -eq $true) {
+                $windowId = Get-UI4MEField $Message.Params 'window_id'
+                if ($windowId -and $Application.Windows.ContainsKey($windowId)) {
+                    $doc = $Application.Windows[$windowId].Document
+                    if ($null -ne $doc -and $doc.Id -eq (Get-UI4MEField $Message.Params 'document_id')) { Set-UI4MEDocumentFailed $doc }
+                }
+            }
+        }
+    }
+}
+
+function Add-UI4MEDeferred {
+    # Defers a notification that arrived while a callback runs. Control
+    # notifications are always kept; at the cap the oldest coalescible one is
+    # evicted first, otherwise the new one is dropped (and counted).
+    param($Application, $Message)
+    if ($Message.Class -eq 'control' -or $Application.Deferred.Count -lt $script:MaximumDeferred) {
+        $Application.Deferred.Enqueue($Message)
+        return
+    }
+    $kept = New-Object 'System.Collections.Generic.Queue[object]'
+    $evicted = $false
+    foreach ($queued in $Application.Deferred) {
+        if (-not $evicted -and $queued.Class -eq 'coalescible') { $evicted = $true; continue }
+        $kept.Enqueue($queued)
+    }
+    $Application.DroppedNotifications++
+    if ($evicted) {
+        $kept.Enqueue($Message)
+        $Application.Deferred.Clear()
+        foreach ($queued in $kept) { $Application.Deferred.Enqueue($queued) }
+    }
+    if ($Application.DroppedNotifications -eq 1 -or ($Application.DroppedNotifications % 1000) -eq 0) {
+        Write-UI4MELog "a callback is running for long; $($Application.DroppedNotifications) deferred event(s) dropped so far (window lifecycle events are never dropped)"
+    }
 }
 
 function Invoke-UI4MEHostRequest {
@@ -240,11 +339,11 @@ function Invoke-UI4MEHostRequest {
                 $callback = $null
                 if ($id -and $Application.BeforeClose.ContainsKey($id)) { $callback = $Application.BeforeClose[$id] }
                 if ($null -eq $callback) { $result = @{ allow = $true } }
-                else { $result = @{ allow = (ConvertTo-UI4MEDecision (Invoke-UI4MECallback $Application $callback @($params))) } }
+                else { $result = @{ allow = (ConvertTo-UI4MEDecision (Invoke-UI4MECallback $Application $callback @($params)) "Set-UI4MEBeforeClose policy for window $id") } }
             }
             'app.before_quit' {
                 if ($null -eq $Application.BeforeQuit) { $result = @{ allow = $true } }
-                else { $result = @{ allow = (ConvertTo-UI4MEDecision (Invoke-UI4MECallback $Application $Application.BeforeQuit @($params))) } }
+                else { $result = @{ allow = (ConvertTo-UI4MEDecision (Invoke-UI4MECallback $Application $Application.BeforeQuit @($params)) 'Set-UI4MEBeforeQuit policy') } }
             }
             'app.shutdown' { $Application.ShutdownRequested = $true; $result = @{ ok = $true } }
             default { $failure = @{ code = -32601; message = "Unknown method: $($Message.Method)" } }
@@ -274,6 +373,8 @@ function Invoke-UI4MEPump {
         Set-UI4MEDisconnected $Application
         throw (New-Object -TypeName 'UI4ME.DisconnectedException' -ArgumentList $Application.Transport.Failure)
     }
+    $notice = $Application.Transport.TakeDropNotice()
+    if ($null -ne $notice) { Write-UI4MELog $notice }
     if ($null -eq $message) { return $false }
     switch -Exact ($message.Kind) {
         'response' {
@@ -281,13 +382,9 @@ function Invoke-UI4MEPump {
         }
         'request' { Invoke-UI4MEHostRequest $Application $message }
         default {
-            if ($message.Method -eq 'app.shutdown') { $Application.ShutdownRequested = $true }
-            if ($Application.Dispatching) {
-                if ($Application.Deferred.Count -ge $script:MaximumDeferred) { $Application.DroppedNotifications++ }
-                else { $Application.Deferred.Enqueue($message) }
-            } else {
-                Invoke-UI4MENotification $Application $message
-            }
+            Invoke-UI4MEReceived $Application $message
+            if ($Application.Dispatching) { Add-UI4MEDeferred $Application $message }
+            else { Invoke-UI4MENotification $Application $message }
         }
     }
     return $true
@@ -314,6 +411,8 @@ function Connect-UI4ME {
     }
     Initialize-UI4MEHelper
     $transport = New-Object -TypeName 'UI4ME.Transport' -ArgumentList @($Endpoint, $ConnectTimeoutMilliseconds)
+    # Notifications without a callback are discarded on the reader thread.
+    $transport.EnableInterestFiltering()
     $app = [pscustomobject]@{
         Transport = $transport
         Hello = $null
@@ -321,6 +420,7 @@ function Connect-UI4ME {
         Replies = @{}
         Pending = @{}
         Deferred = (New-Object 'System.Collections.Generic.Queue[object]')
+        Failing = @{}
         NextId = [long]0
         Depth = 0
         MaxDepth = 32
@@ -357,8 +457,10 @@ function Start-UI4MERpc {
     Assert-UI4MEApplication $Application
     $Application.NextId++
     $id = 'ps-' + $Application.NextId.ToString([Globalization.CultureInfo]::InvariantCulture)
+    # User-operated native dialogs have no deadline unless the caller sets one.
+    $defaultTimeout = if ($Method.StartsWith('dialog.')) { -1 } else { 15000 }
     $request = [pscustomobject]@{ Application = $Application; Id = $id; Method = $Method
-        Completed = $false; Cancelled = $false; Failed = $false }
+        Completed = $false; Cancelled = $false; Failed = $false; DefaultTimeoutMilliseconds = $defaultTimeout }
     $request.PSObject.TypeNames.Insert(0, 'UI4ME.Request')
     $Application.Transport.Register($id)
     $Application.Pending[$id] = $request
@@ -394,13 +496,17 @@ function Wait-UI4MERpc {
     .SYNOPSIS
     Waits for a request's result while pumping events. -1 waits indefinitely.
     .DESCRIPTION
-    On timeout the request is cancelled and UI4ME.RpcTimeoutException is thrown;
-    the native outcome is then unknown. Host errors throw UI4ME.RpcException
-    with Code, RpcMessage and RpcData.
+    The default timeout is 15 seconds, or unlimited for dialog.* requests (user operated, for
+    example Show-UI4MEFileDialog -NoWait). On timeout the request is cancelled and
+    UI4ME.RpcTimeoutException is thrown; the native outcome is then unknown. Host errors throw
+    UI4ME.RpcException with Code, RpcMessage and RpcData.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Request, [ValidateRange(-1, 2147483647)][int]$TimeoutMilliseconds = 15000)
     if (-not (Test-UI4METype $Request 'UI4ME.Request')) { throw 'Expected a UI4ME.Request from Start-UI4MERpc' }
+    if (-not $PSBoundParameters.ContainsKey('TimeoutMilliseconds') -and $null -ne $Request.PSObject.Properties['DefaultTimeoutMilliseconds']) {
+        $TimeoutMilliseconds = $Request.DefaultTimeoutMilliseconds
+    }
     $app = $Request.Application
     $clock = [Diagnostics.Stopwatch]::StartNew()
     while ($true) {
@@ -486,6 +592,15 @@ function Wait-UI4ME {
                 if ($Application.ShutdownRequested) { break }
                 throw
             }
+        }
+        if (-not $Application.Dispatching) {
+            # Deliver what the host sent before (and with) the shutdown, such as
+            # the last window's "closed" event deferred behind a running
+            # callback, for up to two seconds, as the Python binding does.
+            $clock = [Diagnostics.Stopwatch]::StartNew()
+            try {
+                while ($clock.ElapsedMilliseconds -lt 2000 -and (Invoke-UI4MEPump $Application 0)) { }
+            } catch [UI4ME.DisconnectedException] { $null = $_ }
         }
         return
     }
@@ -655,6 +770,7 @@ function Register-UI4MENotification {
     Assert-UI4MEApplication $Application
     if ($null -eq $Callback) { [void]$Application.Notifications.Remove($Method) }
     else { $Application.Notifications[$Method] = $Callback }
+    $Application.Transport.SetNotificationInterest([string[]]@($Application.Notifications.Keys))
 }
 
 # ---------------------------------------------------------------- documents --
@@ -663,7 +779,7 @@ function New-UI4MEDocumentObject {
     param($Window, $Result)
     $id = [string](Get-UI4MEField $Result 'document_id')
     if ([string]::IsNullOrEmpty($id)) { throw 'The host did not return a document_id' }
-    $doc = [pscustomobject]@{ Window = $Window; Id = $id; Retired = $false
+    $doc = [pscustomobject]@{ Window = $Window; Id = $id; Retired = $false; Failing = $false
         Handlers = (New-Object System.Collections.ArrayList); Bitmaps = (New-Object System.Collections.ArrayList) }
     $doc.PSObject.TypeNames.Insert(0, 'UI4ME.Document')
     # Retire the previous facade only after the atomic replacement succeeded.
@@ -674,10 +790,25 @@ function New-UI4MEDocumentObject {
 
 function Remove-UI4MEDocumentState {
     param($Document)
-    if ($null -eq $Document -or $Document.Retired) { return }
+    if ($null -eq $Document -or ($Document.Retired -and -not $Document.Failing)) { return }
     $Document.Retired = $true
+    $Document.Failing = $false
+    [void]$Document.Window.Application.Failing.Remove($Document.Id)
     $Document.Handlers.Clear()
+    Update-UI4MEDocumentInterest $Document
     foreach ($bitmap in @($Document.Bitmaps.ToArray())) { Remove-UI4MELiveBitmap -Bitmap $bitmap -Quiet }
+}
+
+function Update-UI4MEDocumentInterest {
+    # Tells the transport which event types this document has handlers for;
+    # other document events are discarded on arrival (BIND-PS-02).
+    param($Document)
+    $types = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    if (-not $Document.Retired) { foreach ($entry in $Document.Handlers) { [void]$types.Add([string]$entry.Type) } }
+    $list = New-Object 'System.Collections.Generic.List[string]'
+    $list.AddRange($types)
+    try { $Document.Window.Application.Transport.SetDocumentInterest($Document.Id, $list.ToArray()) }
+    catch [ObjectDisposedException] { $null = $_ }
 }
 
 function Open-UI4MEHtml {
@@ -741,6 +872,7 @@ function Register-UI4MEDocumentEvent {
     $sub = [pscustomobject]@{ Document = $Document; Type = $Type; Element = $Element; Callback = $Callback }
     $sub.PSObject.TypeNames.Insert(0, 'UI4ME.Subscription')
     [void]$Document.Handlers.Add($sub)
+    Update-UI4MEDocumentInterest $Document
     return $sub
 }
 
@@ -750,6 +882,7 @@ function Unregister-UI4MEDocumentEvent {
     param([Parameter(Mandatory)]$Subscription)
     if (-not (Test-UI4METype $Subscription 'UI4ME.Subscription')) { throw 'Expected a UI4ME.Subscription' }
     [void]$Subscription.Document.Handlers.Remove($Subscription)
+    Update-UI4MEDocumentInterest $Subscription.Document
 }
 
 function Invoke-UI4MEDocumentCommand {
@@ -818,6 +951,28 @@ function Set-UI4MEDocumentAttribute {
     if ($Remove) { $null = Invoke-UI4MEDocumentCommand $Document 'remove_attribute' @{ element = $Element; name = $Name } }
     else { $null = Invoke-UI4MEDocumentCommand $Document 'set_attribute' @{ element = $Element; name = $Name; value = $Value } }
 }
+function Get-UI4MEAttributes {
+    <#
+    .SYNOPSIS
+    Returns an element's attributes as a name/value dictionary (sorted by name).
+    .DESCRIPTION
+    Works for any attribute name, including names PowerShell reserves for its own members
+    (psbase, psobject, ...). Names keep their exact case.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Document, [string]$Element, $Node)
+    $p = @{}
+    Add-UI4METarget $p $Document $Element $Node -Required
+    $attributes = Get-UI4MEField (Invoke-UI4MEDocumentCommand $Document 'get_attributes' $p) 'attributes'
+    $names = New-Object 'System.Collections.Generic.List[string]'
+    if ($attributes -is [System.Collections.IDictionary]) { foreach ($key in $attributes.Keys) { $names.Add([string]$key) } }
+    elseif ($null -ne $attributes) { foreach ($property in $attributes.PSObject.Properties) { $names.Add($property.Name) } }
+    $names.Sort([StringComparer]::Ordinal)
+    $result = New-Object System.Collections.Specialized.OrderedDictionary ([StringComparer]::Ordinal)
+    foreach ($name in $names) { $result.Add($name, [string](Get-UI4MEField $attributes $name)) }
+    return $result
+}
+
 function Set-UI4MEClass {
     <# .SYNOPSIS Adds a class to an element, or removes it with -Remove. #>
     [CmdletBinding()]
@@ -1314,11 +1469,58 @@ function Get-UI4MEHostPath {
         throw 'The native UI4ME host is missing. Install UI4ME.Core from the PowerShell Gallery, or set UI4ME_HOST_BINARY.'
     }
     if (-not $script:UI4MEIsWindows) {
-        # NuGet package extraction drops Unix execute permissions.
-        & /bin/sh -c 'test -x "$1" || chmod u+x -- "$1"' ui4me-host-check $found
-        if ($LASTEXITCODE -ne 0) { throw "The native host is not executable and could not be made executable: $found" }
+        # NuGet package extraction drops Unix execute permissions. The owner
+        # (for example root after an AllUsers install) makes it executable for
+        # everyone; other users run a verified private copy instead.
+        & /bin/sh -c 'test -x "$1" || chmod a+rx -- "$1" 2>/dev/null' ui4me-host-check $found
+        if ($LASTEXITCODE -ne 0) { $found = Copy-UI4MEHostToCache $found }
     }
     return $found
+}
+
+function Get-UI4MEFileSha256 {
+    param([string]$Path)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $stream = [IO.File]::OpenRead($Path)
+    try { $bytes = $sha.ComputeHash($stream) } finally { $stream.Dispose(); $sha.Dispose() }
+    return (-join ($bytes | ForEach-Object { $_.ToString('x2') }))
+}
+
+function Copy-UI4MEHostToCache {
+    # Linux, host not executable by this user and not ours to chmod (a module
+    # installed for all users by root): run a private copy from the user's
+    # cache. The copy is used only while its SHA-256 equals the installed host's.
+    param([string]$Source)
+    $hint = "The native host was installed without execute permission and this user cannot change it: $Source. Ask an administrator to run: sudo chmod a+rx '$Source' (or install UI4ME.Core with -Scope CurrentUser)."
+    try { $hash = Get-UI4MEFileSha256 $Source } catch { throw "$hint ($($_.Exception.Message))" }
+    $base = $env:XDG_CACHE_HOME
+    if (-not $base -or -not [IO.Path]::IsPathRooted($base)) { $base = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.cache' }
+    $folder = [IO.Path]::Combine($base, 'ui4me', 'powershell', $script:UI4MEVersion, $hash.Substring(0, 16))
+    $target = Join-Path $folder 'ui4me-host'
+    try {
+        if ((Test-Path -LiteralPath $target -PathType Leaf) -and (Get-UI4MEFileSha256 $target) -eq $hash) {
+            & /bin/sh -c 'test -x "$1" || chmod 0755 -- "$1"' ui4me-host-cache $target
+            if ($LASTEXITCODE -eq 0) { return $target }
+        }
+        & /bin/sh -c 'umask 077 && mkdir -p -- "$1"' ui4me-host-cache $folder
+        if ($LASTEXITCODE -ne 0) { throw "cannot create $folder" }
+        $temporary = Join-Path $folder ('.ui4me-host-' + [guid]::NewGuid().ToString('N'))
+        try {
+            [IO.File]::Copy($Source, $temporary)
+            & /bin/sh -c 'chmod 0755 -- "$1"' ui4me-host-cache $temporary
+            if ($LASTEXITCODE -ne 0) { throw "cannot make $temporary executable" }
+            if ((Get-UI4MEFileSha256 $temporary) -ne $hash) { throw 'the copied host does not match the installed one' }
+            # Same folder: an atomic rename, also over a stale or partial copy.
+            & /bin/sh -c 'mv -f -- "$1" "$2"' ui4me-host-cache $temporary $target
+            if ($LASTEXITCODE -ne 0) { throw "cannot move the copy to $target" }
+        } finally {
+            if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
+        }
+        if ((Get-UI4MEFileSha256 $target) -ne $hash) { throw 'the cached host does not match the installed one' }
+        return $target
+    } catch {
+        throw "$hint A private copy in $folder could not be used either: $($_.Exception.Message)"
+    }
 }
 
 function Start-UI4MEHost {
@@ -1388,6 +1590,27 @@ function Get-UI4MEScriptArguments {
     return ,@()
 }
 
+function Get-UI4MEEntryScript {
+    # The script this PowerShell process runs (pwsh -File app.ps1), not the
+    # file that happens to contain the Start-UI4MEScript call (a dot-sourced
+    # helper or a module function). Falls back to the outermost .ps1 on the
+    # call stack (a script started from a prompt), then to the caller.
+    param([string]$Caller)
+    $comparison = if ($script:UI4MEIsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    $scripts = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($frame in @(Get-PSCallStack)) {
+        if ($frame.ScriptName -and [IO.Path]::GetExtension($frame.ScriptName) -ieq '.ps1') { $scripts.Add($frame.ScriptName) }
+    }
+    $all = [Environment]::GetCommandLineArgs()
+    for ($i = 1; $i -lt $all.Count; $i++) {
+        if (-not $all[$i].EndsWith('.ps1', [StringComparison]::OrdinalIgnoreCase)) { continue }
+        try { $full = [IO.Path]::GetFullPath([IO.Path]::Combine([Environment]::CurrentDirectory, $all[$i])) } catch { continue }
+        foreach ($candidate in $scripts) { if ([string]::Equals($candidate, $full, $comparison)) { return $candidate } }
+    }
+    if ($scripts.Count -gt 0) { return $scripts[$scripts.Count - 1] }
+    return $Caller
+}
+
 function Clear-UI4MEStaleStartFolders {
     # Manifests left behind by a launcher that was killed outright. The host
     # reads its manifest only while starting, so a day-old one is never in use.
@@ -1427,6 +1650,10 @@ function Start-UI4MEScript {
     .PARAMETER ArgumentList
     Arguments for the backend run. By default, the arguments that followed the script on the
     pwsh/powershell.exe command line are reused.
+    .PARAMETER ScriptPath
+    The .ps1 file the host runs again as the backend. Default: the script this PowerShell process
+    was started with (pwsh -File app.ps1), even when Start-UI4MEScript is called from a dot-sourced
+    helper or a module function; otherwise the outermost .ps1 on the call stack.
     .EXAMPLE
     $app = Start-UI4MEScript -Name 'Hello UI4ME'
     #>
@@ -1469,7 +1696,7 @@ function Start-UI4MEScript {
     }
 
     # Launcher role.
-    if (-not $ScriptPath) { $ScriptPath = $MyInvocation.PSCommandPath }
+    if (-not $ScriptPath) { $ScriptPath = Get-UI4MEEntryScript $MyInvocation.PSCommandPath }
     if (-not $ScriptPath) { throw 'Start-UI4MEScript must be called from a .ps1 script file (for example pwsh -File ./app.ps1).' }
     $ScriptPath = [IO.Path]::GetFullPath((Resolve-UI4MEPath $ScriptPath))
     if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) { throw "Script not found: $ScriptPath" }
@@ -1505,6 +1732,8 @@ function Start-UI4MEScript {
     [void](New-Item -ItemType Directory -Path $folder)
     $runner = $null
     $code = 1
+    $finished = $false
+    $failed = $false
     $previousMarker = $env:UI4ME_DIRECT_START
     try {
         $manifest = Join-Path $folder 'app.toml'
@@ -1524,17 +1753,48 @@ function Start-UI4MEScript {
         } finally {
             $env:UI4ME_DIRECT_START = $previousMarker
         }
-        # Short waits keep Ctrl+C responsive; the finally block stops the host.
+        # Short waits keep Ctrl+C responsive; the finally block handles it.
         while (-not $runner.WaitForExit(200)) { }
         $code = $runner.ExitCode
+        $finished = $true
+    } catch {
+        $failed = $true
+        throw
     } finally {
+        $interrupted = -not $finished -and -not $failed
+        if ($interrupted) {
+            # Neither completed nor failed: the pipeline was stopped (Ctrl+C).
+            # The host shuts the app down in order (app.shutdown) on Ctrl+C:
+            # wait for it and exit with its status instead of killing it.
+            $code = 130
+            if ($null -ne $runner -and -not $runner.HasExited) {
+                if (-not $script:UI4MEIsWindows) {
+                    # A signal sent to this launcher alone does not reach the host;
+                    # a host that already got the terminal's Ctrl+C ignores the repeat.
+                    & /bin/sh -c 'kill -INT "$1" 2>/dev/null' ui4me-interrupt ([string]$runner.Id)
+                }
+                if ($runner.WaitForExit($ShutdownTimeoutMilliseconds + 5000)) {
+                    $code = $runner.ExitCode
+                    # Windows STATUS_CONTROL_C_EXIT (a host without its own Ctrl+C handling).
+                    if ($code -eq -1073741510) { $code = 130 }
+                }
+            }
+        }
         if ($null -ne $runner) {
             if (-not $runner.HasExited) { $runner.Stop() }
             $runner.Dispose()
         }
         Remove-Item -LiteralPath $folder -Recurse -Force -ErrorAction SilentlyContinue
+        if ($interrupted) {
+            # PowerShell would end a stopped script with status 0.
+            [Environment]::Exit($code)
+        }
     }
-    exit $code
+    # Not `exit $code`: a terminal Ctrl+C reaches the host and this process
+    # together, and a pipeline stop arriving while `exit` runs ends PowerShell
+    # with status 0. This process exists only to run the host.
+    [Console]::Out.Flush(); [Console]::Error.Flush()
+    [Environment]::Exit($code)
 }
 
 function New-UI4MEProject {
@@ -1788,7 +2048,7 @@ Export-ModuleMember -Function @(
     'Open-UI4MEHtml', 'Open-UI4MEFile', 'Remove-UI4MEDocument',
     'Register-UI4MEDocumentEvent', 'Unregister-UI4MEDocumentEvent', 'Invoke-UI4MEDocumentCommand', 'Invoke-UI4MEBatch',
     'Get-UI4MEDocumentText', 'Set-UI4MEDocumentText', 'Get-UI4MEValue', 'Set-UI4MEDocumentValue',
-    'Get-UI4MEChecked', 'Set-UI4MEChecked', 'Set-UI4MEDocumentAttribute', 'Set-UI4MEClass', 'Set-UI4MEDocumentHtml',
+    'Get-UI4MEChecked', 'Set-UI4MEChecked', 'Set-UI4MEDocumentAttribute', 'Get-UI4MEAttributes', 'Set-UI4MEClass', 'Set-UI4MEDocumentHtml',
     'Remove-UI4MEElement', 'Find-UI4MEElement',
     'Add-UI4MEStylesheet', 'Get-UI4MEStylesheets', 'Set-UI4MEStylesheet', 'Get-UI4MEComputedStyle',
     'Get-UI4MEEnvironment', 'Set-UI4MEEnvironment', 'Get-UI4MEScroll', 'Set-UI4MEScroll',

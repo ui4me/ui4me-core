@@ -1,0 +1,1 @@
+uv build --wheel with UI4ME_HOST_BINARY=target/debug/ui4me-host -> ui4me_core-1.0.1-py3-none-linux_x86_64.whl contains ['ui4me_core/py.typed'] (1e49a6a: no py.typed in the package).

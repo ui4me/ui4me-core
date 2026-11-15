@@ -96,7 +96,8 @@ Consequences for your code:
 - The program must be a script file or `python -m package.module`. `python -c`, code piped through standard input and the interactive interpreter raise `StartupError`.
 - **Arguments.** The backend is started with the same command line, so `python app.py --debug` gives the backend the same `sys.argv`, and `argparse` works in both roles.
 - The backend has no standard input, so `input()` cannot be used. `print()` output still reaches your terminal through the launcher.
-- **Lifetime.** Ctrl+C or SIGTERM in the terminal stops the host and the backend. If the launcher itself is killed, the host is stopped too (Linux: parent-death signal; Windows: a kill-on-close job object).
+- **Lifetime.** Ctrl+C (and Ctrl+Break on Windows), SIGTERM or SIGHUP do not end the launcher while the host runs: the launcher forwards the signal to the host (POSIX; on Windows the host receives the console event itself) and waits for it, then exits with the host's status (130 for Ctrl+C, 143 for SIGTERM). A host that shuts down in order on these signals sends `app.shutdown`, so `run()` returns and `on_shutdown` callbacks run; a 1.0.1 host simply stops. A host that has not exited within the shutdown timeout plus five seconds, or a second Ctrl+C, is terminated. If the launcher itself is killed, the host is stopped too (Linux: parent-death signal; Windows: a kill-on-close job object). If the host itself is ended by a signal, the launcher prints `ui4me-host was terminated by SIGKILL ...` and exits with the shell convention 128 + signal number (137 for SIGKILL).
+- **Once per process.** Call `Application.start()` once; a second call in the same process raises `StartupError` instead of starting another host.
 - **Errors.** If an exception escapes a `with Application.start(...)` block in the backend, its traceback is printed before the connection closes, so it is not lost when the host stops the failed backend.
 - Inside a backend that was started from a manifest (`ui4me-host run --app`), `Application.start()` simply connects, so the same script works both ways.
 
@@ -155,10 +156,11 @@ Calls that return host data return plain `dict` and `list` values whose keys are
 | `app.open_file(path, **window_options)` | `Window` | Create a window and load a local HTML file. Relative CSS, images and fonts resolve from the file's folder. |
 | `app.open_html(html, *, asset_root=None, **window_options)` | `Window` | Create a window and load an HTML string. Pass `asset_root` (a folder) if the HTML references local files. |
 | `app.ready()` | `None` | Tell the host the backend is ready. Requires at least one window. `run()` calls it for you. |
-| `app.run()` | `None` | Announce readiness, then block until the host shuts the application down. Raises `DisconnectedError` if the host disappears without an orderly shutdown. |
+| `app.run()` | `None` | Announce readiness, then block until the host shuts the application down. Raises `DisconnectedError` if the host disappears without an orderly shutdown. A quit requested during startup (before `run()`) is an orderly shutdown. If a callback called `sys.exit(n)`, `run()` raises `SystemExit(n)` after the shutdown. |
 | `app.request_quit()` | `None` | Ask the host to quit. The quit policy (below) may refuse. |
-| `app.on_before_quit(callback)` | `None` | `callback()` returns `True` to allow quitting, `False` to veto. |
+| `app.on_before_quit(callback)` | `None` | `callback()` returns `True` to allow quitting, `False` to veto (see [policy callbacks](#threading-and-callbacks)). |
 | `app.on_window_event(callback)` | unsubscribe function | `callback(params)` for every native window event (`params["type"]` is `closed`, `close_requested`, `resized`, `focused`, ...; plus `window_id` and the event's fields). Runs in event order after the API's own bookkeeping, so a `closed` window is already retired. Several listeners may subscribe. |
+| `app.on_activated(callback)` | unsubscribe function | `callback(params)` when a second launch of this single-instance app was forwarded here (`args`, `cwd`, `activation_token`). `args` is the second host's own command line; the second launch's script arguments are not forwarded. Several listeners may subscribe. |
 | `app.on_shutdown(callback)` | `None` | `callback()` runs in the thread that called `run()`, once the host has shut the app down and the events it sent before the shutdown (such as the last window's `closed`) have been delivered. |
 | `app.clipboard_text()` | `str` | Read plain text from the system clipboard. |
 | `app.set_clipboard_text(text)` | `None` | Write plain text to the system clipboard. On Wayland the app must have received keyboard or pointer input first. |
@@ -170,7 +172,15 @@ Calls that return host data return plain `dict` and `list` values whose keys are
 | `app.close()` | `None` | Disconnect from the host and mark all windows and documents stale. |
 | `app.rpc` | `RpcClient` | The low-level client (see [below](#low-level-client)). |
 
-`open_file` and `open_html` accept the same keyword options as `create_window` (`title`, `width`, ...). If loading fails, the new window is closed and the error is raised.
+`open_file` and `open_html` accept the same keyword options as `create_window` (`title`, `width`, ...). If loading fails, the error is raised with the new window as `error.window`. After `run()`/`ready()` that window is closed. Before it, closing a window would cancel the whole application, so the empty window is kept: load a fallback page into `error.window`, or open another window (the unused empty one is then closed as soon as the application is ready):
+
+```python
+try:
+    window = app.open_file("main.html")
+except RpcError as error:
+    window = error.window
+    window.load_html(f"<p>Cannot load the page: {html.escape(error.message)}</p>")
+```
 
 Closing the last window is a request to quit: the quit policy runs, and the application ends if it allows. `app.request_quit()` from a callback is the normal way to end a headless test.
 
@@ -189,7 +199,7 @@ The Python API has no call that lists the open windows (PowerShell: `Get-UI4MEWi
 | `window.state()` | `dict` | Window state, with separate `requested` and `observed` objects: `title`, `width`, `height`, `scale_factor`, `physical_size`, `observed.{focused,minimized,maximized,fullscreen,position,theme}`. |
 | `window.request_attention(kind="informational")` | `dict` | Ask the desktop to draw attention to the window: `"informational"`, `"critical"`, or `None` to cancel. |
 | `window.request_close()` | `None` | Ask to close the window. The close policy may refuse. |
-| `window.on_before_close(callback)` | `None` | `callback()` returns `True` to allow closing this window, `False` to veto. Each window has its own policy. |
+| `window.on_before_close(callback)` | `None` | `callback()` returns `True` to allow closing this window, `False` to veto (see [policy callbacks](#threading-and-callbacks)). Each window has its own policy. |
 | `window.open_files(*, multiple=False, title=None, directory=None, filters=(), wait=True)` | `dict` or future | Native open-file dialog. |
 | `window.save_file(*, file_name=None, title=None, directory=None, filters=(), wait=True)` | `dict` or future | Native save dialog. |
 | `window.choose_folder(*, title=None, directory=None, wait=True)` | `dict` or future | Native folder picker. |
@@ -448,8 +458,8 @@ For animation, produce frames in a `threading.Thread` while `app.run()` waits; s
 | Exception | Raised when |
 | --- | --- |
 | `RpcError` | The host rejected a request. Has `code`, `message`, `data`. |
-| `StaleDocumentError` (`RuntimeError`) | A retired `Document`, `Node` or closed `Window` was used. |
-| `TimeoutError` (`concurrent.futures.TimeoutError`) | `app.rpc.call(..., timeout=...)` expired. Cancellation was requested; **the native outcome is unknown**. |
+| `StaleDocumentError` (`RuntimeError`) | A retired `Document`, `Node` or closed `Window` was used. When the host is first to notice (its `-32004` answer arrives before the window's `closed` event was processed), the error is a `HostStaleError`, which is both a `StaleDocumentError` and an `RpcError` with `code == -32004`; the facade is retired at that point. |
+| `TimeoutError` | `app.rpc.call(..., timeout=...)` expired. Cancellation was requested; **the native outcome is unknown**. On Python 3.10 the exception also derives from `concurrent.futures.TimeoutError`; on 3.11+ the two are the same class. |
 | `DisconnectedError` (`ConnectionError`) | The connection to the host is gone. `app.run()` raises it only if the host disappeared without an orderly shutdown. |
 | `StartupError` (`RuntimeError`) | `Application.start()` cannot run: interactive interpreter, `python -c` or stdin; host binary missing; only one of `UI4ME_ENDPOINT`/`UI4ME_TOKEN` set; host failed to launch. Also `from_environment()` without a host connection. |
 | `ProtocolError` | The host sent a malformed message. |
@@ -464,12 +474,16 @@ except RpcError as error:
 
 Common `RpcError.code` values: `-32602` invalid parameters (including unknown element ids), `-32601` unknown method or operation, `-32001` unsupported on this platform, `-32002` unavailable right now, `-32003` denied, `-32004` closed or stale, `-32005` busy or a limit reached, `-32006` cancelled, `-32008` invalid state (for example shutting down). Platform-dependent features such as Wayland window positioning fail with an explicit error instead of pretending to work, so catch `RpcError` around them.
 
-An exception in an event callback is printed (`Notification handler failed: ...`) and does not stop the application. An exception in a close or quit policy callback counts as a veto: the window stays open or the application keeps running.
+An exception in a callback never stops the application or the callback thread: its full traceback is printed to stderr (`UI4ME: 'click' event handler failed:` followed by the traceback), and the other handlers registered for the same event still run. An exception in a close or quit policy callback counts as a veto (the window stays open or the application keeps running), and the traceback says that closing or quitting was refused.
+
+`sys.exit(n)` (`SystemExit`) or `KeyboardInterrupt` raised in any callback, typically a "Quit" button, requests an orderly application quit (as `app.request_quit()` would; the quit policy still applies) and `app.run()` then raises `SystemExit(n)` after the shutdown, so the backend process exits with that status (`KeyboardInterrupt`: 130; the host, and with it a direct-start launcher, reports any non-zero backend status as exit status 1). In `on_before_close` it refuses that close and requests the quit; in `on_before_quit` it allows the quit. A request result that cannot be encoded as JSON (for example `float("nan")` or an arbitrary object returned from an `app.rpc.on_request` handler) is answered with error `-32603` and printed, instead of leaving the host waiting.
 
 ## Threading and callbacks
 
 - **Event callbacks run one at a time, in order,** on a single event thread of your backend (not the host's UI thread). A callback may call any document method and wait for the reply.
 - A long-running callback delays later events. Do slow work in a `threading.Thread` and send small updates back with document methods.
+- **When callbacks fall far behind, events are dropped, but never lifecycle notifications.** At most 128 events wait for the event thread. Beyond that, high-frequency events (`pointermove`, `mousemove`, `pointerover`/`out`, `mouseover`/`out`, `wheel`, `scroll`, `selectionchange`, `dragover`, CSS `transition*`/`animation*`, window `resized`/`scale_changed`) are dropped first, oldest first; other events (`click`, `input`, ...) only when no such event is queued. Window `close_requested`/`closed`, `document.error`, `app.activated`, desktop preference changes and the shutdown are never dropped, and their bookkeeping is applied the moment they arrive: a window is stale (`StaleDocumentError`) as soon as its `closed` notification is received, even while an event callback is still blocked. The first drop of each burst prints one `UI4ME: event callbacks are behind ...` line to stderr; `app.rpc.dropped_notifications` counts drops (`app.rpc.dropped_by_kind` per class).
+- Document events that no `doc.on(...)` handler of the current document is waiting for are discarded as they arrive (`app.rpc.filtered_notifications`), so they never take a place in that queue. Register handlers right after loading a document; an event that arrives before its handler is registered is not delivered.
 - **Close and quit policy callbacks** (`on_before_close`, `on_before_quit`) and the shutdown request run on separate worker threads, so they work even while an event callback is blocked, for example waiting on a file dialog. They may run concurrently with an event callback: protect shared state with a lock and keep the decision quick.
 - Document and window methods are thread-safe; you can call them from your own threads.
 - An event is a snapshot. If the page changed after the event was queued, its `element` ID may no longer exist; do not treat it as proof that the element is still there.
@@ -488,7 +502,7 @@ def add_save_handler(document, label, log):
 
 To *assign* to a variable of the enclosing function from a callback, declare it `nonlocal` (or keep the state in a mutable object such as a `dict` or `list`).
 
-**Policy callbacks** (`on_before_close`, `on_before_quit`) decide by their **return value**: `True` allows, `False` vetoes. A policy callback that raises counts as a veto.
+**Policy callbacks** (`on_before_close`, `on_before_quit`) decide by their **return value**: `True` allows, `False` vetoes. A policy callback that raises counts as a veto, and its traceback is printed. A forgotten `return` (`None`) also vetoes, so that unsaved work is never lost silently, and prints a one-time warning such as `on_before_close for window w1 callback returned None; treating it as "keep open". Return True to allow closing, False to refuse.` Other non-boolean values are tested for truth (as in 1.0.1), with the same one-time warning. PowerShell is stricter here: its policies must output an explicit `$true`.
 
 ## Low-level client
 
@@ -502,7 +516,9 @@ To *assign* to a variable of the enclosing function from a callback, declare it 
 | `on_notification(method, callback)` | One callback per method. Do not replace `document.event`, `document.error` or `window.event`, which the `Application` uses; use `doc.on`, `app.on_window_event` instead. |
 | `on_request(method, callback)` | Answer a host request. |
 | `closed`, `shutdown_requested` | Connection closed; a `threading.Event` set when the host requests shutdown. |
-| `dropped_notifications` | Incremented if your backend falls so far behind that the bounded queue overflows. |
+| `dropped_notifications`, `dropped_by_kind` | Notifications dropped because callbacks fell more than 128 behind: the total, and a dict per delivery class (`"coalescible"`, `"discrete"`, `"control"`; control notifications are never dropped, so that entry stays 0). |
+| `filtered_notifications` | Document events discarded on arrival because no handler subscribed to them. |
+| `exit_status` | The status a callback passed to `sys.exit()` (`None` if none did). |
 
 The wire protocol is described in [protocol](https://github.com/ui4me/ui4me-core/blob/main/docs/reference/protocol.md); normal applications do not need it.
 
@@ -546,7 +562,7 @@ A result that would exceed the message limit is an error, never silently truncat
 | `ui4me-host --version` | Host version. |
 | `ui4me-skill install\|status\|uninstall [--agents all\|claude,codex,...] [--scope user\|project] [--project PATH] [--dry-run] [--force]` | Install the bundled `ui4me-python` coding-agent skill. See [agent skills](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/agent-skills.md). |
 
-`ui4me_core.host_binary()` returns the path of the native host that `start()` and `ui4me-host` use (`UI4ME_HOST_BINARY` if set, otherwise the packaged binary, otherwise `ui4me-host` on `PATH`).
+`ui4me_core.host_binary()` returns the path of the native host that `start()` and `ui4me-host` use (`UI4ME_HOST_BINARY` if set, otherwise the packaged binary, otherwise the first native `ui4me-host` executable on `PATH`; the package's own `ui4me-host` console script is skipped, so a source checkout or editable install without a built host fails with `FileNotFoundError` instead of running that script in a loop).
 
 ## Parity with the PowerShell API
 

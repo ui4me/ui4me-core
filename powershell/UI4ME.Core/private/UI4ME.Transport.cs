@@ -109,6 +109,12 @@ namespace UI4ME {
                         throw new ProtocolException("Invalid JSON value");
                 }
             }
+            // Names PowerShell refuses for note properties (case-insensitive),
+            // plus "": PSNoteProperty throws for them on the reader thread.
+            private static readonly HashSet<string> ReservedMemberNames = new HashSet<string>(
+                new string[] { "", "psobject", "psbase", "psadapted", "psextended", "pstypenames" },
+                StringComparer.OrdinalIgnoreCase);
+
             private object ReadObject(int depth) {
                 Position++;
                 List<KeyValuePair<string, object>> members = new List<KeyValuePair<string, object>>();
@@ -122,7 +128,7 @@ namespace UI4ME {
                     if (Peek() != '"') throw new ProtocolException("Expected JSON member name");
                     string name = ReadString();
                     if (!exact.Add(name)) throw new ProtocolException("Duplicate JSON member: " + name);
-                    if (!folded.Add(name)) caseCollision = true;
+                    if (!folded.Add(name) || ReservedMemberNames.Contains(name)) caseCollision = true;
                     SkipWhitespace();
                     if (Peek() != ':') throw new ProtocolException("Expected ':' in JSON object");
                     Position++;
@@ -134,17 +140,23 @@ namespace UI4ME {
                     if (next == '}') break;
                     if (next != ',') throw new ProtocolException("Expected ',' or '}' in JSON object");
                 }
-                if (caseCollision) {
-                    // PowerShell member names are case-insensitive. Preserve
-                    // distinct keys such as {"A":1,"a":2} in an ordinal table.
-                    Hashtable table = new Hashtable(StringComparer.Ordinal);
-                    foreach (KeyValuePair<string, object> member in members) table[member.Key] = member.Value;
-                    return table;
+                if (!caseCollision) {
+                    PSObject result = new PSObject();
+                    try {
+                        foreach (KeyValuePair<string, object> member in members)
+                            result.Properties.Add(new PSNoteProperty(member.Key, member.Value));
+                        return result;
+                    } catch (Exception) {
+                        // Any other name PowerShell refuses: use the table below.
+                    }
                 }
-                PSObject result = new PSObject();
-                foreach (KeyValuePair<string, object> member in members)
-                    result.Properties.Add(new PSNoteProperty(member.Key, member.Value));
-                return result;
+                // PowerShell member names are case-insensitive and some are
+                // reserved. Preserve keys such as {"A":1,"a":2}, {"psbase":1}
+                // or {"":1} (host results can be keyed by user data, e.g.
+                // get_attributes) in an ordinal table instead.
+                Hashtable table = new Hashtable(StringComparer.Ordinal);
+                foreach (KeyValuePair<string, object> member in members) table[member.Key] = member.Value;
+                return table;
             }
             private object ReadArray(int depth) {
                 Position++;
@@ -394,6 +406,8 @@ namespace UI4ME {
         public long ErrorCode { get; internal set; }
         public string ErrorMessage { get; internal set; }
         public object ErrorData { get; internal set; }
+        /// <summary>control, discrete or coalescible (see Transport.Classify).</summary>
+        public string Class { get; internal set; }
         internal int Size;
     }
 
@@ -403,8 +417,21 @@ namespace UI4ME {
         public const int MaximumQueuedMessages = 128;
         public const int MaximumPending = 128;
 
-        private readonly BlockingCollection<Message> incoming = new BlockingCollection<Message>();
+        // Messages for the runspace, in arrival order. A plain list under
+        // stateLock (not a BlockingCollection) so that, when the bound is
+        // reached, an older coalescible event can be evicted for a newer one.
+        private readonly LinkedList<Message> incoming = new LinkedList<Message>();
+        private bool incomingCompleted;
         private readonly HashSet<string> pending = new HashSet<string>(StringComparer.Ordinal);
+        // Interest: what the module has callbacks for. When filtering is on,
+        // other notifications are discarded on the reader thread and never
+        // occupy one of the MaximumQueuedMessages slots.
+        private bool filtering;
+        private readonly Dictionary<string, HashSet<string>> documentInterest = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);  // types: case-insensitive like the module's -eq
+        private readonly HashSet<string> notificationInterest = new HashSet<string>(StringComparer.Ordinal);
+        // Bookkeeping applied on the reader thread as control messages arrive.
+        private readonly HashSet<string> closedWindows = new HashSet<string>(StringComparer.Ordinal);
+        private readonly HashSet<string> failedDocuments = new HashSet<string>(StringComparer.Ordinal);
         private readonly object stateLock = new object();
         private readonly object writeLock = new object();
         private readonly UTF8Encoding utf8 = new UTF8Encoding(false, true);
@@ -421,8 +448,13 @@ namespace UI4ME {
         private int queuedMessages;
         private int queuedBytes;
         private long droppedNotifications;
+        private long droppedCoalescible;
+        private long droppedDiscrete;
+        private long filteredNotifications;
         private long rejectedRequests;
         private long receivedMessages;
+        private long burstDrops;
+        private string dropNotice;
 
         public Transport(string endpoint, int connectTimeoutMs) {
             if (string.IsNullOrEmpty(endpoint)) throw new ArgumentException("Endpoint must not be empty.");
@@ -479,6 +511,14 @@ namespace UI4ME {
         public bool IsDisconnected { get { return disconnected || disposed; } }
         public string Failure { get { return failure ?? "The native host disconnected"; } }
         public long DroppedNotifications { get { return Interlocked.Read(ref droppedNotifications); } }
+        /// <summary>Dropped high-frequency events (pointer moves, scroll, transitions, resize).</summary>
+        public long DroppedCoalescible { get { return Interlocked.Read(ref droppedCoalescible); } }
+        /// <summary>Dropped other events (click, input, ...): only when no coalescible event was queued.</summary>
+        public long DroppedDiscrete { get { return Interlocked.Read(ref droppedDiscrete); } }
+        /// <summary>Control notifications are never dropped; always 0.</summary>
+        public long DroppedControl { get { return 0; } }
+        /// <summary>Notifications nobody subscribed to, discarded on arrival (not drops).</summary>
+        public long FilteredNotifications { get { return Interlocked.Read(ref filteredNotifications); } }
         public long RejectedRequests { get { return Interlocked.Read(ref rejectedRequests); } }
         public long ReceivedMessages { get { return Interlocked.Read(ref receivedMessages); } }
         public int QueuedMessages { get { return Volatile.Read(ref queuedMessages); } }
@@ -499,9 +539,131 @@ namespace UI4ME {
             lock (stateLock) pending.Remove(id);
         }
 
-        private static bool IsLifecycle(string method, object parameters) {
-            if (method == "app.shutdown" || method == "window.before_close" || method == "app.before_quit") return true;
-            return method == "window.event" && (Json.Field(parameters, "type") as string) == "closed";
+        /// <summary>
+        /// Delivery class of a host request or notification when callbacks
+        /// fall behind: "control" (lifecycle requests; window closed and
+        /// close_requested, document.error, app.shutdown, app.activated,
+        /// request.cancelled, desktop.preferences_changed) is never dropped;
+        /// "coalescible" (pointer/mouse moves and over/out, wheel, scroll,
+        /// selectionchange, dragover, transition*/animation*, window resized and
+        /// scale_changed) is dropped first; everything else is "discrete".
+        /// </summary>
+        public static string Classify(string method, object parameters, bool request) {
+            if (request) {
+                return method == "window.before_close" || method == "app.before_quit" || method == "app.shutdown" ? "control" : "discrete";
+            }
+            switch (method) {
+                case "app.shutdown": case "app.activated": case "request.cancelled":
+                case "document.error": case "desktop.preferences_changed":
+                    return "control";
+                case "window.event": {
+                    string type = Json.Field(parameters, "type") as string;
+                    if (type == "closed" || type == "close_requested") return "control";
+                    return type == "resized" || type == "scale_changed" ? "coalescible" : "discrete";
+                }
+                case "document.event": {
+                    string type = Json.Field(Json.Field(parameters, "event"), "type") as string;
+                    if (type == null) return "discrete";
+                    switch (type) {
+                        case "pointermove": case "pointerover": case "pointerout": case "mousemove":
+                        case "mouseover": case "mouseout": case "wheel": case "scroll":
+                        case "selectionchange": case "dragover": case "drag_feedback":
+                            return "coalescible";
+                    }
+                    return type.StartsWith("transition", StringComparison.Ordinal) ||
+                        type.StartsWith("animation", StringComparison.Ordinal) ? "coalescible" : "discrete";
+                }
+            }
+            return "discrete";
+        }
+
+        /// <summary>Discard notifications without a subscriber on the reader thread from now on.</summary>
+        public void EnableInterestFiltering() { lock (stateLock) filtering = true; }
+        /// <summary>The event types that have handlers on a document; null or empty removes it.</summary>
+        public void SetDocumentInterest(string documentId, string[] eventTypes) {
+            if (string.IsNullOrEmpty(documentId)) throw new ArgumentException("documentId");
+            lock (stateLock) {
+                if (eventTypes == null || eventTypes.Length == 0) documentInterest.Remove(documentId);
+                else documentInterest[documentId] = new HashSet<string>(eventTypes, StringComparer.OrdinalIgnoreCase);
+            }
+        }
+        /// <summary>The notification methods that have a module callback.</summary>
+        public void SetNotificationInterest(string[] methods) {
+            lock (stateLock) {
+                notificationInterest.Clear();
+                if (methods != null) foreach (string method in methods) if (method != null) notificationInterest.Add(method);
+            }
+        }
+        /// <summary>True once the host's "closed" event for this window arrived (before it is pumped).</summary>
+        public bool IsWindowClosed(string windowId) {
+            if (windowId == null) return false;
+            lock (stateLock) return closedWindows.Contains(windowId);
+        }
+        /// <summary>True once a fatal document.error for this document arrived (before it is pumped).</summary>
+        public bool IsDocumentFailed(string documentId) {
+            if (documentId == null) return false;
+            lock (stateLock) return failedDocuments.Contains(documentId);
+        }
+        /// <summary>A one-line notice when a burst of drops starts or ends; otherwise null. For the runspace to log.</summary>
+        public string TakeDropNotice() {
+            lock (stateLock) { string notice = dropNotice; dropNotice = null; return notice; }
+        }
+
+        // Caller holds stateLock.
+        private bool Interested(Message message) {
+            if (!filtering || message.Class == "control" || notificationInterest.Contains(message.Method)) return true;
+            if (message.Method == "document.event") {
+                string document = Json.Field(message.Params, "document_id") as string;
+                string type = Json.Field(Json.Field(message.Params, "event"), "type") as string;
+                HashSet<string> types;
+                return document != null && type != null && documentInterest.TryGetValue(document, out types) && types.Contains(type);
+            }
+            return false;
+        }
+
+        // Caller holds stateLock.
+        private void ApplyBookkeeping(Message message) {
+            if (message.Method == "window.event" && (Json.Field(message.Params, "type") as string) == "closed") {
+                string window = Json.Field(message.Params, "window_id") as string;
+                if (window != null) closedWindows.Add(window);
+            } else if (message.Method == "document.error" && true.Equals(Json.Field(message.Params, "fatal"))) {
+                string document = Json.Field(message.Params, "document_id") as string;
+                if (document != null) failedDocuments.Add(document);
+            }
+        }
+
+        // Caller holds stateLock.
+        private void CountDrop(Message message) {
+            Interlocked.Increment(ref droppedNotifications);
+            if (message.Class == "coalescible") Interlocked.Increment(ref droppedCoalescible);
+            else Interlocked.Increment(ref droppedDiscrete);
+            burstDrops++;
+            if (burstDrops == 1) {
+                object evt = Json.Field(message.Params, "event");
+                string what = (Json.Field(evt, "type") as string) ?? message.Method;
+                dropNotice = "event callbacks are behind (a callback is slow or blocked); dropping queued events, " +
+                    "pointer/scroll/animation first (first dropped: " + what + "). Window lifecycle, errors and shutdown are never dropped.";
+            }
+        }
+
+        // Caller holds stateLock. Removes the oldest queued coalescible notification.
+        private bool EvictCoalescible() {
+            for (LinkedListNode<Message> node = incoming.First; node != null; node = node.Next) {
+                if (node.Value.Kind != "response" && node.Value.Class == "coalescible") {
+                    incoming.Remove(node);
+                    queuedMessages--;
+                    queuedBytes -= node.Value.Size;
+                    CountDrop(node.Value);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private void Enqueue(Message message) {
+            // Caller holds stateLock.
+            incoming.AddLast(message);
+            Monitor.PulseAll(stateLock);
         }
 
         private byte[] ReadExact(int count, bool frameStart) {
@@ -575,18 +737,30 @@ namespace UI4ME {
                     Message message = Decode(json, (int)size);
                     Interlocked.Increment(ref receivedMessages);
                     if (message.Kind == "response") {
-                        bool expected;
-                        lock (stateLock) expected = pending.Remove(message.Id);
-                        if (expected) incoming.Add(message);  // bounded by MaximumPending
-                        continue;                              // late reply to a cancelled request
+                        lock (stateLock) {
+                            if (pending.Remove(message.Id)) Enqueue(message);  // bounded by MaximumPending
+                        }                                                      // else: late reply to a cancelled request
+                        continue;
                     }
+                    message.Class = Classify(message.Method, message.Params, message.Kind == "request");
                     bool admit;
                     lock (stateLock) {
-                        admit = IsLifecycle(message.Method, message.Params) ||
-                            (queuedMessages < MaximumQueuedMessages && queuedBytes + message.Size <= MaximumQueuedBytes);
-                        if (admit) { queuedMessages++; queuedBytes += message.Size; }
+                        if (message.Kind == "notification") {
+                            if (!Interested(message)) {
+                                Interlocked.Increment(ref filteredNotifications);
+                                continue;
+                            }
+                            ApplyBookkeeping(message);
+                        }
+                        // Control messages bypass the bounds: their number is
+                        // bounded by windows, documents and lifecycle steps.
+                        admit = message.Class == "control" ||
+                            (queuedMessages < MaximumQueuedMessages && queuedBytes + message.Size <= MaximumQueuedBytes) ||
+                            (EvictCoalescible() && queuedBytes + message.Size <= MaximumQueuedBytes);
+                        if (admit) { queuedMessages++; queuedBytes += message.Size; Enqueue(message); }
+                        else if (message.Kind == "notification") CountDrop(message);
                     }
-                    if (admit) { incoming.Add(message); continue; }
+                    if (admit || message.Kind == "notification") continue;
                     if (message.Kind == "request") {
                         Interlocked.Increment(ref rejectedRequests);
                         Hashtable error = new Hashtable();
@@ -598,17 +772,19 @@ namespace UI4ME {
                         response["error"] = error;
                         if (!rejections.TryAdd(response))
                             throw new ProtocolException("The host keeps sending requests that the backend cannot accept");
-                    } else {
-                        Interlocked.Increment(ref droppedNotifications);
                     }
                 }
             } catch (Exception ex) {
                 if (!disposed) failure = ex.GetType().Name + ": " + ex.Message;
             } finally {
                 disconnected = true;
-                try { incoming.CompleteAdding(); } catch (ObjectDisposedException) { }
+                CompleteIncoming();
                 try { rejections.CompleteAdding(); } catch (ObjectDisposedException) { }
             }
+        }
+
+        private void CompleteIncoming() {
+            lock (stateLock) { incomingCompleted = true; Monitor.PulseAll(stateLock); }
         }
 
         /// <summary>
@@ -617,18 +793,32 @@ namespace UI4ME {
         /// </summary>
         public Message Receive(int timeoutMs) {
             if (timeoutMs < -1) throw new ArgumentOutOfRangeException("timeoutMs");
-            Message message;
-            bool taken;
-            try { taken = incoming.TryTake(out message, timeoutMs); }
-            catch (ObjectDisposedException) { throw new DisconnectedException(Failure); }
-            if (taken) {
+            DateTime deadline = timeoutMs < 0 ? DateTime.MaxValue : DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            lock (stateLock) {
+                while (incoming.Count == 0) {
+                    if (incomingCompleted) throw new DisconnectedException(Failure);
+                    if (timeoutMs < 0) { Monitor.Wait(stateLock); continue; }
+                    TimeSpan remaining = deadline - DateTime.UtcNow;
+                    if (remaining <= TimeSpan.Zero || !Monitor.Wait(stateLock, remaining)) {
+                        if (incoming.Count == 0) {
+                            if (incomingCompleted) throw new DisconnectedException(Failure);
+                            return null;
+                        }
+                    }
+                }
+                Message message = incoming.First.Value;
+                incoming.RemoveFirst();
                 if (message.Kind != "response") {
-                    lock (stateLock) { queuedMessages--; queuedBytes -= message.Size; }
+                    queuedMessages--;
+                    queuedBytes -= message.Size;
+                    if (queuedMessages == 0 && burstDrops > 0) {
+                        dropNotice = "event callbacks caught up; " + burstDrops.ToString(CultureInfo.InvariantCulture) +
+                            " event(s) were dropped (" + Interlocked.Read(ref droppedNotifications).ToString(CultureInfo.InvariantCulture) + " in total)";
+                        burstDrops = 0;
+                    }
                 }
                 return message;
             }
-            if (incoming.IsCompleted) throw new DisconnectedException(Failure);
-            return null;
         }
 
         /// <summary>Serializes and writes one frame. Thread-safe.</summary>
@@ -667,7 +857,7 @@ namespace UI4ME {
             }
             try { stream.Dispose(); } catch (IOException) { } catch (ObjectDisposedException) { }
             if (Thread.CurrentThread != reader) reader.Join(2000);
-            try { incoming.CompleteAdding(); } catch (ObjectDisposedException) { }
+            CompleteIncoming();
             try { rejections.CompleteAdding(); } catch (ObjectDisposedException) { }
             if (Thread.CurrentThread != rejecter) rejecter.Join(2000);
         }
