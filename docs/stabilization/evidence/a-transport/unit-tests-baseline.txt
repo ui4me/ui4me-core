@@ -1,0 +1,27 @@
+# Baseline (1e49a6a transport.rs) + new transport tests, debug build, Linux
+# cargo test -p ui4me-host --lib transport:: -- --nocapture
+
+running 6 tests
+
+thread 'transport::tests::peer_that_stops_reading_is_refused_at_the_byte_cap' (120524) panicked at crates/ui4me-host/src/transport.rs:792:9:
+refused by something other than the byte cap after 233: connection outgoing queue unavailable: sending on a full channel
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test transport::tests::local_round_trip_and_clean_disconnect ... ok
+test transport::tests::peer_that_stops_reading_is_refused_at_the_byte_cap ... FAILED
+test transport::tests::disconnect_never_waits_for_a_full_gui_queue ... ok
+
+thread 'transport::tests::t2_burst_to_a_slow_reading_peer_is_delivered_in_order_without_disconnect' (120525) panicked at crates/ui4me-host/src/transport.rs:743:17:
+message 236 of 10221 was refused: connection outgoing queue unavailable: sending on a full channel
+test transport::tests::t2_burst_to_a_slow_reading_peer_is_delivered_in_order_without_disconnect ... FAILED
+test transport::tests::incoming_large_frames_obey_the_byte_budget ... ok
+test transport::tests::peer_that_stops_reading_is_disconnected_by_the_write_deadline ... ok
+
+failures:
+
+failures:
+    transport::tests::peer_that_stops_reading_is_refused_at_the_byte_cap
+    transport::tests::t2_burst_to_a_slow_reading_peer_is_delivered_in_order_without_disconnect
+
+test result: FAILED. 4 passed; 2 failed; 0 ignored; 0 measured; 91 filtered out; finished in 10.25s
+
+error: test failed, to rerun pass `-p ui4me-host --lib`
