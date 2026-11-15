@@ -228,6 +228,37 @@ pub struct Host {
     /// the retries waiting for their backoff.
     decision_requests: HashMap<String, (&'static str, Value)>,
     decision_retries: Vec<(Instant, String)>,
+    /// The last pump yielded with backend messages possibly left (HOST-05).
+    pump_more: bool,
+    pump_stats: PumpStats,
+}
+
+/// HOST-05/HOST-06: one pump handles backend messages for at most this long, or at most
+/// [`PUMP_MESSAGES`] of them, before it yields to native events and frames (and re-wakes).
+const PUMP_BUDGET: Duration = Duration::from_millis(8);
+const PUMP_MESSAGES: usize = 64;
+/// A single backend message that blocks the GUI thread at least this long is logged.
+const SLOW_COMMAND: Duration = Duration::from_millis(100);
+
+/// GUI-thread time accounting reported by `host.diagnostics` (`pump`), since the last report.
+#[derive(Default)]
+struct PumpStats {
+    longest_turn: Duration,
+    budget_yields: u64,
+    slow_commands: u64,
+}
+
+/// The operation a backend message names, for the slow-command log: the `document.command`
+/// `op`, otherwise the method (responses have none).
+fn slow_command_name(value: &Value) -> String {
+    let method = value
+        .get("method")
+        .and_then(Value::as_str)
+        .unwrap_or("response");
+    match value.pointer("/params/command/op").and_then(Value::as_str) {
+        Some(op) if method == "document.command" => format!("document.command {op}"),
+        _ => method.chars().take(128).collect(),
+    }
 }
 
 /// HOST-15: how often a decision answered with "busy" is asked again (100 ms … 1.6 s backoff,
@@ -259,7 +290,9 @@ pub fn run(config: AppConfig, headless: bool) -> Result<i32> {
         host.watch_termination(termination.clone());
         while host.lifecycle.phase() != Phase::Stopped {
             host.pump(None);
-            std::thread::sleep(Duration::from_millis(5));
+            if !host.pump_more {
+                std::thread::sleep(Duration::from_millis(5));
+            }
         }
     } else {
         let event_loop = event_loop().context(
@@ -534,6 +567,8 @@ impl Host {
             termination_seen: 0,
             decision_requests: HashMap::new(),
             decision_retries: Vec::new(),
+            pump_more: false,
+            pump_stats: PumpStats::default(),
             #[cfg(test)]
             observed_notifications: Vec::new(),
         })
@@ -610,6 +645,15 @@ impl Host {
             self.send(client, message);
         }
     }
+    /// `host.diagnostics` `pump`: GUI-thread turn statistics since the previous report. The
+    /// longest turn bounds how long frames and input waited for backend work (gate R5(c)).
+    fn take_pump_stats(&mut self) -> Value {
+        let stats = std::mem::take(&mut self.pump_stats);
+        json!({"longest_turn_ms":stats.longest_turn.as_secs_f64() * 1000.0,
+            "budget_yields":stats.budget_yields,"slow_commands":stats.slow_commands,
+            "budget_ms":PUMP_BUDGET.as_millis() as u64,"budget_messages":PUMP_MESSAGES})
+    }
+
     fn window_event_message(&mut self, id: &str, kind: &str, data: Value) {
         self.notify(
             "window.event",
@@ -618,19 +662,45 @@ impl Host {
     }
 
     fn pump(&mut self, event_loop: Option<&dyn ActiveEventLoop>) {
+        let turn = Instant::now();
         self.apply_native_preferences(event_loop);
-        // An input/log flood must not monopolize native event dispatch.
-        for _ in 0..64 {
+        // HOST-05/HOST-06: an input/log flood or a slow command must not monopolize native
+        // event dispatch. Backend messages are processed until PUMP_BUDGET has elapsed or
+        // PUMP_MESSAGES were handled; then the loop yields (frames, input) and is woken again
+        // at once for the rest instead of waiting for the next timer or input event.
+        self.pump_more = false;
+        let mut handled = 0;
+        loop {
+            if handled == PUMP_MESSAGES || turn.elapsed() >= PUMP_BUDGET {
+                self.pump_more = true;
+                self.pump_stats.budget_yields += 1;
+                (self.wake)();
+                break;
+            }
             let event = self
                 .server
                 .as_ref()
                 .and_then(|s| s.incoming.try_recv().ok());
             let Some(event) = event else { break };
+            handled += 1;
             match event {
                 TransportEvent::Connected(id) => {
                     self.connected.insert(id, Instant::now());
                 }
-                TransportEvent::Message(id, value) => self.message(id, value, event_loop),
+                TransportEvent::Message(id, value) => {
+                    let operation = slow_command_name(&value);
+                    let started = Instant::now();
+                    self.message(id, value, event_loop);
+                    let took = started.elapsed();
+                    if took >= SLOW_COMMAND {
+                        self.pump_stats.slow_commands += 1;
+                        tracing::warn!(
+                            operation,
+                            duration_ms = took.as_millis() as u64,
+                            "backend message took long on the GUI thread"
+                        );
+                    }
+                }
                 TransportEvent::Disconnected(0, reason) => {
                     // HOST-04: connection 0 is the listener itself (or a connection that could
                     // not be attached). Transient accept errors are retried by the transport;
@@ -820,6 +890,10 @@ impl Host {
         }
         self.flush_document_refreshes();
         self.headless_frames(false);
+        let took = turn.elapsed();
+        if took > self.pump_stats.longest_turn {
+            self.pump_stats.longest_turn = took;
+        }
     }
 
     fn message(&mut self, connection: u64, value: Value, event_loop: Option<&dyn ActiveEventLoop>) {
@@ -1585,6 +1659,8 @@ mod tests {
             termination_seen: 0,
             decision_requests: HashMap::new(),
             decision_retries: Vec::new(),
+            pump_more: false,
+            pump_stats: PumpStats::default(),
             #[cfg(test)]
             observed_notifications: Vec::new(),
         }
@@ -1840,6 +1916,62 @@ mod tests {
         host.message(7, protocol::success(&quit, json!({"allow":false})), None);
         assert_eq!(host.lifecycle.phase(), Phase::Running);
         assert!(host.windows["two"].probe.status.contains("Quit cancelled"));
+    }
+
+    /// HOST-05 (T15): a pump that stops at its message budget re-wakes the loop for the rest
+    /// instead of leaving it queued until the next timer or input event.
+    #[test]
+    fn pump_budget_yields_and_rewakes_until_the_queue_is_drained() {
+        let app = format!("org.ui4me.host05.{}", std::process::id());
+        let lock = crate::platform::InstanceLock::acquire(&app).unwrap();
+        let mut host = controller(true);
+        let wakes = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = wakes.clone();
+        host.wake = Arc::new(move || {
+            counter.fetch_add(1, Ordering::SeqCst);
+        });
+        let server = Server::bind(&app, &lock.instance_key, Arc::new(|| {})).unwrap();
+        let mut peer =
+            crate::platform::NativeStream::connect(&server.endpoint, Duration::from_secs(5))
+                .unwrap();
+        host.server = Some(server);
+        let total = 3 * PUMP_MESSAGES + 10;
+        for _ in 0..total {
+            protocol::write_frame(&mut peer, &protocol::notification("test.noop", json!({})))
+                .unwrap();
+        }
+        // Wait until the reader thread has queued everything (Connected + messages).
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut pumps = 0;
+        let mut seen = 0;
+        while Instant::now() < deadline {
+            let before = wakes.load(Ordering::SeqCst);
+            host.pump(None);
+            pumps += 1;
+            if host.pump_more {
+                assert_eq!(wakes.load(Ordering::SeqCst), before + 1, "a yield re-wakes");
+                seen += 1;
+            } else if seen >= 3 {
+                break;
+            } else {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+        assert!(
+            seen >= 3,
+            "at least three budget yields for {total} messages"
+        );
+        assert!(pumps < 100);
+        assert_eq!(
+            slow_command_name(&json!({"method":"document.command",
+                "params":{"command":{"op":"request_submit"}}})),
+            "document.command request_submit"
+        );
+        assert_eq!(
+            slow_command_name(&json!({"id":"x","result":{}})),
+            "response"
+        );
+        host.server.as_mut().unwrap().close();
     }
 
     #[test]

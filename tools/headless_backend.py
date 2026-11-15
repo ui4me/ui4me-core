@@ -181,6 +181,55 @@ def scenario_soak(peer, report, count="10000"):
     return window
 
 
+def scenario_drain(peer, report, commands="1000", rows="200"):
+    """Gate R5(c): pipeline COMMANDS document commands at once (alternating a write and a
+    geometry read, which forces an update each) and report the host's longest GUI-thread turn
+    while they drain."""
+    commands, rows = int(commands), int(rows)
+    html = "<ul>%s</ul>" % "".join(f"<li id=r{i}>row {i}</li>" for i in range(rows))
+    window, document = open_document(peer, html)
+    peer.call("app.ready")
+    peer.call("host.diagnostics")      # reset the turn statistics
+    started = time.monotonic()
+    pending = []
+    for index in range(commands):
+        row = f"r{(index // 2) % rows}"
+        command = ({"op": "set_text", "element": row, "text": f"row {index}"} if index % 2 == 0
+                   else {"op": "get_rect", "element": row})
+        pending.append(peer.request("document.command", {
+            "window_id": window, "document_id": document, "command": command}))
+    for ident in pending:
+        peer.wait(ident)
+    report["drain_seconds"] = time.monotonic() - started
+    report["pump"] = peer.call("host.diagnostics").get("pump")
+    return window
+
+
+def scenario_submit(peer, report, fields="1000", mode="submit"):
+    """HOST-06: one request_submit on a form of FIELDS empty required inputs; time the command
+    and count the `invalid` events it produces."""
+    fields = int(fields)
+    wrap = ("<div>", "</div>") if mode == "blocks" else ("", "")
+    html = "<form id=f>%s</form>" % "".join(f"{wrap[0]}<input id=i{i} required>{wrap[1]}"
+                                             for i in range(fields))
+    started = time.monotonic()
+    window, document = open_document(peer, html)
+    peer.call("app.ready")
+    command(peer, window, document, "get_rect", element="f")    # settle the first layout
+    report["load_seconds"] = time.monotonic() - started
+    report["load_pump"] = peer.call("host.diagnostics").get("pump")
+    start = len(peer.log)
+    started = time.monotonic()
+    if mode in ("submit", "blocks"):
+        command(peer, window, document, "request_submit", element="f")
+    report["submit_seconds"] = time.monotonic() - started
+    command(peer, window, document, "get_rect", element="f")    # the update after it
+    report["update_seconds"] = time.monotonic() - started
+    report["invalid_events"] = sum(1 for e in peer.events(start) if e.get("type") == "invalid")
+    report["pump"] = peer.call("host.diagnostics").get("pump")
+    return window
+
+
 def scenario_wait(peer, report, *options):
     """Ready with one window, announce it (`REPORT.ready`), then serve the host until it sends
     `app.shutdown`. Options: `quit-soon` requests the quit 0.5 s after ready, `close-soon` requests
@@ -226,7 +275,8 @@ def scenario_wait(peer, report, *options):
     return None
 
 
-SCENARIOS = {"burst": scenario_burst, "soak": scenario_soak, "wait": scenario_wait}
+SCENARIOS = {"burst": scenario_burst, "soak": scenario_soak, "wait": scenario_wait,
+             "drain": scenario_drain, "submit": scenario_submit}
 
 
 def main():

@@ -244,7 +244,7 @@ impl Host {
                 json!({"phase":self.lifecycle.phase(),"windows":self.windows.keys().collect::<Vec<_>>(),
                 "pending_jobs":self.jobs.len(),"pending_transfers":self.transfers.len(),"pid":std::process::id(),
                 "backend_pid":self.backend.as_ref().map(Backend::id),"containment":platform::containment_description(),
-                "logging":crate::logging::diagnostics()})
+                "logging":crate::logging::diagnostics(),"pump":self.take_pump_stats()})
             }
             "app.ready" => {
                 if self.windows.is_empty() {

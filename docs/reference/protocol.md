@@ -161,11 +161,13 @@ For `instance = "single"`, a second launch of the same app sends `app.activate` 
 | Method | Params | Result |
 | --- | --- | --- |
 | `host.capabilities` | `{}` | Capability object (below) |
-| `host.diagnostics` | `{}` | `phase`, `windows` (IDs), `pending_jobs`, `pending_transfers`, `pid`, `backend_pid`, `containment`, `logging` |
+| `host.diagnostics` | `{}` | `phase`, `windows` (IDs), `pending_jobs`, `pending_transfers`, `pid`, `backend_pid`, `containment`, `logging`, `pump` (see below) |
 | `app.ready` | `{}` | `{"ready":true}` |
 | `app.request_quit` | `{}` | `{"requested":true}` (outcome follows through `app.before_quit`) |
 | `app.force_quit` | `{}` | `{"requested":true}` |
 | `request.cancel` | `{"id":"<pending request id>"}` | `{"cancelled":bool}`; the cancelled request is answered with `-32006`. Usually sent as a notification. |
+
+The host handles backend messages on its GUI thread in turns of at most 8 ms or 64 messages; then it yields to native events and frames and continues in the next turn. A single message that takes longer still runs to completion (and one over 100 ms is logged with its method or `document.command` op). `host.diagnostics` `pump` reports, since the previous `host.diagnostics`: `longest_turn_ms` (the longest time frames and input waited for backend work), `budget_yields`, `slow_commands`, `budget_ms` and `budget_messages`.
 
 `host.capabilities` returns `capability_schema: 2` with top-level flags (`native`, `headless`, `test_clock` (headless test mode only, see [Test mode](#test-mode-headless-only)), `max_windows`, `max_documents` (16), `renderer: "cpu"`, `css_profile: "ui4me-desktop-1.0"`, `platform`, `containment`, `window_positioning`, `limits` {`frame_bytes`, `pending_requests`, …}, `printing: false`, `tray: false`), a `features` map and the current `native_preferences`. Each feature is `{"implemented":bool,"available":true|false|null,"qualification":…,"scope":"…"}`, where `available: null` means "not observed yet". Feature keys: `window_constraints`, `window_observation`, `window_visibility`, `window_focus`, `window_position`, `window_restore`, `attention`, `clipboard_text`, `file_dialogs`, `external_open`, `reveal_file`, `native_preferences`, `ime`, `ime_purpose_hints`, `incoming_drop`, `accessibility`, `printing`, `tray`. Prefer `features` over the legacy top-level booleans.
 

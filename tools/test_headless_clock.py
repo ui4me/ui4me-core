@@ -106,5 +106,17 @@ class HeadlessClockTests(unittest.TestCase):
         self.assertLess(growth, 1024, f"RSS grew {growth} KiB over 6,000 writes: {samples}")
 
 
+    def test_r5c_turns_stay_short_while_1000_queued_commands_drain(self):
+        """Gate R5(c) (HOST-05/06): 1,000 pipelined commands (writes and forced-layout reads)
+        never hold the GUI thread for 50 ms in one turn; the pump yields and re-wakes."""
+        process, report = run_scenario(self, "drain", 1000, 20, app_id="org.ui4me.test.Drain")
+        self.assertEqual(process.returncode, 0, (report.get("error"), process.stderr[-2000:]))
+        self.assertTrue(report.get("ok"), report.get("error"))
+        pump = report["pump"]
+        # Measured (debug host): 230 ms with only the 64-message budget, 18 ms with 8 ms.
+        self.assertLess(pump["longest_turn_ms"], 50, pump)
+        self.assertGreater(pump["budget_yields"], 0, pump)
+
+
 if __name__ == "__main__":
     unittest.main()
