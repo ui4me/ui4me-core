@@ -461,9 +461,17 @@ fn run_item_inner(host: &mut dyn DispatchHost, item: &InputItem) -> Result<(), S
                     .doc_state(doc)
                     .map(|s| (s.pointer.press_target.take(), s.pointer.press_button.take()))
                     .unwrap_or_default();
-                (press, d.arena().is_connected(target))
+                // UI Events / Pointer Events: when press and release land on different nodes, the
+                // click goes to their nearest common inclusive ancestor (F-17b / INTERACT-07).
+                let click_target = match press.0 {
+                    Some(pt) if press.1 == Some(p.button) => click_target(d, pt, target),
+                    _ => None,
+                };
+                let connected = click_target.is_some_and(|c| d.arena().is_connected(c));
+                (click_target, connected)
             })?;
-            let same = press.0 == Some(target) && press.1 == Some(p.button);
+            let same = press.is_some();
+            let target = press.unwrap_or(target);
             let disabled = eng(host, doc, |_, d| {
                 crate::interaction::activation::disabled_click_target(d, target)
             })?;
@@ -604,8 +612,10 @@ fn run_item_inner(host: &mut dyn DispatchHost, item: &InputItem) -> Result<(), S
             }
             // Clipboard shortcuts where no text control has the focus: the event reaches application code.
             if !k.is_composing
-                && let Some(c) =
-                    crate::interaction::editing::clipboard_command(&k.key, item.modifiers)
+                && let Some(c) = crate::interaction::editing::clipboard_command(
+                    &crate::interaction::keyboard::shortcut_key(&k.key, &k.code, item.modifiers),
+                    item.modifiers,
+                )
             {
                 crate::interaction::editing::document_clipboard(
                     host,
@@ -670,12 +680,38 @@ fn run_item_inner(host: &mut dyn DispatchHost, item: &InputItem) -> Result<(), S
         // platform has already committed or cleared its preedit, 011 Clarification Q3).
         InputKind::WindowFocus { focused: false } => {
             // A press or drag in progress ends: the matching release will not arrive here.
-            eng(host, doc, |ix, d| {
+            let (captured, at) = eng(host, doc, |ix, d| {
                 ix.set_active(d, None);
-                if let Ok(s) = ix.doc_state(doc) {
-                    s.pointer = PointerState::default();
-                }
+                let Ok(s) = ix.doc_state(doc) else {
+                    return (None, None);
+                };
+                s.pointer = PointerState::default();
+                // The pointer capture ends with the press (INTERACT-10): the OS took the pointer.
+                let c = std::mem::take(&mut s.capture);
+                let target = c
+                    .target
+                    .or(c.pending.flatten())
+                    .filter(|&n| d.arena().is_connected(n));
+                (target, s.hover.last_pointer)
             })?;
+            if let Some(c) = captured {
+                // Pointer Events: the user agent cancels the pointer (`pointercancel`), then the
+                // capture is released (`lostpointercapture`), both at the capture target.
+                let (x, y) = at.unwrap_or((0.0, 0.0));
+                let mut p = PointerData::mouse(x, y, -1);
+                p.buttons = 0;
+                for ty in ["pointercancel", "lostpointercapture"] {
+                    run_dispatch(
+                        host,
+                        doc,
+                        c,
+                        pointer_event(ty, &p, item.modifiers),
+                        true,
+                        origin,
+                        ts,
+                    )?;
+                }
+            }
             crate::interaction::editing::on_pointer_up(host, doc);
             crate::interaction::editing::ime::finish(host, doc, false, item.modifiers, origin, ts)?
         }
@@ -683,4 +719,39 @@ fn run_item_inner(host: &mut dyn DispatchHost, item: &InputItem) -> Result<(), S
         _ => {}
     }
     Ok(())
+}
+
+/// The target of the `click` (and `auxclick` / `contextmenu`) that ends a press on `pressed` and a
+/// release on `released`: the same node, else their nearest common inclusive ancestor in the
+/// flat tree, when that ancestor or one of its ancestors is activatable (has activation behaviour
+/// or is a focusable area, such as a `<button>`, a `<label>` or a `tabindex` widget). A drag between
+/// two parts of plain content (a text selection across paragraphs) therefore produces no click, as
+/// before; a press on a button's icon released on its padding clicks the button. `None` when either
+/// node is gone or no ancestor qualifies.
+fn click_target(d: &Document, pressed: NodeId, released: NodeId) -> Option<NodeId> {
+    if pressed == released {
+        return Some(released);
+    }
+    if !d.arena().is_connected(pressed) || !d.arena().is_connected(released) {
+        return None;
+    }
+    let parent = |n: NodeId| d.arena().get(n).and_then(|x| x.parent());
+    let mut common = Some(pressed);
+    while let Some(c) = common {
+        if d.arena().is_inclusive_ancestor(c, released) {
+            break;
+        }
+        common = parent(c);
+    }
+    let common = common?;
+    let mut a = Some(common);
+    while let Some(n) = a {
+        if crate::interaction::activation::has_activation_behaviour(d, n)
+            || crate::interaction::focus::is_focusable(d, n)
+        {
+            return Some(common);
+        }
+        a = parent(n);
+    }
+    None
 }

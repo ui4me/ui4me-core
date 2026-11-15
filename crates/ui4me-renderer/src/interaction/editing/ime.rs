@@ -567,9 +567,10 @@ pub(super) fn report(host: &mut dyn DispatchHost, cx: &Cx) {
         Ok(Some(g)) => {
             let li = g.inner.line_of(focus, false);
             let l = &g.inner.lines[li];
-            (
-                g.origin.0 + f64::from(g.inner.x_of(li, focus)) - g.scroll.0,
-                g.origin.1 + f64::from(l.top) - g.scroll.1,
+            // Through the geometry service: right under a fixed, scrolled or transformed field.
+            g.text_rect_to_viewport(
+                f64::from(g.inner.x_of(li, focus)),
+                f64::from(l.top),
                 1.0,
                 f64::from(l.height),
             )

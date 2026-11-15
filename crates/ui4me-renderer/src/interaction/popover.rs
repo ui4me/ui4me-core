@@ -356,7 +356,7 @@ fn hide_one(h: &mut dyn DispatchHost, doc: DocumentId, popover: NodeId) -> Resul
     if let Some(p) = restore
         && eng(h, doc, |_, d| d.arena().contains(p) && is_focusable(d, p))?
     {
-        focus_update(h, doc, Some(p), DispatchOrigin::Focus, FocusSource::Script)?;
+        crate::interaction::focus::restore_focus(h, doc, p)?;
     }
     Ok(())
 }

@@ -646,7 +646,7 @@ impl Document {
         self.pipeline.flush()?;
         let chain: Vec<ScrollTarget> = self
             .pipeline
-            .scroll_chain(host)
+            .scroll_chain_until_fixed(host)
             .into_iter()
             .map(|e| e.target)
             .collect();

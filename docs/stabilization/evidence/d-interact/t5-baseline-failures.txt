@@ -1,0 +1,40 @@
+thread 'document::geometry_tests::element_rect_and_accessibility_bounds_are_the_transformed_box' (246689) panicked at crates/ui4me-renderer/src/document/geometry_tests.rs:191:5:
+assertion `left == right` failed: Rect { x: 0.0, y: 0.0, width: 100.0, height: 50.0 }
+  left: (0.0, 0.0, 100.0, 50.0)
+ right: (150.0, -25.0, 200.0, 100.0)
+thread 'document::geometry_tests::a_centred_modal_after_scrolling_is_hit_where_it_is_reported' (246683) panicked at crates/ui4me-renderer/src/document/geometry_tests.rs:289:5:
+centred: Rect { x: 300.0, y: 200.0, width: 260.0, height: 128.0 }
+
+---- document::geometry_tests::a_modal_dialog_on_a_scrolled_page_places_the_caret_under_the_click stdout ----
+thread 'document::geometry_tests::a_modal_dialog_on_a_scrolled_page_places_the_caret_under_the_click' (246686) panicked at crates/ui4me-renderer/src/document/geometry_tests.rs:79:5:
+IME area (240.0, -1011.0, 1.0, 22.0) inside i Rect { x: 200.0, y: 189.0, width: 200.0, height: 22.0 }
+
+---- document::geometry_tests::a_textarea_in_a_fixed_box_keeps_its_geometry_after_the_page_scrolls stdout ----
+thread 'document::geometry_tests::a_textarea_in_a_fixed_box_keeps_its_geometry_after_the_page_scrolls' (246688) panicked at crates/ui4me-renderer/src/document/geometry_tests.rs:116:5:
+assertion `left == right` failed: IME y does not move with the page
+  left: -350.0
+ right: 50.0
+thread 'document::geometry_tests::a_range_slider_in_a_translated_box_follows_the_pointer' (246687) panicked at crates/ui4me-renderer/src/document/geometry_tests.rs:264:5:
+assertion `left == right` failed
+  left: 0.0
+ right: 200.0
+thread 'document::geometry_tests::a_click_in_a_scaled_input_maps_through_the_inverse_transform' (246684) panicked at crates/ui4me-renderer/src/document/geometry_tests.rs:253:9:
+assertion `left == right` failed: glyph 1
+  left: (3, 3)
+ right: (1, 1)
+thread 'document::geometry_tests::a_click_on_glyph_k_of_a_translated_input_puts_the_caret_at_k' (246685) panicked at crates/ui4me-renderer/src/document/geometry_tests.rs:225:9:
+assertion `left == right` failed: glyph 0 at x 153
+  left: (15, 15)
+ right: (0, 0)
+thread 'document::geometry_tests::element_rects_are_hit_where_they_are_reported' (246690) panicked at crates/ui4me-renderer/src/document/geometry_tests.rs:435:1:
+Test failed: t: centre (80, 330) of Rect { x: 20.0, y: 300.0, width: 120.0, height: 60.0 } hits Some("tall") (page 0, inner 0) at crates/ui4me-renderer/src/document/geometry_tests.rs:426.
+minimal failing input: fixture = 3, page = 0.0, inner = 0.0
+	successes: 0
+thread 'document::geometry_tests::every_fixture_is_consistent_before_and_after_scrolling' (246691) panicked at crates/ui4me-renderer/src/document/geometry_tests.rs:451:43:
+called `Result::unwrap()` on an `Err` value: Fail(Reason("t: centre (80, 330) of Rect { x: 20.0, y: 300.0, width: 120.0, height: 60.0 } hits Some(\"tall\") (page 0, inner 0) at crates/ui4me-renderer/src/document/geometry_tests.rs:426"))
+
+---- document::geometry_tests::select_options_are_picked_where_they_are_painted stdout ----
+thread 'document::geometry_tests::select_options_are_picked_where_they_are_painted' (246692) panicked at crates/ui4me-renderer/src/document/geometry_tests.rs:166:5:
+assertion `left == right` failed: fixed + scrolled
+  left: "one"
+ right: "two"

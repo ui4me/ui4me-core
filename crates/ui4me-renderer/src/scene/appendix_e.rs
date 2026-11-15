@@ -195,6 +195,23 @@ pub struct SceneSnapshot {
     /// Scene-stage `UNSUPPORTED_FEATURE` reports of this build (from [`prepare_scene`]),
     /// de-duplicated by key, in traversal order. 005 records them with the DOM revision.
     pub reports: Vec<SceneReport>,
+    /// The CSS transform chain each element's (first) box is painted and hit-tested with, from its
+    /// own space to the viewport, for elements in a transformed subtree only (empty when nothing is
+    /// transformed). Read through [`SceneSnapshot::element_transform`] by the geometry service
+    /// (`document::geometry`), so element bounds, caret, IME and accessibility geometry agree with
+    /// painting and hit testing.
+    pub transforms: HashMap<NodeId, ui4me_engine_types::geometry::transform::Affine2D>,
+}
+
+impl SceneSnapshot {
+    /// The transform `node`'s box is painted with (see [`SceneSnapshot::transforms`]); `None` for
+    /// an untransformed element.
+    pub fn element_transform(
+        &self,
+        node: NodeId,
+    ) -> Option<ui4me_engine_types::geometry::transform::Affine2D> {
+        self.transforms.get(&node).copied()
+    }
 }
 
 /// S5: build the display list in Appendix E order and the hit index in one traversal.
@@ -315,6 +332,7 @@ pub fn build_scene_with(
         fonts,
         images: b.images,
         reports: all_reports,
+        transforms: b.transforms,
     }
 }
 
@@ -493,6 +511,8 @@ pub(crate) struct Builder {
     hit_shapes: std::sync::Arc<Vec<crate::scene::hit_index::HitClip>>,
     hit_transform: ui4me_engine_types::geometry::transform::Affine2D,
     backdrop_root: Option<ScopeId>,
+    /// [`SceneSnapshot::transforms`] being built.
+    transforms: HashMap<NodeId, ui4me_engine_types::geometry::transform::Affine2D>,
 }
 
 impl Builder {
@@ -506,6 +526,15 @@ impl Builder {
             hit_shapes: Default::default(),
             hit_transform: ui4me_engine_types::geometry::transform::Affine2D::IDENTITY,
             backdrop_root: None,
+            transforms: HashMap::default(),
+        }
+    }
+
+    /// Record the transform `node`'s first box is painted with, when it is transformed (its
+    /// pseudo-element and anonymous boxes are visited after it and keep its entry).
+    fn note_transform(&mut self, node: NodeId) {
+        if self.hit_transform != ui4me_engine_types::geometry::transform::Affine2D::IDENTITY {
+            self.transforms.entry(node).or_insert(self.hit_transform);
         }
     }
 
@@ -607,6 +636,7 @@ impl Builder {
             }
             self.hit_transform = combined;
         }
+        self.note_transform(b.node);
         if let Some(spec) = &b.extras.clip_path {
             std::sync::Arc::make_mut(&mut self.hit_shapes).push(crate::scene::hit_index::HitClip {
                 shape: crate::scene::paint::clip_path::shape_clip(spec, b).into(),
@@ -853,6 +883,7 @@ impl Builder {
                 ctx.regions.zero.push((e.tree_order, sub.regions));
             }
         } else {
+            self.note_transform(c.node);
             self.paint_box_decor(c, &mut ctx.block, PaintPhase::BlockBackground, scope);
             if !c.extras.hit_transparent
                 && let Some(r) =

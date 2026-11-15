@@ -1,0 +1,67 @@
+== fixed_textarea (PR #4 sibling paths)
+element_rect before=Rect { x: 10.0, y: 50.0, width: 300.0, height: 160.0 }
+element_rect after =Rect { x: 10.0, y: 50.0, width: 300.0, height: 160.0 }
+ime cursor_area before=Some((100.0, 110.0, 1.0, 20.0))
+ime cursor_area after =Some((100.0, 110.0, 1.0, 20.0))
+a11y text runs before=[{"h":20.0,"w":300.0,"x":10.0,"y":50.0},{"h":20.0,"w":300.0,"x":10.0,"y":70.0},{"h":20.0,"w":300.0,"x":10.0,"y":90.0},{"h":20.0,"w":300.0,"x":10.0,"y":110.0}]
+a11y text runs after =[{"h":20.0,"w":300.0,"x":10.0,"y":50.0},{"h":20.0,"w":300.0,"x":10.0,"y":70.0},{"h":20.0,"w":300.0,"x":10.0,"y":90.0},{"h":20.0,"w":300.0,"x":10.0,"y":110.0}]
+element_at_point(30,100) after scroll = {"element":"ta","node":"node:1:8:1"}
+caret after click on line three (expect inside 'line three', offsets 18..28): {"direction":"none","end":20,"length":38,"node":"node:1:8:1","start":20}
+== click_across_children
+span=Rect { x: 20.0, y: 20.0, width: 40.0, height: 22.0 } button=Rect { x: 0.0, y: 0.0, width: 80.0, height: 62.0 }
+press on span, release on button padding -> ["pointerdown@s", "mousedown@s", "focus@b", "focusin@b", "pointerup@b", "mouseup@b", "click@b"]
+click delivered: true
+press+release on span -> click delivered: true
+== transformed_bounds
+element_rect(t) = Some(Rect { x: 150.0, y: -25.0, width: 200.0, height: 100.0 })
+element_at_point(250,25) = {"element":"t","node":"node:3:7:1"}
+element_at_point(50,25) = null
+a11y button bounds = {"h":100.0,"w":200.0,"x":150.0,"y":-25.0}
+== transformed_input
+element_at_point(198,8) = {"element":"i","node":"node:4:8:1"}
+caret after click at visual char 5: {"direction":"none","end":5,"length":16,"node":"node:4:8:1","start":5} ; ime cursor_area=Some((200.0, 0.0, 1.0, 22.0))
+== tab_order
+Tab order: ["c", "b", "a", "l", "dv", "i", "c", "b"]
+Shift+Tab: ["c", "i", "dv"]
+focused_element json = {"element":"dv","node":"node:5:13:1"}
+== radio_and_select_keys
+radio ArrowDown: focused="r2" r2.checked=Ok(true)
+radio ArrowRight: focused="r3" r3.checked=Ok(true)
+radio ArrowDown wrap: focused="r1" r1.checked=Ok(true)
+select ArrowDown: value=Ok("two")
+select End: value=Ok("three")
+checkbox Space: checked=Ok(true)
+range ArrowRight+PageUp: value=Ok("7")
+== focus_loss_capture
+set_pointer_capture -> Ok(true)
+capture while pressed = Some("c")
+capture after Focus(false) = None
+move after focus loss -> ["pointermove@", "mouseout@c", "mouseleave@c", "mouseleave@", "mouseover@", "mousemove@"]
+range during drag = Ok("32")
+range after focus loss + buttonless move (should stay) = Ok("32")
+== link_enter
+Enter on focused <a href> -> ["focus@l", "focusin@l", "keydown@l", "click@l", "link_activated@l", "keyup@l"]
+Enter on role=button tabindex=0 -> ["blur@l", "focusout@l", "focus@rb", "focusin@rb", "keydown@rb", "keyup@rb"]
+Space on role=button tabindex=0 -> ["keydown@rb", "keyup@rb"]
+== layout_shortcuts
+latin: after Ctrl+A selection={"direction":"forward","end":11,"length":11,"node":"node:9:5:1","start":0} ; Ctrl+C events=["keydown@i", "copy@i", "keyup@i"] clipboard requests=0
+russian: after Ctrl+A selection={"direction":"forward","end":11,"length":11,"node":"node:10:5:1","start":0} ; Ctrl+C events=["keydown@i", "copy@i", "keyup@i"] clipboard requests=0
+== select_in_container
+plain: option two at y=52 -> ("two", false)
+transformed: element_rect(s)=Rect { x: 150.0, y: 0.0, width: 150.0, height: 26.0 } (visual x is +150)
+transformed: non-white pixels in popup band y 30..90: at x 0..150 = 0, at x 150..300 = 3562
+transformed: combobox states after open click = {"busy":false,"checked":null,"disabled":false,"expanded":true,"focusable":true,"focused":true,"invalid":false,"live_atomic":false,"modal":false,"multiselectable":false,"read_only":false,"required":false,"selected":null}
+transformed: after clicking visual option two -> value=Ok("two")
+fixed+scrolled: element_rect(s)=Rect { x: 0.0, y: 0.0, width: 150.0, height: 26.0 } (visual y is unchanged)
+fixed+scrolled: combobox states after open click = {"busy":false,"checked":null,"disabled":false,"expanded":true,"focusable":true,"focused":true,"invalid":false,"live_atomic":false,"modal":false,"multiselectable":false,"read_only":false,"required":false,"selected":null}
+fixed+scrolled: after clicking visual option two -> value=Ok("two")
+== fixed_in_transform
+after scroll 400: element_rect(f)=Some(Rect { x: 0.0, y: 10.0, width: 100.0, height: 40.0 }) element_rect(c)=Some(Rect { x: 0.0, y: 10.0, width: 100.0, height: 20.0 })
+hit at (50,20)={"element":"c","node":"node:31:9:1"} ; hit at (50,-) n/a
+== tab_scroll
+focused="b" viewport scroll=Ok(1248.0) rect(b)=Some(Rect { x: 0.0, y: 276.0, width: 24.0, height: 24.0 })
+focused="inner" viewport scroll=Ok(1348.0) sc scroll=Ok(1424.0) rect(inner)=Some(Rect { x: 0.0, y: 276.0, width: 49.0, height: 24.0 })
+backend focus(b): viewport scroll=Ok(1248.0)
+AT focus(b): focused="b" viewport scroll=Ok(1248.0)
+== tab_scroll_input
+text input: focused="b" viewport scroll=Ok(1248.0)

@@ -109,6 +109,35 @@ impl DocumentPipeline {
         out
     }
 
+    /// The scroll entries that move `from` on screen: like [`Self::scroll_chain`], but it stops at
+    /// the nearest `position: fixed` ancestor-or-self box. Outer scrolling (including the viewport)
+    /// does not move a fixed box or anything inside it, such as the contents of a modal `<dialog>`.
+    pub fn scroll_chain_until_fixed(&self, from: NodeId) -> Vec<ScrollEntry> {
+        let Some(c) = self.committed.as_ref() else {
+            return Vec::new();
+        };
+        let tree = &c.layout.fragments;
+        let mut out = Vec::new();
+        let mut at = tree.fragments_of(from).first().copied();
+        while let Some(f) = at {
+            let frag = tree.get(f);
+            if let FragmentKind::Box(b) = &frag.kind {
+                if b.extras.is_scroll_container
+                    && let crate::layout::box_tree::BoxOwner::Element(n) = b.owner
+                    && let Some(e) = entry(tree, &self.scroll, ScrollTarget::Node(n))
+                {
+                    out.push(e);
+                }
+                if b.extras.position == crate::layout::box_tree::PositionValue::Fixed {
+                    return out;
+                }
+            }
+            at = frag.parent;
+        }
+        out.extend(entry(tree, &self.scroll, ScrollTarget::Viewport));
+        out
+    }
+
     /// `scrollTo`: set the offset of `target`, clamped to the committed scrollable overflow and
     /// snapped to 1/64 px. A change notes `SCROLL` and advances the scroll epoch.
     pub fn scroll_to(

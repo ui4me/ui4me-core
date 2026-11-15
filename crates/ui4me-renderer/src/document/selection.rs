@@ -168,19 +168,20 @@ impl Document {
         self.pipeline.flush()?;
         Ok(self.pipeline.committed.clone())
     }
-    /// The viewport offset of content inside `container`'s scroll chain (its own scroll included).
-    fn content_scroll(&self, container: Option<NodeId>) -> (f64, f64) {
-        let chain = match container {
-            Some(n) => self.pipeline.scroll_chain(n),
-            None => self
-                .pipeline
-                .scroll_entry(ScrollTarget::Viewport)
-                .into_iter()
-                .collect(),
-        };
-        chain
-            .iter()
-            .fold((0.0, 0.0), |a, e| (a.0 + e.offset.0, a.1 + e.offset.1))
+    /// The document → viewport mapping of the text in `container` (fragment `f` is one of its text
+    /// fragments): the geometry service's, so scroll containers up to the nearest fixed ancestor,
+    /// sticky shifts and transforms apply as painted.
+    fn content_mapping(
+        &self,
+        c: &crate::pipeline::publish::CommittedSet,
+        f: FragmentId,
+    ) -> ui4me_engine_types::geometry::transform::Affine2D {
+        crate::document::geometry::fragment_to_viewport(
+            &c.layout.fragments,
+            self.pipeline.scroll_offsets(),
+            &c.scene,
+            f,
+        )
     }
     fn container_of(tree: &FragmentTree, f: FragmentId) -> Option<NodeId> {
         let mut at = tree.get(f).parent;
@@ -200,7 +201,7 @@ impl Document {
         &self,
         tree: &FragmentTree,
         f: FragmentId,
-        scroll: &mut HashMap<Option<NodeId>, (f64, f64)>,
+        scroll: &mut HashMap<Option<NodeId>, ui4me_engine_types::geometry::transform::Affine2D>,
     ) -> Option<(
         f64,
         f64,
@@ -213,10 +214,22 @@ impl Document {
             return None;
         };
         let container = Self::container_of(tree, f);
-        let (sx, sy) = *scroll
-            .entry(container)
-            .or_insert_with(|| self.content_scroll(container));
+        let m = match (scroll.get(&container), self.pipeline.committed.as_deref()) {
+            (Some(m), _) => *m,
+            (None, Some(c)) => *scroll
+                .entry(container)
+                .or_insert_with(|| self.content_mapping(c, f)),
+            (None, None) => return None,
+        };
         let r = tree.document_rect(f).rect;
+        // Text geometry is kept axis-aligned: the fragment's origin maps exactly (translations,
+        // the common centred-modal transform, are exact); a scale or rotation is not applied to
+        // the extents.
+        let o = m.map_point(ui4me_engine_types::geometry::transform::PointF {
+            x: r.origin.x.to_f64(),
+            y: r.origin.y.to_f64(),
+        });
+        let (sx, sy) = (r.origin.x.to_f64() - o.x, r.origin.y.to_f64() - o.y);
         let line = tree
             .get(f)
             .parent
@@ -626,7 +639,7 @@ impl Document {
         };
         let chain: Vec<ScrollTarget> = self
             .pipeline
-            .scroll_chain(anchor.root)
+            .scroll_chain_until_fixed(anchor.root)
             .into_iter()
             .filter(|e| e.user_y && e.range.max.1 > e.range.min.1)
             .map(|e| e.target)
@@ -1065,7 +1078,7 @@ impl Document {
             f64::INFINITY,
         );
         if let Some(n) = container {
-            for e in self.pipeline.scroll_chain(n) {
+            for e in self.pipeline.scroll_chain_until_fixed(n) {
                 if e.target == ScrollTarget::Viewport {
                     continue;
                 }

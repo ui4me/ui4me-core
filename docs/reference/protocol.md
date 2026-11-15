@@ -224,6 +224,14 @@ A failed `document.load` leaves the previous document in place.
 
 `event` is a renderer event object with a `type` field; events from a replaced document are not delivered. The event types are listed in the [HTML and CSS scope](../concepts/html-css-scope.md#events-delivered-to-the-backend). The host also emits `{"type":"environment_changed","environment":{…}}` when the desktop preferences change.
 
+Input default actions that produce or order events (browser behaviour):
+
+* **Focus scrolls into view.** When focus moves by keyboard (Tab, Shift+Tab), by the `focus` operation or by an assistive technology, the focused element is scrolled into view (`nearest`, instant), innermost scroll container first and never past its nearest `position: fixed` ancestor (a modal `<dialog>` does not scroll the page behind it). The `scroll` events follow `focus`/`focusin`. A pointer press that focuses an element does not scroll, nor does a closing dialog or popover giving focus back.
+* **Keyboard activation.** Enter on a focused button, `<summary>`, submit/reset/button input or `<a href>` dispatches a `click` on keydown; Space does so on keyup for buttons, `<summary>`, checkboxes and radios (not for links, where Space scrolls). An uncanceled `click` on a link is followed by `link_activated`. An element with only `role="button"` gets no synthetic `click`; handle its `keydown`.
+* **Click target.** When the press and the release land on different elements, `click` (and `auxclick`, `contextmenu`) goes to their nearest common ancestor, provided it or an ancestor is activatable (has activation behaviour or is focusable): a press on a button's icon released on its padding clicks the button. A drag across plain content produces no `click`.
+* **Shortcuts on non-Latin layouts.** With Ctrl/Meta held, a key whose layout character is not Latin matches editing and clipboard shortcuts (and Ctrl+Shift+Q) by its physical key (`code` `KeyA`…`KeyZ`).
+* **Focus loss ends pointer capture.** When the window loses focus while an element has pointer capture, it receives `pointercancel` then `lostpointercapture`.
+
 `document.error` `{"window_id","document_id","message"}` (message ≤ 2048 characters) reports asynchronous document failures, such as a failed resource load or an event that exceeded the frame limit.
 
 ## Live bitmaps

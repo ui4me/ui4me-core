@@ -25,15 +25,16 @@ impl Document {
         if self.hosted {
             return Some(node);
         }
-        let Some((cx, cy, cw, ch)) = DispatchHost::element_content_rect(self, self.id(), node)
-            .ok()
-            .flatten()
+        let Some((lx, ly, cw, ch)) =
+            DispatchHost::element_content_point(self, self.id(), node, x, y)
+                .ok()
+                .flatten()
         else {
             return Some(node);
         };
         Some(
             resources
-                .inline_svg_hit(node, (x - cx) as f32, (y - cy) as f32, cw as f32, ch as f32)
+                .inline_svg_hit(node, lx as f32, ly as f32, cw as f32, ch as f32)
                 .unwrap_or(node),
         )
     }

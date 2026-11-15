@@ -357,9 +357,10 @@ impl Document {
         self.tick_scroll()?;
         self.apply_follow()?;
         self.pipeline.flush()?;
+        // Containers outside the nearest `position: fixed` ancestor do not move the element.
         let chain: Vec<ScrollTarget> = self
             .pipeline
-            .scroll_chain(n)
+            .scroll_chain_until_fixed(n)
             .into_iter()
             .map(|e| e.target)
             .filter(|&t| t != ScrollTarget::Node(n))

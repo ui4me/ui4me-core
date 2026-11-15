@@ -905,6 +905,43 @@ impl Document {
     pub fn accessibility_tree(&mut self) -> Result<crate::a11y::A11yTree> {
         self.accessibility_tree_titled("")
     }
+    /// What the accessibility tree is built from (F-16b / INTERACT-04): equal keys mean that
+    /// [`Self::accessibility_tree_titled`] (with the same title) would build the same tree, so a
+    /// host can skip the O(document) rebuild. It covers the DOM and element/control state
+    /// (values, checkedness, text selection), the style and layout outputs (names, roles,
+    /// visibility, bounds), scroll offsets, the environment (viewport, scale), resources and fonts,
+    /// CSS transforms (bounds), focus and window focus. It leaves out the animation clock and the
+    /// scene itself, so a caret blink or a paint-only repaint keeps the key; a CSS animation that
+    /// changes computed style changes it on every tick it restyles. Flushes the pipeline first.
+    pub fn accessibility_key(&mut self) -> Result<AccessibilityKey> {
+        self.apply_follow()?;
+        let read = self.pipeline.flush()?;
+        let r = read.committed.revision;
+        let i = r.inputs;
+        // Order-independent fingerprint of the recorded transforms.
+        let transforms = read
+            .committed
+            .scene
+            .transforms
+            .iter()
+            .fold(0u64, |acc, (n, t)| {
+                use std::hash::{Hash, Hasher};
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                n.hash(&mut h);
+                for v in [t.a, t.b, t.c, t.d, t.e, t.f] {
+                    v.to_bits().hash(&mut h);
+                }
+                acc.wrapping_add(h.finish())
+            });
+        let id = self.id();
+        Ok(AccessibilityKey {
+            inputs: [i.dom, i.environment, i.resource, i.font, i.scroll],
+            outputs: [r.style, r.layout],
+            transforms,
+            focus: self.interaction.focused_element(id),
+            window_focused: self.window_focused,
+        })
+    }
     /// The tree with `window_title` as the name of its root (the platform window).
     pub fn accessibility_tree_titled(
         &mut self,
@@ -1125,10 +1162,12 @@ impl Document {
                 .is_none_or(|e| e.offset.1 >= e.range.max.1 - 1.0);
         }
     }
+    /// Border-box bounds of `n` in viewport CSS px: the bounding box of its boxes as painted and
+    /// hit-tested (scroll containers up to the nearest fixed ancestor, sticky and anchor shifts,
+    /// CSS transforms), through the geometry service (`document::geometry`).
     fn viewport_rect(&self, n: NodeId) -> Option<(f64, f64, f64, f64)> {
         let c = self.pipeline.committed.as_deref()?;
         let tree = &c.layout.fragments;
-        let mut bounds: Option<(f64, f64, f64, f64)> = None;
         let offsets = self.pipeline.scroll_offsets();
         let own = tree.fragments_of(n);
         // A control's inner content (a textarea's lines) also belongs to it and overflows its
@@ -1140,48 +1179,28 @@ impl Document {
             )
         };
         let boxed = own.iter().any(|f| !is_text(f));
+        let mut bounds: Option<(f64, f64, f64, f64)> = None;
         for &f in own {
             if boxed && is_text(&f) {
                 continue;
             }
             let r = tree.document_rect(f).rect;
-            // `position: sticky` boxes (the fragment or an ancestor) are drawn shifted.
-            let (mut dx, mut dy) = (0.0, 0.0);
-            let mut at = Some(f);
-            while let Some(a) = at {
-                if let Ok((sx, sy)) =
-                    crate::layout::coordinator::sticky::sticky_shift(tree, offsets, a)
-                {
-                    dx += sx;
-                    dy += sy;
-                }
-                at = tree.get(a).parent;
-            }
-            let (ax, ay) =
-                crate::layout::coordinator::sticky::anchor_scroll_shift(tree, offsets, f);
-            dx += ax;
-            dy += ay;
-            let (x0, y0) = (r.origin.x.to_f64() + dx, r.origin.y.to_f64() + dy);
-            let (x1, y1) = (x0 + r.size.width.to_f64(), y0 + r.size.height.to_f64());
+            let m = geometry::fragment_to_viewport(tree, offsets, &c.scene, f);
+            let (x0, y0) = (r.origin.x.to_f64(), r.origin.y.to_f64());
+            let b = geometry::map_bounds(
+                &m,
+                x0,
+                y0,
+                x0 + r.size.width.to_f64(),
+                y0 + r.size.height.to_f64(),
+            );
             bounds = Some(match bounds {
-                None => (x0, y0, x1, y1),
-                Some(b) => (b.0.min(x0), b.1.min(y0), b.2.max(x1), b.3.max(y1)),
+                None => b,
+                Some(a) => (a.0.min(b.0), a.1.min(b.1), a.2.max(b.2), a.3.max(b.3)),
             });
         }
         let (x0, y0, x1, y1) = bounds?;
-        let (mut sx, mut sy) = (0.0, 0.0);
-        // A `fixed` box does not scroll with its containers (an anchored one follows its anchor, above).
-        let fixed = tree.fragments_of(n).first().is_some_and(|&f| {
-            matches!(&tree.get(f).kind, crate::layout::fragment::FragmentKind::Box(b)
-                if b.extras.position == crate::layout::box_tree::PositionValue::Fixed)
-        });
-        for e in self.pipeline.scroll_chain(n).into_iter().filter(|_| !fixed) {
-            if e.target != ScrollTarget::Node(n) {
-                sx += e.offset.0;
-                sy += e.offset.1;
-            }
-        }
-        Some((x0 - sx, y0 - sy, x1 - x0, y1 - y0))
+        Some((x0, y0, x1 - x0, y1 - y0))
     }
     fn scrollport_rect(&self, target: ScrollTarget) -> Option<(f64, f64, f64, f64)> {
         let c = self.pipeline.committed.as_deref()?;
@@ -2141,58 +2160,57 @@ impl DispatchHost for Document {
     ) -> std::result::Result<Option<crate::interaction::editing::EditGeometry>, Status> {
         let read = self.pipeline.flush()?;
         let tree = &read.committed.layout.fragments;
-        let Some((frag, bf)) = tree.box_fragment(node) else {
+        let Some((_, bf)) = tree.box_fragment(node) else {
             return Ok(None);
         };
         let Some(inner) = bf.extras.control_inner.clone() else {
             return Ok(None);
         };
-        let origin = tree.document_rect(frag.id).rect.origin;
-        let (mut sx, mut sy) = (0.0, 0.0);
-        for e in self.pipeline.scroll_chain(node) {
-            if e.target != ScrollTarget::Node(node) {
-                sx += e.offset.0;
-                sy += e.offset.1;
-            }
-        }
+        let local = (
+            inner.viewport.origin.x.to_f64(),
+            inner.viewport.origin.y.to_f64(),
+        );
+        let Some(to_viewport) = self.box_local_to_viewport(node, local) else {
+            return Ok(None);
+        };
         let scroll = self
             .pipeline
             .scroll_offsets()
             .offset(ScrollTarget::Node(node));
+        let o = to_viewport
+            .map_point(ui4me_engine_types::geometry::transform::PointF { x: 0.0, y: 0.0 });
         Ok(Some(crate::interaction::editing::EditGeometry {
-            origin: (
-                origin.x.to_f64() + inner.viewport.origin.x.to_f64() - sx,
-                origin.y.to_f64() + inner.viewport.origin.y.to_f64() - sy,
-            ),
+            origin: (o.x, o.y),
             inner: *inner,
             scroll,
+            from_viewport: geometry::inverse(&to_viewport),
+            to_viewport,
         }))
     }
     fn element_content_rect(
         &mut self,
-        _id: DocumentId,
+        id: DocumentId,
         node: NodeId,
     ) -> std::result::Result<Option<(f64, f64, f64, f64)>, Status> {
-        let read = self.pipeline.flush()?;
-        let tree = &read.committed.layout.fragments;
-        let Some((frag, bf)) = tree.box_fragment(node) else {
+        let Some((m, w, h)) = self.content_box_space(id, node)? else {
             return Ok(None);
         };
-        let rect = tree.document_rect(frag.id).rect;
-        let (mut sx, mut sy) = (0.0, 0.0);
-        for e in self.pipeline.scroll_chain(node) {
-            if e.target != ScrollTarget::Node(node) {
-                sx += e.offset.0;
-                sy += e.offset.1;
-            }
-        }
-        let c = bf.content_rect;
-        Ok(Some((
-            rect.origin.x.to_f64() + c.origin.x.to_f64() - sx,
-            rect.origin.y.to_f64() + c.origin.y.to_f64() - sy,
-            c.size.width.to_f64(),
-            c.size.height.to_f64(),
-        )))
+        let (x0, y0, x1, y1) = geometry::map_bounds(&m, 0.0, 0.0, w, h);
+        Ok(Some((x0, y0, x1 - x0, y1 - y0)))
+    }
+    fn element_content_point(
+        &mut self,
+        id: DocumentId,
+        node: NodeId,
+        x: f64,
+        y: f64,
+    ) -> std::result::Result<Option<(f64, f64, f64, f64)>, Status> {
+        let Some((m, w, h)) = self.content_box_space(id, node)? else {
+            return Ok(None);
+        };
+        let p = geometry::inverse(&m)
+            .map_point(ui4me_engine_types::geometry::transform::PointF { x, y });
+        Ok(Some((p.x, p.y, w, h)))
     }
     fn set_caret_state(&mut self, _id: DocumentId, node: NodeId, visible: bool, upstream: bool) {
         let visible = visible && self.window_focused;
@@ -2285,6 +2303,11 @@ impl DispatchHost for Document {
         if !self.file_requests.contains(&input) && self.file_requests.len() < 8 {
             self.file_requests.push(input);
         }
+    }
+    fn reveal_focused(&mut self, _id: DocumentId, node: NodeId) -> std::result::Result<(), Status> {
+        // A failure to scroll never fails the focus move.
+        let _ = self.scroll_node_into_view(node, "nearest", "nearest", "instant");
+        Ok(())
     }
     fn link_activated(&mut self, _id: DocumentId, link: NodeId) {
         // Reported after the dispatch as `link_activated` (0.6 F0608); the host decides.
@@ -2968,6 +2991,11 @@ pub mod file_input;
 mod focus_pointer_tests;
 #[cfg(test)]
 mod framework_fixtures_tests;
+pub(crate) mod geometry;
+#[cfg(test)]
+mod geometry_tests;
+#[cfg(test)]
+mod interact_tests;
 #[cfg(test)]
 mod layout_conformance_tests;
 #[cfg(test)]
@@ -2995,6 +3023,16 @@ mod tests;
 mod unicode_corpus_tests;
 #[cfg(test)]
 mod visual_tests;
+
+/// See [`Document::accessibility_key`]. Opaque; compare for equality only.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AccessibilityKey {
+    inputs: [u64; 5],
+    outputs: [u64; 2],
+    transforms: u64,
+    focus: Option<NodeId>,
+    window_focused: bool,
+}
 
 /// Media preferences of a document (0.5 F0506): the OS signal and the app override are kept
 /// apart, so a later OS change never undoes an app choice.
@@ -3064,57 +3102,80 @@ impl crate::a11y::RenderInfo for A11yInfo<'_> {
     }
     fn text_lines(&self, field: NodeId) -> Option<Vec<crate::a11y::TextLine>> {
         let tree = &self.committed?.layout.fragments;
-        let (frag, bf) = tree.box_fragment(field)?;
+        let (_, bf) = tree.box_fragment(field)?;
         let inner = bf.extras.control_inner.as_ref()?;
         if inner.select.is_some() {
             return None;
         }
-        // Viewport position of the content box, as `control_geometry` computes it.
-        let origin = tree.document_rect(frag.id).rect.origin;
-        let (mut sx, mut sy) = (0.0, 0.0);
-        for e in self.doc.pipeline.scroll_chain(field) {
-            if e.target != ScrollTarget::Node(field) {
-                sx += e.offset.0;
-                sy += e.offset.1;
-            }
-        }
+        // The content box's (scrolled) text space → viewport, as `control_geometry` maps it.
+        let to_viewport = self.doc.box_local_to_viewport(
+            field,
+            (
+                inner.viewport.origin.x.to_f64(),
+                inner.viewport.origin.y.to_f64(),
+            ),
+        )?;
         let own = self
             .doc
             .pipeline
             .scroll_offsets()
             .offset(ScrollTarget::Node(field));
-        let ox = origin.x.to_f64() + inner.viewport.origin.x.to_f64() - sx - own.0;
-        let oy = origin.y.to_f64() + inner.viewport.origin.y.to_f64() - sy - own.1;
+        let text = to_viewport.then_after(
+            &ui4me_engine_types::geometry::transform::Affine2D::translate(-own.0, -own.1),
+        );
         let width = inner.viewport.size.width.to_f64();
+        // A line box and the x extent of a character on it (at its vertical middle) in viewport
+        // space: exact for translations and scales, the bounding box under rotation and skew.
+        let line_box = |top: f64, height: f64| {
+            let (x0, y0, x1, y1) = geometry::map_bounds(&text, 0.0, top, width, top + height);
+            (x0, y0, x1 - x0, y1 - y0)
+        };
+        let x_at = |x: f64, top: f64, height: f64| {
+            text.map_point(ui4me_engine_types::geometry::transform::PointF {
+                x,
+                y: top + height / 2.0,
+            })
+            .x
+        };
         Some(
             inner
                 .lines
                 .iter()
                 .map(|l| {
+                    let (top, height) = (f64::from(l.top), f64::from(l.height));
+                    let x = |v: f64| x_at(v, top, height);
+                    let span = |a: f64, b: f64| {
+                        let (p, q) = (x(a), x(b));
+                        (p.min(q), p.max(q))
+                    };
                     let clusters = if l.clusters.is_empty() {
                         // A left-to-right line: each pair of neighbouring caret stops is a character.
                         l.stops
                             .windows(2)
                             .filter(|w| w[1].0 > w[0].0)
                             .map(|w| {
-                                let (a, b) = (f64::from(w[0].1), f64::from(w[1].1));
-                                (w[0].0, w[1].0, ox + a.min(b), ox + a.max(b), false)
+                                let (a, b) = span(f64::from(w[0].1), f64::from(w[1].1));
+                                (w[0].0, w[1].0, a, b, false)
                             })
                             .collect()
                     } else {
                         l.clusters
                             .iter()
-                            .map(|c| (c.0, c.1, ox + f64::from(c.2), ox + f64::from(c.3), c.4))
+                            .map(|c| {
+                                let (a, b) = span(f64::from(c.2), f64::from(c.3));
+                                (c.0, c.1, a, b, c.4)
+                            })
                             .collect()
                     };
+                    let (bx, by, bw, bh) = line_box(top, height);
                     crate::a11y::TextLine {
                         start: if inner.placeholder_shown { 0 } else { l.start },
                         end: if inner.placeholder_shown { 0 } else { l.end },
                         bounds: crate::a11y::Bounds {
-                            x: ox,
-                            y: oy + f64::from(l.top),
-                            w: width,
-                            h: f64::from(l.height),
+                            x: bx,
+                            y: by,
+                            w: bw,
+                            h: bh,
                         },
                         clusters: if inner.placeholder_shown {
                             Vec::new()
