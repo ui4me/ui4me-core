@@ -43,8 +43,8 @@ pub fn css_profile() -> (&'static str, Vec<(&'static str, &'static str)>) {
 #[cfg(test)]
 pub(crate) use document::paged_facade::PageSize;
 pub use document::{
-    Clipboard, ClipboardRequest, DefaultActionRule, Document, DomOp, Error, ImeState,
-    ImeSurrounding, Input, MAX_PIXELS, MAX_TEXT, NodeOp, Rect, Result, ScrollState,
+    AccessibilityKey, Clipboard, ClipboardRequest, DefaultActionRule, Document, DomOp, Error,
+    ImeState, ImeSurrounding, Input, MAX_PIXELS, MAX_TEXT, NodeOp, Rect, Result, ScrollState,
 };
 /// Generation-checked DOM node identity (opaque to hosts).
 pub use ui4me_engine_types::ids::NodeId;

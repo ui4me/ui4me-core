@@ -521,13 +521,14 @@ impl Host {
             if let Some(document) = &mut record.document {
                 // A refresh may already have computed and published the exact
                 // semantic tree for this committed layout. Do not repeat an
-                // O(document-size) tree construction after every repaint.
+                // O(document-size) tree construction after every repaint; build
+                // only for an active AT and a semantic change (INTERACT-04).
                 if document.native_refresh_pending || document.a11y.is_none() {
-                    let tree = document.engine.accessibility_tree_titled(&record.title)?;
-                    native
-                        .accessibility
-                        .update_document(&document.id, ui4me_renderer::a11y::full_update(&tree));
-                    document.a11y = Some(tree);
+                    super::document_native::refresh_accessibility(
+                        document,
+                        &mut native.accessibility,
+                        &record.title,
+                    )?;
                 }
                 document.native_refresh_pending = false;
                 super::document_native::update_ime(&document.engine, native);

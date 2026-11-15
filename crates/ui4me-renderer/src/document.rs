@@ -905,6 +905,43 @@ impl Document {
     pub fn accessibility_tree(&mut self) -> Result<crate::a11y::A11yTree> {
         self.accessibility_tree_titled("")
     }
+    /// What the accessibility tree is built from (F-16b / INTERACT-04): equal keys mean that
+    /// [`Self::accessibility_tree_titled`] (with the same title) would build the same tree, so a
+    /// host can skip the O(document) rebuild. It covers the DOM and element/control state
+    /// (values, checkedness, text selection), the style and layout outputs (names, roles,
+    /// visibility, bounds), scroll offsets, the environment (viewport, scale), resources and fonts,
+    /// CSS transforms (bounds), focus and window focus. It leaves out the animation clock and the
+    /// scene itself, so a caret blink or a paint-only repaint keeps the key; a CSS animation that
+    /// changes computed style changes it on every tick it restyles. Flushes the pipeline first.
+    pub fn accessibility_key(&mut self) -> Result<AccessibilityKey> {
+        self.apply_follow()?;
+        let read = self.pipeline.flush()?;
+        let r = read.committed.revision;
+        let i = r.inputs;
+        // Order-independent fingerprint of the recorded transforms.
+        let transforms = read
+            .committed
+            .scene
+            .transforms
+            .iter()
+            .fold(0u64, |acc, (n, t)| {
+                use std::hash::{Hash, Hasher};
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                n.hash(&mut h);
+                for v in [t.a, t.b, t.c, t.d, t.e, t.f] {
+                    v.to_bits().hash(&mut h);
+                }
+                acc.wrapping_add(h.finish())
+            });
+        let id = self.id();
+        Ok(AccessibilityKey {
+            inputs: [i.dom, i.environment, i.resource, i.font, i.scroll],
+            outputs: [r.style, r.layout],
+            transforms,
+            focus: self.interaction.focused_element(id),
+            window_focused: self.window_focused,
+        })
+    }
     /// The tree with `window_title` as the name of its root (the platform window).
     pub fn accessibility_tree_titled(
         &mut self,
@@ -2986,6 +3023,16 @@ mod tests;
 mod unicode_corpus_tests;
 #[cfg(test)]
 mod visual_tests;
+
+/// See [`Document::accessibility_key`]. Opaque; compare for equality only.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AccessibilityKey {
+    inputs: [u64; 5],
+    outputs: [u64; 2],
+    transforms: u64,
+    focus: Option<NodeId>,
+    window_focused: bool,
+}
 
 /// Media preferences of a document (0.5 F0506): the OS signal and the app override are kept
 /// apart, so a later OS change never undoes an app choice.

@@ -6,6 +6,7 @@ use accesskit::{
     ActionData, ActionHandler, ActionRequest, ActivationHandler, Node, NodeId, TreeId, TreeUpdate,
 };
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc::SyncSender, Arc, Mutex};
 use winit::event::WindowEvent;
 use winit::window::Window;
@@ -221,16 +222,58 @@ fn remap_node(node: &mut Node, map: &HashMap<NodeId, NodeId>) {
     }
 }
 
-struct Activation(Arc<Mutex<TreeState>>);
+/// Whether an assistive technology reads a window's tree (F-16b / INTERACT-04). The owner
+/// thread skips the O(document) tree rebuild while nothing reads it.
+///
+/// - `active`: set when the platform adapter asks for the initial tree (AT-SPI enabled on Linux;
+///   the first UI Automation client on Windows), cleared by the Linux deactivation handler. Windows
+///   AccessKit has no deactivation signal, so a Windows window stays active once a client
+///   connected (the safe fallback: it then refreshes as before, on semantic changes).
+/// - `activated`: an activation the owner thread has not yet answered with a fresh tree.
+#[derive(Debug, Default)]
+pub struct Presence {
+    active: AtomicBool,
+    activated: AtomicBool,
+}
+
+impl Presence {
+    fn activate(&self) {
+        self.active.store(true, Ordering::SeqCst);
+        self.activated.store(true, Ordering::SeqCst);
+    }
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    fn deactivate(&self) {
+        self.active.store(false, Ordering::SeqCst);
+    }
+    pub fn is_active(&self) -> bool {
+        self.active.load(Ordering::SeqCst)
+    }
+    /// An activation happened since the last call: the owner thread must publish a current tree.
+    pub fn take_activated(&self) -> bool {
+        self.activated.swap(false, Ordering::SeqCst)
+    }
+}
+
+/// Serves the cached full tree synchronously (never `None`, so the adapter never waits for a full
+/// tree it would not get: publication sends deltas). The cache can be older than the document
+/// while no AT was active; the activation wakes the owner thread, which rebuilds the tree and
+/// publishes the difference at once.
+struct Activation {
+    state: Arc<Mutex<TreeState>>,
+    presence: Arc<Presence>,
+    wake: Arc<dyn Fn() + Send + Sync>,
+}
 impl ActivationHandler for Activation {
     fn request_initial_tree(&mut self) -> Option<TreeUpdate> {
-        Some(
-            self.0
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .full
-                .clone(),
-        )
+        let full = self
+            .state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .full
+            .clone();
+        self.presence.activate();
+        (self.wake)();
+        Some(full)
     }
 }
 struct Actions {
@@ -267,14 +310,17 @@ impl ActionHandler for Actions {
     }
 }
 #[cfg(target_os = "linux")]
-struct Deactivation;
+struct Deactivation(Arc<Presence>);
 #[cfg(target_os = "linux")]
 impl DeactivationHandler for Deactivation {
-    fn deactivate_accessibility(&mut self) {}
+    fn deactivate_accessibility(&mut self) {
+        self.0.deactivate();
+    }
 }
 
 pub struct NativeAccessibility {
     state: Arc<Mutex<TreeState>>,
+    presence: Arc<Presence>,
     #[cfg(target_os = "linux")]
     adapter: accesskit_unix::Adapter,
     #[cfg(target_os = "windows")]
@@ -290,7 +336,12 @@ impl NativeAccessibility {
         wake: Arc<dyn Fn() + Send + Sync>,
     ) -> anyhow::Result<Self> {
         let state = Arc::new(Mutex::new(TreeState::new(tree)?));
-        let activation = Activation(state.clone());
+        let presence = Arc::new(Presence::default());
+        let activation = Activation {
+            state: state.clone(),
+            presence: presence.clone(),
+            wake: wake.clone(),
+        };
         let actions = Actions {
             window_id: window_id.into(),
             state: state.clone(),
@@ -300,7 +351,7 @@ impl NativeAccessibility {
         #[cfg(target_os = "linux")]
         let adapter = {
             let _ = window;
-            accesskit_unix::Adapter::new(activation, actions, Deactivation)
+            accesskit_unix::Adapter::new(activation, actions, Deactivation(presence.clone()))
         };
         #[cfg(target_os = "windows")]
         let adapter = {
@@ -313,7 +364,16 @@ impl NativeAccessibility {
             };
             accesskit_windows::SubclassingAdapter::new(hwnd, activation, actions)
         };
-        Ok(Self { state, adapter })
+        Ok(Self {
+            state,
+            presence,
+            adapter,
+        })
+    }
+
+    /// Whether an assistive technology reads this window's tree (see [`Presence`]).
+    pub fn presence(&self) -> &Presence {
+        &self.presence
     }
 
     /// Publish the host probe tree, including a transition back from a document.
@@ -568,8 +628,23 @@ mod tests {
             assert!(focus.nodes.is_empty());
             assert_eq!(focus.focus, NATIVE_ROOT);
         }
-        let mut activation = Activation(state);
+        let presence = Arc::new(Presence::default());
+        let woken = Arc::new(AtomicBool::new(false));
+        let flag = woken.clone();
+        let mut activation = Activation {
+            state,
+            presence: presence.clone(),
+            wake: Arc::new(move || flag.store(true, Ordering::SeqCst)),
+        };
+        assert!(!presence.is_active());
         let full = activation.request_initial_tree().unwrap();
+        assert!(
+            presence.is_active(),
+            "the initial-tree request marks the window active"
+        );
+        assert!(woken.load(Ordering::SeqCst), "and wakes the owner thread");
+        assert!(presence.take_activated());
+        assert!(!presence.take_activated(), "an activation is answered once");
         assert_eq!(full.nodes.len(), 4);
         assert!(full.tree.is_some());
         assert_eq!(full.focus, NATIVE_ROOT);

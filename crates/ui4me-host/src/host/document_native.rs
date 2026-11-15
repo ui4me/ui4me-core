@@ -33,6 +33,48 @@ fn is_shortcut_letter(key: &str, physical: &PhysicalKey, letter: char) -> bool {
             .is_some_and(|c| c.eq_ignore_ascii_case(letter.encode_utf8(&mut [0; 4])))
 }
 
+/// Whether the document's accessibility tree must be rebuilt (F-16b / INTERACT-04): always for
+/// the first tree (the adapter serves it synchronously on activation); afterwards only while an
+/// assistive technology reads the window (`at_active`) and only when the tree's inputs changed
+/// (`Document::accessibility_key`: DOM and control state, style and layout outputs, scroll,
+/// environment, transforms, focus) or the window title did. A caret blink, a paint-only repaint
+/// or any repaint with no AT connected builds nothing; an activation finds the key stale and
+/// rebuilds at once. `Some(key)` = build, then store the key.
+pub(super) fn accessibility_build_needed(
+    document: &mut super::documents::HostedDocument,
+    at_active: bool,
+    title: &str,
+) -> Result<Option<(ui4me_renderer::AccessibilityKey, String)>, ui4me_renderer::Error> {
+    if document.a11y.is_some() && !at_active {
+        return Ok(None);
+    }
+    let key = (document.engine.accessibility_key()?, title.to_owned());
+    if document.a11y.is_some() && document.a11y_key.as_ref() == Some(&key) {
+        return Ok(None);
+    }
+    Ok(Some(key))
+}
+
+/// Rebuild and publish the document's accessibility tree when [`accessibility_build_needed`].
+pub(super) fn refresh_accessibility(
+    document: &mut super::documents::HostedDocument,
+    accessibility: &mut crate::accessibility::NativeAccessibility,
+    title: &str,
+) -> Result<(), ui4me_renderer::Error> {
+    let active = accessibility.presence().is_active();
+    let Some(key) = accessibility_build_needed(document, active, title)? else {
+        return Ok(());
+    };
+    let tree = document.engine.accessibility_tree_titled(title)?;
+    // The adapter maintains a synchronous full tree plus monotonic native IDs and emits only
+    // changed nodes to a running AT client.
+    accessibility.update_document(&document.id, ui4me_renderer::a11y::full_update(&tree));
+    document.a11y = Some(tree);
+    document.a11y_key = Some(key);
+    document.a11y_builds += 1;
+    Ok(())
+}
+
 pub(super) fn update_ime(engine: &Document, native: &mut NativeWindow) {
     let resets = engine.ime_reset_count();
     if resets != native.ime_resets {
@@ -356,8 +398,13 @@ impl Host {
             .windows
             .iter_mut()
             .filter_map(|(id, window)| {
+                // An assistive technology just connected: publish a current tree now.
+                let activated = window
+                    .native
+                    .as_ref()
+                    .is_some_and(|n| n.accessibility.presence().take_activated());
                 let document = window.document.as_mut()?;
-                if std::mem::take(&mut document.native_refresh_pending) {
+                if std::mem::take(&mut document.native_refresh_pending) | activated {
                     Some(id.clone())
                 } else {
                     None
@@ -398,14 +445,8 @@ impl Host {
                 return Ok(());
             };
             let repaint = document.engine.needs_repaint();
-            if repaint || document.a11y.is_none() {
-                let tree = document.engine.accessibility_tree_titled(&window.title)?;
-                // The adapter maintains a synchronous full tree plus monotonic
-                // native IDs and emits only changed nodes to a running AT client.
-                native
-                    .accessibility
-                    .update_document(&document.id, ui4me_renderer::a11y::full_update(&tree));
-                document.a11y = Some(tree);
+            if repaint || document.a11y.is_none() || native.accessibility.presence().is_active() {
+                refresh_accessibility(document, &mut native.accessibility, &window.title)?;
                 document.native_refresh_pending = false;
             }
             native
@@ -1284,6 +1325,84 @@ mod tests {
             ime_policy(&json!({"input_type":"email"}), false).1,
             ImePurpose::Email
         );
+    }
+    /// T13 (F-16b / INTERACT-04): with no assistive technology connected, animation ticks, caret
+    /// blinks and repaints build no accessibility tree; with one connected, an unchanged document
+    /// builds none and a semantic change builds one.
+    #[test]
+    fn accessibility_tree_is_built_only_for_an_active_at_and_semantic_changes() {
+        let mut host = super::super::tests::controller(true);
+        super::super::tests::add_window(&mut host, "w1");
+        let html = "<!doctype html><style>@keyframes spin{to{transform:rotate(360deg)}}\
+            @keyframes glow{to{color:red}}#s{width:20px;height:20px;animation:spin 1s linear infinite}\
+            #g{animation:glow 1s linear infinite}</style><div id=s></div><p id=g>glow</p>\
+            <input id=i value=caret>";
+        host.dispatch_document("document.load", json!({"window_id":"w1","html":html}))
+            .unwrap();
+        let document = host
+            .windows
+            .get_mut("w1")
+            .unwrap()
+            .document
+            .as_mut()
+            .unwrap();
+        document.engine.use_manual_clock();
+        let build = |document: &mut super::super::documents::HostedDocument, active: bool| {
+            let key = accessibility_build_needed(document, active, "Title").unwrap();
+            if let Some(key) = key {
+                let tree = document.engine.accessibility_tree_titled("Title").unwrap();
+                document.a11y = Some(tree);
+                document.a11y_key = Some(key);
+                document.a11y_builds += 1;
+            }
+        };
+        // The first tree is always built (the adapter serves it synchronously on activation).
+        build(document, false);
+        assert_eq!(document.a11y_builds, 1);
+        document.engine.focus("i").unwrap();
+        // 100 animation ticks (transform and colour) with caret blinks, no AT: no build.
+        // The 1.0.1 rule built a tree on every repaint (`repaint || a11y.is_none()`).
+        let mut old_rule_builds = 0;
+        for k in 0..100 {
+            document.engine.advance_clock(16.0).unwrap();
+            if k % 30 == 0 {
+                let _ = document.engine.poll_resources();
+            }
+            if document.engine.needs_repaint() {
+                old_rule_builds += 1;
+                build(document, false);
+            }
+            document.engine.render(400, 300, 1.0).unwrap();
+        }
+        assert_eq!(old_rule_builds, 100, "every tick repaints");
+        assert_eq!(document.a11y_builds, 1, "no AT: 100 ticks build 0 trees");
+        // With an AT connected, a restyling animation rebuilds on its ticks (bounds move); a
+        // static document does not (below).
+        // An AT connects: the stale key rebuilds once; an unchanged document then builds nothing.
+        build(document, true);
+        assert_eq!(
+            document.a11y_builds, 2,
+            "activation refreshes the stale tree"
+        );
+        for _ in 0..3 {
+            build(document, true);
+        }
+        assert_eq!(document.a11y_builds, 2, "unchanged semantics build nothing");
+        // A semantic change (the field's value) builds exactly one tree.
+        document.engine.set_value("i", "changed").unwrap();
+        build(document, true);
+        build(document, true);
+        assert_eq!(document.a11y_builds, 3);
+        assert!(document
+            .a11y
+            .as_ref()
+            .unwrap()
+            .in_order()
+            .iter()
+            .any(|n| n.value.as_deref() == Some("changed")));
+        // A title change is part of the key.
+        let key = accessibility_build_needed(document, true, "Other").unwrap();
+        assert!(key.is_some(), "a new window title rebuilds the root name");
     }
     #[test]
     fn oversized_document_event_reports_error_without_disconnect_or_truncation() {

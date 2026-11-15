@@ -22,6 +22,11 @@ pub(super) struct HostedDocument {
     pub(super) id: String,
     pub(super) engine: Document,
     pub(super) a11y: Option<ui4me_renderer::a11y::A11yTree>,
+    /// What `a11y` was built from (semantic key and window title); see
+    /// `document_native::accessibility_build_needed`.
+    pub(super) a11y_key: Option<(ui4me_renderer::AccessibilityKey, String)>,
+    /// Accessibility trees built for this document (a work counter, F-16b / INTERACT-04).
+    pub(super) a11y_builds: u64,
     pub(super) source: Option<PathBuf>,
     pub(super) asset_root: Option<PathBuf>,
     pub(super) viewport: (u32, u32, f64),
@@ -306,6 +311,8 @@ impl Host {
             id: format!("d{serial}"),
             engine,
             a11y: None,
+            a11y_key: None,
+            a11y_builds: 0,
             viewport: (width, height, scale),
             native_refresh_pending: false,
             bitmaps: Default::default(),

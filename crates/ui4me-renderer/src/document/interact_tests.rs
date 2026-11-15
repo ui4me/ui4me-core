@@ -608,3 +608,79 @@ fn press_on_label_text_and_release_on_its_checkbox_toggles_it() {
         types(&ev)
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// F-16b / INTERACT-04: the accessibility key changes with semantics, not with repaints
+
+fn key_of(d: &mut Document) -> crate::AccessibilityKey {
+    d.accessibility_key().unwrap()
+}
+
+#[test]
+fn accessibility_key_ignores_caret_blinks_and_repaints() {
+    let mut d = doc(
+        "<!doctype html><input id=i value=hello><p id=p style='color:blue'>text</p>",
+        400,
+        300,
+    );
+    d.focus("i").unwrap();
+    let k = key_of(&mut d);
+    let id = d.id();
+    let n = d.node("i").unwrap();
+    for visible in [false, true, false] {
+        DispatchHost::set_caret_state(&mut d, id, n, visible, false);
+        d.render(400, 300, 1.0).unwrap();
+        assert_eq!(key_of(&mut d), k, "a caret blink keeps the key");
+    }
+    d.render(400, 300, 1.0).unwrap();
+    assert_eq!(key_of(&mut d), k, "a repaint keeps the key");
+}
+
+#[test]
+fn accessibility_key_changes_with_every_semantic_input() {
+    let mut d = doc(
+        "<!doctype html><style>body{margin:0}#gap{height:2000px}</style>\
+         <input id=i value=hello><button id=b>B</button><div id=t>t</div><div id=gap></div>",
+        400,
+        300,
+    );
+    let mut last = key_of(&mut d);
+    let mut changed = |d: &mut Document, what: &str| {
+        let k = key_of(d);
+        assert_ne!(k, last, "{what} changes the key");
+        last = k;
+    };
+    d.set_value("i", "world").unwrap();
+    changed(&mut d, "a value");
+    d.focus("i").unwrap();
+    changed(&mut d, "focus");
+    d.set_control_selection(Some("i"), None, 1, 3, "none")
+        .unwrap();
+    changed(&mut d, "a text selection");
+    d.scroll_to(None, None, Some(200.0)).unwrap();
+    changed(&mut d, "a scroll");
+    d.set_attribute("t", "style", Some("transform:translateX(30px)"))
+        .unwrap();
+    changed(&mut d, "a transform");
+    d.set_attribute("b", "aria-label", Some("Bee")).unwrap();
+    changed(&mut d, "an ARIA name");
+    d.handle_input(Input::Focus(false)).unwrap();
+    changed(&mut d, "window focus");
+    d.render(500, 300, 1.0).unwrap();
+    changed(&mut d, "a resize");
+}
+
+#[test]
+fn accessibility_key_follows_a_transform_animation() {
+    // A moving element moves its accessibility bounds: an active AT must see them.
+    let mut d = doc(
+        "<!doctype html><style>@keyframes slide{to{transform:translateX(100px)}}\
+         #s{width:20px;height:20px;animation:slide 1s linear infinite}</style><div id=s></div>",
+        400,
+        300,
+    );
+    let k = key_of(&mut d);
+    d.advance_clock(100.0).unwrap();
+    d.render(400, 300, 1.0).unwrap();
+    assert_ne!(key_of(&mut d), k);
+}
