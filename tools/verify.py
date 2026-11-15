@@ -13,7 +13,13 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-STAGES = ("fmt", "check", "test", "python", "headless", "renderer", "faults", "native", "renderer-native", "completion-native", "browser")
+STAGES = ("fmt", "check", "test", "python", "headless", "renderer", "faults", "clippy",
+          "release-manifest", "native", "renderer-native", "completion-native", "browser")
+# The default run. `clippy` is opt-in here because CI runs it as its own
+# unconditional step; `release-manifest` is the release-freeze check of the
+# committed source manifest and is expected to fail on any non-release tree
+# (F-09), so it runs only on request and in the publish workflows.
+DEFAULT_STAGES = ("fmt", "check", "test", "python", "headless", "renderer", "faults")
 
 
 def stop_process_tree(process):
@@ -45,7 +51,7 @@ def main():
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error("--jobs must be positive")
-    stages = args.stage or ["fmt", "check", "test", "python", "headless", "renderer", "faults"]
+    stages = args.stage or list(DEFAULT_STAGES)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
@@ -62,6 +68,9 @@ def main():
         "check": [["cargo", "check", "--locked", "--workspace", "--all-targets"]],
         "test": [["cargo", "test", "--locked", "--workspace"]],
         "python": [[sys.executable, "-m", "unittest", "discover", "-s", "tools", "-p", "test_*.py", "-v"]],
+        "clippy": [["cargo", "clippy", "--locked", "--workspace", "--all-targets", "--", "-D", "warnings"]],
+        "release-manifest": [[sys.executable, "tools/release/refresh_source_manifest.py", "--check"],
+                             [sys.executable, "tools/verify_package.py"]],
         "headless": [["cargo", "build", "--locked", "-p", "ui4me-host"],
                      [sys.executable, "tools/run_example.py", "--headless", "--timeout", "40",
                       "--app-id", "org.ui4me.HostHeadlessVerification",
