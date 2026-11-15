@@ -445,20 +445,53 @@ pub fn bootstrap_supervised(args: &[OsString]) -> Result<Option<i32>> {
         .env("UI4ME_DESKTOP_REALM", desktop_realm())
         .env(LAUNCHER_ENV, launcher_identity(std::process::id())?);
     const OWN: [&str; 3] = ["UI4ME_SYSTEMD_UNIT", "UI4ME_DESKTOP_REALM", LAUNCHER_ENV];
-    for (key, _) in std::env::vars_os() {
-        if !OWN.iter().any(|own| key == OsStr::new(own)) {
-            let mut argument = OsString::from("--setenv=");
-            argument.push(key);
-            command.arg(argument);
-        }
+    let (forwarded, skipped) = systemd_environment(
+        std::env::vars_os().filter(|(key, _)| !OWN.iter().any(|own| key == OsStr::new(own))),
+    );
+    if !skipped.is_empty() {
+        // Names only: values may be secrets.
+        tracing::debug!(
+            skipped = skipped.join(","),
+            "environment variables systemd cannot represent are not inherited under supervision"
+        );
     }
     command
+        .args(forwarded)
         .args(OWN.map(|own| format!("--setenv={own}")))
         .arg("--")
         .arg(std::env::current_exe()?)
         .args(args);
     let status = command.status().context("cannot start systemd user supervision; run doctor, or explicitly choose --allow-unsupervised for diagnostics")?;
     Ok(Some(status.code().unwrap_or(1)))
+}
+
+/// F-18 (HOST-03): the `--setenv=NAME` arguments for the variables systemd can represent, and
+/// the names of the others. systemd-run refuses the whole start for a name that is not a shell
+/// identifier (`BASH_FUNC_name%%` from `export -f`, Lmod and Environment Modules) or a value that
+/// is not UTF-8, so such variables are left out instead. Only names reach the command line; each
+/// value is taken from this process's environment by systemd-run itself.
+fn systemd_environment(
+    variables: impl IntoIterator<Item = (OsString, OsString)>,
+) -> (Vec<OsString>, Vec<String>) {
+    let mut forwarded = Vec::new();
+    let mut skipped = Vec::new();
+    for (name, value) in variables {
+        let valid_name = name.to_str().is_some_and(|name| {
+            let mut bytes = name.bytes();
+            bytes
+                .next()
+                .is_some_and(|first| first == b'_' || first.is_ascii_alphabetic())
+                && bytes.all(|byte| byte == b'_' || byte.is_ascii_alphanumeric())
+        });
+        if valid_name && value.to_str().is_some() {
+            let mut argument = OsString::from("--setenv=");
+            argument.push(&name);
+            forwarded.push(argument);
+        } else {
+            skipped.push(name.to_string_lossy().into_owned());
+        }
+    }
+    (forwarded, skipped)
 }
 
 /// The supervised host's lifetime remains bound to the launcher that the
@@ -816,6 +849,39 @@ mod tests {
         for invalid in ["", "../escape", "/tmp/escape", "not-hex"] {
             assert!(endpoint_for(invalid).is_err());
         }
+    }
+
+    /// F-18 (HOST-03, T15): names systemd rejects and non-UTF-8 values are left out; every
+    /// shell-identifier name with a UTF-8 value is forwarded by name only.
+    #[test]
+    fn supervised_environment_skips_what_systemd_rejects() {
+        use std::os::unix::ffi::OsStringExt;
+        let variables = [
+            ("PATH", OsString::from("/usr/bin")),
+            ("_private1", OsString::from("x")),
+            (
+                "BASH_FUNC_module%%",
+                OsString::from("() {  eval $(modulecmd bash $*)\n}"),
+            ),
+            ("A-B", OsString::from("x")),
+            ("1ABC", OsString::from("x")),
+            ("LATIN", OsString::from_vec(b"caf\xe9".to_vec())),
+            ("EMPTY", OsString::new()),
+            ("UNICODE_VALUE", OsString::from("Příliš 😀")),
+        ]
+        .map(|(name, value)| (OsString::from(name), value));
+        let (forwarded, skipped) = systemd_environment(variables);
+        assert_eq!(
+            forwarded,
+            ["PATH", "_private1", "EMPTY", "UNICODE_VALUE"]
+                .map(|name| OsString::from(format!("--setenv={name}")))
+        );
+        assert_eq!(skipped, ["BASH_FUNC_module%%", "A-B", "1ABC", "LATIN"]);
+        let mut non_utf8_name = OsString::from_vec(b"N\xffX".to_vec());
+        non_utf8_name.push("");
+        let (forwarded, skipped) = systemd_environment([(non_utf8_name, OsString::from("x"))]);
+        assert!(forwarded.is_empty());
+        assert_eq!(skipped.len(), 1);
     }
 
     #[test]
