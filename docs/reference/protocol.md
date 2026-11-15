@@ -140,6 +140,8 @@ The backend answers `{"allow": true}` or `{"allow": false}`. Anything else, incl
 * **Deny** (`{"allow":false}`): the application keeps running.
 * **Allow:** the host cancels native jobs and sends the **notification** `app.shutdown` `{"deadline_ms": <shutdown_timeout_ms>}`. The backend should clean up and exit. If it has not exited when the deadline passes, the host kills it and exits with status 1. A backend that exits non-zero during shutdown also gives exit status 1.
 
+A termination request from outside the application (a signal, a console control event or the end of the desktop session; see [host CLI](host-cli.md#run)) skips the decision too: it cancels pending decisions and sends `app.shutdown` with a deadline of at most 3000 ms.
+
 `app.force_quit` (`{}` → `{"requested":true}`) skips the decision, kills the backend and stops. The user can do the same with **Ctrl+Shift+Q** in a window.
 
 ### Second launches: `app.activated`

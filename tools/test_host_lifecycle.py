@@ -122,31 +122,51 @@ class AcceptLoopTests(unittest.TestCase):
     def test_t15_listener_survives_descriptor_exhaustion(self):
         """HOST-04: EMFILE on accept is retried instead of ending the listener for good."""
         import resource
-
-        def low_limit():
-            resource.setrlimit(resource.RLIMIT_NOFILE, (19, 19))
-
-        host = WaitingHost(self, app_id="org.ui4me.test.AcceptEmfile", preexec_fn=low_limit)
-        endpoint = host.ready["endpoint"]
-        flood = []
-        for _ in range(40):
-            connection = socket.socket(socket.AF_UNIX)
-            try:
-                connection.connect(endpoint)
-            except OSError:
-                connection.close()
-                break
-            flood.append(connection)
+        host = WaitingHost(self, app_id="org.ui4me.test.AcceptEmfile")
+        endpoint, pid = host.ready["endpoint"], host.process.pid
+        original = resource.prlimit(pid, resource.RLIMIT_NOFILE)
+        # No descriptor left: the next accept(2) fails with EMFILE.
+        in_use = len(os.listdir(f"/proc/{pid}/fd"))
+        resource.prlimit(pid, resource.RLIMIT_NOFILE, (in_use, original[1]))
+        waiting = socket.socket(socket.AF_UNIX)
+        waiting.connect(endpoint)          # queued in the backlog; accept keeps failing
         time.sleep(1.0)
-        for connection in flood:
-            connection.close()
-        time.sleep(1.5)
+        resource.prlimit(pid, resource.RLIMIT_NOFILE, original)
+        time.sleep(0.5)
+        waiting.close()
         self.assertIsNone(host.process.poll(), host.host_log())
         self.assertTrue(os.path.exists(endpoint), "the endpoint must still exist")
         answer = raw_request(endpoint, "host.diagnostics")
         self.assertEqual(answer["error"]["code"], -32011, answer)   # reached the live host
         self.assertIn("transient IPC accept error", host.host_log())
         host.process.send_signal(signal.SIGKILL)
+
+
+
+@unittest.skipUnless(built_host(), "build the host first: cargo build -p ui4me-host")
+@unittest.skipUnless(os.name == "posix", "POSIX signals; Windows console/session end: see the report")
+class TerminationSignalTests(unittest.TestCase):
+    def check_signal(self, signum):
+        host = WaitingHost(self, app_id=f"org.ui4me.test.Signal{int(signum)}")
+        host.process.send_signal(signum)
+        code = host.wait(15)
+        report = host.report()
+        self.assertTrue(report.get("ok"), (report, host.host_log()))
+        # HOST-07: the backend got an orderly shutdown with the short deadline ...
+        self.assertLessEqual(report["shutdown"]["deadline_ms"], 3000)
+        # ... and the host exits 128 + signal once the backend has exited.
+        self.assertEqual(code, 128 + int(signum), host.host_log())
+        self.assertFalse(os.path.exists(host.ready["endpoint"]), "endpoint removed")
+        self.assertIn("termination requested", host.host_log())
+
+    def test_t15_sigterm_delivers_app_shutdown(self):
+        self.check_signal(signal.SIGTERM)
+
+    def test_t15_sigint_delivers_app_shutdown(self):
+        self.check_signal(signal.SIGINT)
+
+    def test_t15_sighup_delivers_app_shutdown(self):
+        self.check_signal(signal.SIGHUP)
 
 
 if __name__ == "__main__":

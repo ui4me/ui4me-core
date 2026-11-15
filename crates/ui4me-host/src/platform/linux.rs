@@ -611,6 +611,97 @@ pub fn is_systemd_managed() -> bool {
         .unwrap_or(false)
 }
 
+/// Write end of the signal self-pipe; -1 until [`install_termination_handlers`] ran.
+static SIGNAL_PIPE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
+
+extern "C" fn on_termination_signal(signal: libc::c_int) {
+    // Async-signal-safe: one atomic load and one write(2) of the signal number; errno is kept.
+    let fd = SIGNAL_PIPE.load(Ordering::Relaxed);
+    if fd >= 0 {
+        // SAFETY: errno location is thread-local and always valid.
+        let errno = unsafe { *libc::__errno_location() };
+        let byte = signal as u8;
+        // SAFETY: writes one byte from a live stack variable to the pipe's write end.
+        unsafe {
+            libc::write(fd, (&byte as *const u8).cast(), 1);
+            *libc::__errno_location() = errno;
+        }
+    }
+}
+
+/// HOST-07: route `SIGTERM`, `SIGINT` and `SIGHUP` to `termination` instead of the default
+/// disposition (immediate death without `app.shutdown`). The handler writes the signal number
+/// to a self-pipe; a watcher thread turns it into a [`crate::termination::Request`] with exit
+/// status 128 + signal. Handlers are process-wide and reset to the default by `exec`, so
+/// backends and other children are unaffected. Installed once per process.
+pub fn install_termination_handlers(
+    termination: std::sync::Arc<crate::termination::Termination>,
+) -> Result<()> {
+    static INSTALLED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+    if INSTALLED.get().is_some() {
+        return Ok(());
+    }
+    let mut fds = [0; 2];
+    // SAFETY: pipe2 fills two descriptors on success.
+    if unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
+        return Err(io::Error::last_os_error()).context("signal self-pipe");
+    }
+    // SAFETY: both descriptors were just created and are owned here.
+    let (read, write) = unsafe { (OwnedFd::from_raw_fd(fds[0]), OwnedFd::from_raw_fd(fds[1])) };
+    // A full pipe must never block the handler (the watcher drains it).
+    // SAFETY: fcntl on an owned descriptor.
+    unsafe {
+        let flags = libc::fcntl(write.as_raw_fd(), libc::F_GETFL);
+        libc::fcntl(write.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK);
+    }
+    let mut reader = File::from(read);
+    std::thread::Builder::new()
+        .name("ui4me-signals".into())
+        .spawn(move || {
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(1) => {
+                        let signal = i32::from(byte[0]);
+                        let source = match signal {
+                            libc::SIGTERM => "SIGTERM",
+                            libc::SIGINT => "SIGINT",
+                            libc::SIGHUP => "SIGHUP",
+                            _ => "signal",
+                        };
+                        tracing::warn!(signal = source, "termination requested");
+                        termination.request(crate::termination::Request {
+                            source,
+                            exit_code: 128 + signal,
+                        });
+                    }
+                    Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                    _ => return,
+                }
+            }
+        })
+        .context("start signal watcher")?;
+    // The write end stays open for the rest of the process: a handler may run at any time.
+    SIGNAL_PIPE.store(
+        std::os::fd::IntoRawFd::into_raw_fd(write),
+        Ordering::Relaxed,
+    );
+    for signal in [libc::SIGTERM, libc::SIGINT, libc::SIGHUP] {
+        // SAFETY: a zeroed sigaction with a valid handler, an empty mask and SA_RESTART.
+        unsafe {
+            let mut action: libc::sigaction = std::mem::zeroed();
+            action.sa_sigaction = on_termination_signal as *const () as libc::sighandler_t;
+            action.sa_flags = libc::SA_RESTART;
+            libc::sigemptyset(&mut action.sa_mask);
+            if libc::sigaction(signal, &action, std::ptr::null_mut()) != 0 {
+                return Err(io::Error::last_os_error()).context("install signal handler");
+            }
+        }
+    }
+    let _ = INSTALLED.set(());
+    Ok(())
+}
+
 /// Only Windows creates a console window for a GUI launch.
 pub fn detach_owned_console() {}
 

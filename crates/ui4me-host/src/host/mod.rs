@@ -220,6 +220,10 @@ pub struct Host {
     preference_revision: u64,
     /// F-12: `None` until the first `test.advance_time`; then the virtual time advanced so far.
     virtual_time_ms: Option<f64>,
+    /// HOST-07: termination requests (signals, console control, session end) and how many of
+    /// them this host has handled.
+    termination: Option<Arc<crate::termination::Termination>>,
+    termination_seen: usize,
 }
 
 /// Launch a manifest, forwarding secondary launches to the existing instance.
@@ -237,6 +241,7 @@ pub fn run(config: AppConfig, headless: bool) -> Result<i32> {
         }
     }
     let result = Arc::new(AtomicI32::new(0));
+    let termination = crate::termination::Termination::global();
     if headless {
         let mut host = Host::new(
             config,
@@ -246,6 +251,7 @@ pub fn run(config: AppConfig, headless: bool) -> Result<i32> {
             Arc::new(|| {}),
             result.clone(),
         )?;
+        host.watch_termination(termination.clone());
         while host.lifecycle.phase() != Phase::Stopped {
             host.pump(None);
             std::thread::sleep(Duration::from_millis(5));
@@ -256,9 +262,13 @@ pub fn run(config: AppConfig, headless: bool) -> Result<i32> {
         )?;
         let proxy = event_loop.create_proxy();
         let wake: Wake = Arc::new(move || proxy.wake_up());
-        let host = Host::new(config, false, false, instance, wake, result.clone())?;
-        event_loop.run_app(host)?;
+        let mut host = Host::new(config, false, false, instance, wake, result.clone())?;
+        host.watch_termination(termination.clone());
+        let outcome = event_loop.run_app(host);
+        termination.finished();
+        outcome?;
     }
+    termination.finished();
     Ok(result.load(Ordering::Relaxed))
 }
 
@@ -328,7 +338,7 @@ pub fn run_probe() -> Result<i32> {
     let event_loop = event_loop()?;
     let proxy = event_loop.create_proxy();
     let result = Arc::new(AtomicI32::new(0));
-    let host = Host::new(
+    let mut host = Host::new(
         config,
         false,
         true,
@@ -336,7 +346,11 @@ pub fn run_probe() -> Result<i32> {
         Arc::new(move || proxy.wake_up()),
         result.clone(),
     )?;
-    event_loop.run_app(host)?;
+    let termination = crate::termination::Termination::global();
+    host.watch_termination(termination.clone());
+    let outcome = event_loop.run_app(host);
+    termination.finished();
+    outcome?;
     Ok(result.load(Ordering::Relaxed))
 }
 
@@ -458,6 +472,8 @@ impl Host {
             preferences,
             preference_revision: 0,
             virtual_time_ms: None,
+            termination: None,
+            termination_seen: 0,
             #[cfg(test)]
             observed_notifications: Vec::new(),
         })
@@ -675,6 +691,14 @@ impl Host {
                 self.exit_code.store(1, Ordering::Relaxed);
                 self.begin_shutdown();
             }
+        }
+        let requests = self
+            .termination
+            .as_ref()
+            .map(|t| t.take_new(&mut self.termination_seen))
+            .unwrap_or_default();
+        for request in requests {
+            self.terminate(request);
         }
         if let Some(event_loop) = event_loop {
             for target in std::mem::take(&mut self.deferred_clipboard_reads) {
@@ -1069,7 +1093,51 @@ impl Host {
         Ok(())
     }
 
+    /// Receive this process's termination requests (signals, console control, session end).
+    fn watch_termination(&mut self, termination: Arc<crate::termination::Termination>) {
+        termination.set_wake(self.wake.clone());
+        if let Err(error) = platform::install_termination_handlers(termination.clone()) {
+            tracing::warn!(
+                error = format!("{error:#}"),
+                "termination requests keep their default effect"
+            );
+        }
+        self.termination = Some(termination);
+    }
+
+    /// HOST-07: an external termination request (signal, console control, session end) is not
+    /// an answer to a pending decision: it cancels them and starts the orderly shutdown with a
+    /// deadline short enough for process managers and session ends. A second request while
+    /// already shutting down forces the quit.
+    fn terminate(&mut self, request: crate::termination::Request) {
+        match self.lifecycle.phase() {
+            Phase::Stopped => {}
+            Phase::Quitting => {
+                tracing::warn!(
+                    source = request.source,
+                    "termination requested again; forcing shutdown"
+                );
+                self.force_shutdown();
+            }
+            phase => {
+                tracing::warn!(
+                    source = request.source,
+                    "termination requested; shutting down"
+                );
+                if phase != Phase::Failed {
+                    self.exit_code.store(request.exit_code, Ordering::Relaxed);
+                }
+                let configured = Duration::from_millis(self.config.host.shutdown_timeout_ms);
+                self.begin_shutdown_within(configured.min(crate::termination::DEADLINE));
+            }
+        }
+    }
+
     fn begin_shutdown(&mut self) {
+        self.begin_shutdown_within(Duration::from_millis(self.config.host.shutdown_timeout_ms));
+    }
+
+    fn begin_shutdown_within(&mut self, deadline: Duration) {
         if self.lifecycle.phase() == Phase::QuitPending {
             let _ = self.lifecycle.commit_quit();
         } else {
@@ -1079,10 +1147,9 @@ impl Host {
         self.cancel_native_jobs("Application is shutting down");
         self.notify(
             "app.shutdown",
-            json!({"deadline_ms":self.config.host.shutdown_timeout_ms}),
+            json!({"deadline_ms":deadline.as_millis() as u64}),
         );
-        self.quit_deadline =
-            Some(Instant::now() + Duration::from_millis(self.config.host.shutdown_timeout_ms));
+        self.quit_deadline = Some(Instant::now() + deadline);
         self.status_all("Shutting down application...");
     }
 
@@ -1102,6 +1169,9 @@ impl Host {
         let _ = self.lifecycle.stop();
         if let Some(server) = &mut self.server {
             server.close();
+        }
+        if let Some(termination) = &self.termination {
+            termination.finished();
         }
         self.cancel_native_jobs("Host stopped");
         self.native_ids.clear();
@@ -1343,6 +1413,8 @@ mod tests {
             preferences: platform::preferences::PreferenceWatch::new(false, Arc::new(|| {})),
             preference_revision: 0,
             virtual_time_ms: None,
+            termination: None,
+            termination_seen: 0,
             #[cfg(test)]
             observed_notifications: Vec::new(),
         }
@@ -1463,6 +1535,53 @@ mod tests {
         assert_eq!(host.lifecycle.phase(), Phase::Stopped);
         assert_eq!(host.decisions.pending_count(), 0);
         assert_eq!(host.exit_code.load(Ordering::Relaxed), 1);
+    }
+
+    /// HOST-07 (T15): a termination request cancels a pending decision, delivers
+    /// `app.shutdown` with the short deadline and sets the 128 + signal exit status; a second
+    /// request while shutting down forces the quit.
+    #[test]
+    fn termination_request_starts_an_orderly_shutdown_and_a_second_forces_it() {
+        let mut host = controller(true);
+        add_window(&mut host, "one");
+        let termination = Arc::new(crate::termination::Termination::default());
+        host.termination = Some(termination.clone());
+        host.request_quit("backend_request").unwrap();
+        assert_eq!(host.decisions.pending_count(), 1);
+        // Keep the fixture in Quitting: a live backend has not exited yet.
+        host.quit_deadline = None;
+        termination.request(crate::termination::Request {
+            source: "SIGTERM",
+            exit_code: 143,
+        });
+        host.observed_notifications.clear();
+        let before = Instant::now();
+        host.pump(None);
+        // No backend in this fixture, so the orderly shutdown completes at once.
+        assert_eq!(host.lifecycle.phase(), Phase::Stopped);
+        assert_eq!(host.decisions.pending_count(), 0);
+        assert_eq!(host.exit_code.load(Ordering::Relaxed), 143);
+        let shutdown: Vec<_> = host
+            .observed_notifications
+            .iter()
+            .filter(|n| n["method"] == "app.shutdown")
+            .collect();
+        assert_eq!(shutdown.len(), 1);
+        assert_eq!(shutdown[0]["params"]["deadline_ms"], 3000);
+        assert!(host.quit_deadline.unwrap() <= before + Duration::from_millis(3100));
+
+        let mut host = controller(true);
+        let termination = Arc::new(crate::termination::Termination::default());
+        host.termination = Some(termination.clone());
+        host.begin_shutdown();
+        assert_eq!(host.lifecycle.phase(), Phase::Quitting);
+        termination.request(crate::termination::Request {
+            source: "SIGINT",
+            exit_code: 130,
+        });
+        let request = termination.take_new(&mut host.termination_seen).remove(0);
+        host.terminate(request);
+        assert!(host.force_quit, "second request forces the quit");
     }
 
     #[test]

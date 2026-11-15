@@ -36,6 +36,8 @@ Validates the manifest, starts the backend it describes and runs the application
 
 Exit status: `0` after a normal shutdown, `1` when the manifest is invalid, the backend fails, does not become ready before `startup_timeout_ms`, exits on its own, exits non-zero during shutdown, or overruns `shutdown_timeout_ms`. A secondary launch forwarded to a running single instance exits `0` once the primary accepted it.
 
+Termination requests: on Linux `SIGTERM`, `SIGINT` and `SIGHUP`, on Windows console Ctrl+C, Ctrl+Break, console close, logoff and shutdown events and the session end (`WM_QUERYENDSESSION`/`WM_ENDSESSION`) start an orderly shutdown instead of ending the host at once: pending close/quit decisions are cancelled (a termination request is not an answer to them), the backend receives `app.shutdown` with a deadline of at most 3 seconds (`shutdown_timeout_ms` if that is shorter), and the host exits once the backend has exited — with `128 + signal` on Linux (`143` for `SIGTERM`, `130` for `SIGINT`, `129` for `SIGHUP`), `130` for Ctrl+C/Ctrl+Break and `0` for the other Windows events — or with `1` if it had to kill the backend at the deadline. A second request during that shutdown forces the quit. Under systemd supervision `systemctl --user stop` and logout signal every process of the unit (`KillMode=control-group`), so the backend may receive its own `SIGTERM` at the same time.
+
 ### `probe`
 
 Opens a native diagnostic window without any language backend, to separate host/desktop problems (input, IME, clipboard, dialogs, accessibility) from application problems. `--allow-unsupervised` has the same meaning as for `run`.

@@ -138,8 +138,10 @@ fn execute(command: Command) -> Result<i32> {
 /// * AccessKit: the Windows `SubclassingAdapter` is created for, and serviced on, the thread that
 ///   owns the HWND (this one); the Unix adapter runs its own async-io thread.
 /// * Console and environment: `detach_owned_console` and every `set_var` stay on the main thread,
-///   before any other thread is started. No signal or console-control handler is installed; the
-///   default disposition is process-wide.
+///   before any other thread is started. Signal and console-control handlers (HOST-07) are
+///   process-wide; `host::run` installs them from this thread, after `bootstrap_supervised`, so
+///   the supervising launcher keeps the default disposition. They only record the request and
+///   wake this thread (`termination.rs`); the shutdown itself runs here.
 /// * Linux supervision: `bootstrap_supervised` waits on `systemd-run` from this thread; the
 ///   backend child's `PR_SET_PDEATHSIG` follows the thread that forked it, which is this thread,
 ///   and that thread lives exactly as long as the host (the process exits when it ends).

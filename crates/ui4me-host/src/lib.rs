@@ -11,4 +11,5 @@ pub mod platform;
 pub mod presentation;
 pub mod protocol;
 pub mod snapshot;
+pub mod termination;
 pub mod transport;
