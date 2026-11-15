@@ -147,6 +147,39 @@ pub(crate) struct HostNode {
     /// root's font (the strut it aligns to) is `strut_central`.
     pub(crate) central: f32,
     pub(crate) strut_central: f32,
+    /// Atomic inlines only: the border-box min-content and max-content widths of this pass
+    /// (`atomic.rs`, `atomic_intrinsic_width`), with the context key they were computed under
+    /// (INPUTSEC-06).
+    pub(crate) intrinsic_memo: [Option<(u32, f32)>; 2],
+    /// The value of `HostTree::cache_stores` when this node's subtree was last cleared (0: never).
+    pub(crate) cleared_at: u64,
+    /// The value of `HostTree::cache_stores` when a result of this node was last stored (0: never).
+    pub(crate) stored_at: u64,
+    /// The value of `HostTree::cache_stores` when the final-layout entry of `cache` was stored (1 for
+    /// an entry seeded from the previous pass), and when this node's final-layout entries were last
+    /// invalidated (`atomic.rs`, `clear_subtree_cache`): an entry stored no later than that does
+    /// not match (INPUTSEC-06).
+    pub(crate) final_stored_at: u64,
+    pub(crate) finals_cleared_at: u64,
+    /// Atomic inlines only: the input of the last `Final` layout and the value of
+    /// `HostTree::cache_stores` when it ended (`atomic.rs`; INPUTSEC-06).
+    pub(crate) last_final: Option<Box<(u64, LayoutInput)>>,
+    /// Atomic inlines only: the last `Measure` layout of this pass (`atomic.rs`; INPUTSEC-06).
+    pub(crate) measure_memo: Option<Box<MeasureMemo>>,
+}
+
+/// A memoised `Measure` layout of an atomic inline (`atomic.rs`, `layout_atomic_child`): its key
+/// (the available width and the `memo_key` context, as bits), what the layout wrote to the node
+/// itself and the metrics it returned.
+pub(crate) struct MeasureMemo {
+    pub key: (u32, u32),
+    pub size: Size<f32>,
+    pub margin: Rect<f32>,
+    pub padding: Rect<f32>,
+    pub border: Rect<f32>,
+    pub scrollable_overflow_rect: taffy::ScrollableOverflow,
+    pub baselines: Baselines,
+    pub metrics: crate::layout::ifc::interface::AtomicMetrics,
 }
 
 /// What one fragmented layout of a flow thread found (MC-1 balancing).
@@ -204,6 +237,14 @@ pub(crate) struct HostTree {
     /// The tree is laid out as pages (015 PAGE-1, `crate::layout::fragmentation::paged`): the fragmentation facts of
     /// boxes outside multicol containers follow the page context (page breaks forced, `avoid-page`).
     pub(crate) paged: bool,
+    /// Results stored in the node caches so far this pass (`CacheTree::cache_store`), the clock of
+    /// `HostNode::cleared_at`, `stored_at` and `last_final`: a subtree whose nodes were all cleared
+    /// since the last store is still clear, and one none of whose nodes stored a result since an
+    /// atomic's last final layout still holds that layout (`atomic.rs`; INPUTSEC-06).
+    pub(crate) cache_stores: u64,
+    /// Replaced and control boxes among the nodes before each index (built on first use, after the
+    /// tree is complete): whether a subtree holds one (`atomic.rs`, `memo_key`; INPUTSEC-06).
+    pub(crate) leaf_prefix: Option<Vec<u32>>,
 }
 
 impl HostTree {
@@ -759,6 +800,13 @@ impl HostTree {
                 0.0
             },
             strut_central: 0.0,
+            intrinsic_memo: [None; 2],
+            cleared_at: 0,
+            measure_memo: None,
+            stored_at: 0,
+            final_stored_at: 1,
+            finals_cleared_at: 0,
+            last_final: None,
         });
         // An image marker (`list-style-image`): the box is the image and a 7 px gap (the reference
         // browser's `kCMarkerPaddingPx`) separates it from the content; an outside marker's margin box is
@@ -1016,6 +1064,13 @@ impl HostTree {
             ortho_overflow: None,
             central: 0.0,
             strut_central: 0.0,
+            intrinsic_memo: [None; 2],
+            cleared_at: 0,
+            measure_memo: None,
+            stored_at: 0,
+            final_stored_at: 1,
+            finals_cleared_at: 0,
+            last_final: None,
         });
         idx
     }
@@ -2747,10 +2802,16 @@ impl CacheTree for HostTree {
                 return self.frag_cache_get(i, input);
             }
             self.nodes[i].frag_cache = None;
+            let node = &self.nodes[i];
+            if node.final_stored_at <= node.finals_cleared_at {
+                return None;
+            }
         }
         self.nodes[i].cache.get(input)
     }
     fn cache_store(&mut self, n: NodeId, input: &LayoutInput, out: LayoutOutput) {
+        self.cache_stores += 1;
+        self.nodes[usize::from(n)].stored_at = self.cache_stores;
         if self.frag.is_some() && input.run_mode == RunMode::PerformLayout {
             self.frag_cache_store(usize::from(n), input, out);
             return;
@@ -2771,6 +2832,9 @@ impl CacheTree for HostTree {
                 ..*input
             };
             node.cache.store(&unmatchable, LayoutOutput::HIDDEN);
+        }
+        if input.run_mode == RunMode::PerformLayout {
+            node.final_stored_at = self.cache_stores;
         }
         node.cache.store(input, out)
     }
@@ -3078,6 +3142,8 @@ fn paged_tree(
         viewport,
         text_ptr: std::ptr::null_mut(),
         paged: true,
+        cache_stores: 1,
+        leaf_prefix: None,
     };
     let root_idx = tree.add(boxes, root, None, text);
     // The root's percentage heights resolve against the page area (015 STAB-1, measured in the reference's print path:
@@ -3457,6 +3523,8 @@ pub(crate) fn layout_boxes(
         viewport,
         text_ptr: std::ptr::null_mut(),
         paged: false,
+        cache_stores: 1,
+        leaf_prefix: None,
     };
     let tp0 = std::time::Instant::now();
     let root_idx = tree.add(boxes, root, None, text);

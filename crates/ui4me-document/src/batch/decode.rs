@@ -139,7 +139,9 @@ struct Reader<'a> {
 
 impl<'a> Reader<'a> {
     fn need(&self, n: usize) -> Result<(), Status> {
-        if self.pos + n > self.b.len() {
+        // INPUTSEC-11: `pos + n` cannot overflow on 64-bit (both are bounded by the batch size),
+        // but a field length comes from the input: never let it wrap.
+        if self.pos.checked_add(n).is_none_or(|end| end > self.b.len()) {
             Err(bad(self.pos, "buffer ends inside a field"))
         } else {
             Ok(())
@@ -250,10 +252,10 @@ pub fn decode(buf: &[u8], limits: &DomLimits) -> Result<Batch, Status> {
         if cmd_flags != 0 {
             return Err(bad(start + 2, "unknown command flag bits"));
         }
-        if length < 8 || !length.is_multiple_of(4) || start + length > buf.len() {
+        let end = start.checked_add(length).filter(|&e| e <= buf.len());
+        let Some(end) = end.filter(|_| length >= 8 && length.is_multiple_of(4)) else {
             return Err(bad(start + 4, "bad command length"));
-        }
-        let end = start + length;
+        };
         let node = |r: &mut Reader, nullable: bool, defined: u32| -> Result<Operand, Status> {
             let at = r.pos;
             let tag = r.u32()?;
@@ -572,6 +574,17 @@ impl Encoder {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_field_length_never_wraps_the_reader_position() {
+        // INPUTSEC-11: a length near usize::MAX is refused, not wrapped into range.
+        let b = [0u8; 16];
+        let r = Reader { b: &b, pos: 8 };
+        assert!(r.need(usize::MAX).is_err());
+        assert!(r.need(usize::MAX - 7).is_err());
+        assert!(r.need(8).is_ok());
+        assert!(r.need(9).is_err());
+    }
 
     fn enc(cmds: &[Cmd]) -> Vec<u8> {
         let mut e = Encoder::new();

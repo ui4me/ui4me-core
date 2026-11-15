@@ -23,6 +23,9 @@ pub struct RasterStats {
     pub hits: u64,
     /// Requests whose size was clamped to 65,535 px per side (a `SIZE_LIMIT` warning each).
     pub clamped: u64,
+    /// Rasters drawn without their filters because the filter work was over the budget
+    /// (`BUDGET_EXCEEDED`, F-14).
+    pub filters_skipped: u64,
     pub bytes: u64,
 }
 
@@ -36,12 +39,15 @@ pub struct SvgPaint {
     pub clamped: bool,
     /// The new raster could not be made; this is the previous one.
     pub stale: bool,
+    /// This raster was drawn without the image's filters: they were over the work budget (F-14).
+    pub filters_skipped: bool,
 }
 
 /// (entry generation, device size)
 type SizeKey = (u64, (u32, u32));
 /// A raster and the generation it was handed out under.
-type Made = (Arc<ImageRaster>, u64);
+/// A raster, the generation it was handed out under, and whether its filters were skipped.
+type Made = (Arc<ImageRaster>, u64, bool);
 
 #[derive(Default)]
 struct Inner {
@@ -65,7 +71,7 @@ impl Inner {
     }
 
     fn remove(&mut self, key: &SizeKey) {
-        if let Some((raster, _)) = self.map.remove(key) {
+        if let Some((raster, _, _)) = self.map.remove(key) {
             let bytes = raster.data.len() as u64;
             self.stats.bytes = self.stats.bytes.saturating_sub(bytes);
             self.retired.push((Arc::downgrade(&raster.data), bytes));
@@ -122,7 +128,7 @@ impl SvgRasterCache {
         if clamped {
             g.stats.clamped += 1;
         }
-        if let Some((r, gen_)) = g.map.get(&key).cloned() {
+        if let Some((r, gen_, skipped)) = g.map.get(&key).cloned() {
             g.stats.hits += 1;
             g.last.insert(image.generation, (Arc::downgrade(&r), gen_));
             return Ok(SvgPaint {
@@ -130,6 +136,7 @@ impl SvgRasterCache {
                 generation: gen_,
                 clamped,
                 stale: false,
+                filters_skipped: skipped,
             });
         }
         let bytes = w as u64 * h as u64 * 4;
@@ -148,11 +155,11 @@ impl SvgRasterCache {
         } else {
             vector
                 .renderer
-                .rasterize(&vector.tree, w, h)
+                .rasterize_bounded(&vector.tree, w, h)
                 .map_err(|s| s.code)
         };
         match made {
-            Ok(img) => {
+            Ok((img, skipped)) => {
                 let raster = Arc::new(ImageRaster {
                     width: img.width,
                     height: img.height,
@@ -163,7 +170,8 @@ impl SvgRasterCache {
                 g.next_generation += 1;
                 g.stats.rasterisations += 1;
                 g.stats.bytes += bytes;
-                g.map.insert(key, (raster.clone(), gen_));
+                g.stats.filters_skipped += u64::from(skipped);
+                g.map.insert(key, (raster.clone(), gen_, skipped));
                 g.order.push_back(key);
                 g.last
                     .insert(image.generation, (Arc::downgrade(&raster), gen_));
@@ -186,6 +194,7 @@ impl SvgRasterCache {
                     generation: gen_,
                     clamped,
                     stale: false,
+                    filters_skipped: skipped,
                 })
             }
             Err(code) => match g
@@ -199,6 +208,7 @@ impl SvgRasterCache {
                     generation: gen_,
                     clamped,
                     stale: true,
+                    filters_skipped: false,
                 }),
                 None => Err(code),
             },
@@ -213,7 +223,7 @@ impl SvgRasterCache {
         let keys: Vec<_> = g
             .map
             .iter()
-            .filter(|(_, (raster, _))| {
+            .filter(|(_, (raster, _, _))| {
                 Arc::strong_count(raster) == 1 && Arc::strong_count(&raster.data) == 1
             })
             .map(|(key, _)| *key)

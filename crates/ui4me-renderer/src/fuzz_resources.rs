@@ -537,6 +537,123 @@ fn harness_svg_depth() {
 }
 
 // ---------------------------------------------------------------------------------------------
+// F-14: SVG filter cost
+// ---------------------------------------------------------------------------------------------
+
+/// One filter primitive with a random, often extreme, cost parameter.
+fn filter_primitive(rng: &mut Rng) -> String {
+    let big = |rng: &mut Rng| match rng.below(4) {
+        0 => rng.below(8),
+        1 => rng.below(100),
+        2 => rng.below(5000),
+        _ => [u32::MAX as usize, 1_000_000, 65_536][rng.below(3)],
+    };
+    match rng.below(9) {
+        0 => format!(
+            "<feTurbulence baseFrequency='0.0{}' numOctaves='{}'/>",
+            1 + rng.below(9),
+            big(rng)
+        ),
+        1 => format!("<feMorphology operator='dilate' radius='{}'/>", big(rng)),
+        2 => {
+            let n = 1 + rng.below(40);
+            format!(
+                "<feConvolveMatrix order='{n}' kernelMatrix='{}'/>",
+                vec!["1"; n * n].join(" ")
+            )
+        }
+        3 => format!(
+            "<feGaussianBlur stdDeviation='{}'/>",
+            rng.below(300) as f32 / 7.0
+        ),
+        4 => format!("<feDropShadow stdDeviation='{}'/>", rng.below(50)),
+        5 => "<feDiffuseLighting><feDistantLight azimuth='45' elevation='45'/></feDiffuseLighting>"
+            .into(),
+        6 => "<feDisplacementMap in2='SourceGraphic' scale='20'/>".into(),
+        7 => "<feComponentTransfer><feFuncA type='table' tableValues='0 1'/></feComponentTransfer>"
+            .into(),
+        _ => "<feTile/>".into(),
+    }
+}
+
+/// A generated SVG whose filters are expensive: long chains, big parameters, filters reused by
+/// many elements, through `use`, masks and patterns, at a random canvas size.
+fn costly_filter_svg(rng: &mut Rng) -> (String, u32) {
+    let size = [40, 300, 1200][rng.below(3)];
+    let long = rng.chance(20);
+    let len = 1 + rng.below(if long { 400 } else { 6 });
+    let chain: String = (0..len).map(|_| filter_primitive(rng)).collect();
+    let many = rng.chance(20);
+    let users = 1 + rng.below(if many { 200 } else { 4 });
+    let shape = format!("<rect width='{size}' height='{size}' fill='teal' filter='url(#f)'/>");
+    let body = match rng.below(4) {
+        0 => shape.repeat(users),
+        1 => format!(
+            "<defs><g id='u'>{shape}</g></defs>{}",
+            "<use href='#u'/>".repeat(users)
+        ),
+        2 => format!(
+            "<mask id='m'>{shape}</mask><rect width='{size}' height='{size}' mask='url(#m)'/>"
+        ),
+        _ => format!(
+            "<pattern id='p' width='{size}' height='{size}' patternUnits='userSpaceOnUse'>{shape}</pattern><rect width='{size}' height='{size}' fill='url(#p)'/>"
+        ),
+    };
+    (
+        format!(
+            "<svg xmlns='http://www.w3.org/2000/svg' width='{size}' height='{size}'><filter id='f'>{chain}</filter>{body}</svg>"
+        ),
+        size,
+    )
+}
+
+/// T6 (F-14): every generated filter document rasterises within the watchdog (the adapter
+/// estimates the filter work and draws over-budget images without their filters); every fourth
+/// case goes through a document, as an inline `<svg>` or an `<img>`.
+#[test]
+#[ignore = "fuzz harness; see module docs"]
+fn harness_svg_filters() {
+    use ui4me_assets::decode::{SvgOptions, SvgRenderer};
+    use ui4me_assets::svg::usvg_adapter::UsvgRenderer;
+    run_cases("svg-filters", move |rng, n| {
+        let (svg, size) = costly_filter_svg(rng);
+        let via_document = n % 4 == 3;
+        let inline = rng.chance(50);
+        let desc = format!("via_document={via_document} inline={inline} size={size}\n{svg}");
+        (
+            desc,
+            Box::new(move || {
+                let t0 = Instant::now();
+                if via_document {
+                    let html = if inline {
+                        format!("<!doctype html><body style='margin:0'>{svg}")
+                    } else {
+                        format!(
+                            "<!doctype html><img src='data:image/svg+xml;base64,{}'>",
+                            b64(svg.as_bytes())
+                        )
+                    };
+                    let mut d = Document::parse_hosted(&html, None, 320, 240).unwrap();
+                    settle(&mut d, 320, 240);
+                } else {
+                    let r = UsvgRenderer;
+                    if let Ok(parsed) = r.parse(svg.as_bytes(), &SvgOptions::default()) {
+                        let _ = r.rasterize_bounded(&parsed.tree, size, size);
+                    }
+                }
+                // Generous against the 100 ms budget: parse, the unfiltered parse and an
+                // unfiltered raster of a 1200 px canvas come on top.
+                assert!(
+                    t0.elapsed() < Duration::from_secs(3),
+                    "filter case took {:?}",
+                    t0.elapsed()
+                );
+            }),
+        )
+    });
+}
+
+// ---------------------------------------------------------------------------------------------
 // Red team: untrusted resource access
 // ---------------------------------------------------------------------------------------------
 

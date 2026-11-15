@@ -320,14 +320,22 @@ pub fn build_scene_with(
             all_reports.push(r);
         }
     }
+    let mut display_list = DisplayList {
+        items,
+        scopes: b.scopes,
+    };
+    // F-15: over-budget paint degrades the offending item, never the frame.
+    crate::scene::paint_budget::apply(
+        &mut display_list,
+        (vw, vh),
+        input.revision.document,
+        &mut all_reports,
+    );
     SceneSnapshot {
         generation: input.generation,
         revision: input.revision,
         viewport: input.viewport,
-        display_list: DisplayList {
-            items,
-            scopes: b.scopes,
-        },
+        display_list,
         hit_index: HitTestIndex::from_regions(regions),
         fonts,
         images: b.images,

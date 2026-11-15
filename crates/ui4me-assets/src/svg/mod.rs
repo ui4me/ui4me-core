@@ -17,6 +17,7 @@ pub const INLINE_SVG_KEY: &str = "html.inline-svg";
 /// R-20 report key of `<text>` inside an SVG image (FR-039): text is not rendered.
 pub const TEXT_KEY: &str = "svg.text";
 
+pub mod filter_cost;
 pub mod hit;
 pub mod prescan;
 pub mod raster_cache;

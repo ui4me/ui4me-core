@@ -937,9 +937,22 @@ fn dom_sequence(rng: &mut Rng, steps: usize) {
 // ---------------------------------------------------------------------------------------------
 
 /// Opening/closing markup of one nesting unit and the DOM levels it adds. `inline-block`, buttons
-/// (atomic inlines) and multicol are left out: their layout is exponential in nesting depth
-/// (INPUTSEC-06, roadmap 2.5), which would only time out.
+/// (atomic inlines) and multicol are in since roadmap 2.5 made shrink-to-fit layout polynomial in
+/// the nesting depth (INPUTSEC-06): any chain of them must finish within the watchdog.
 const UNITS: &[(&str, &str, usize)] = &[
+    ("<div style='display:inline-block'>", "</div>", 1),
+    (
+        "<span><div style='display:inline-block'>",
+        "</div></span>",
+        2,
+    ),
+    ("<button>", "</button>", 1),
+    (
+        "<button><table><tbody><tr><td>",
+        "</td></tr></tbody></table></button>",
+        5,
+    ),
+    ("<div style='columns:2'>", "</div>", 1),
     ("<div>", "</div>", 1),
     ("<fieldset>", "</fieldset>", 1),
     ("<fieldset><legend>l</legend>", "</fieldset>", 1),

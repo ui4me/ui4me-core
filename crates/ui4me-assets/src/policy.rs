@@ -31,6 +31,12 @@ pub const SVG_MAX_EXPANDED: u64 = SVG_MAX_NODES as u64;
 /// Most compound selectors in one selector of an SVG style sheet (simplecss matches recursively).
 pub const SVG_MAX_SELECTOR_COMPOUNDS: usize = 32;
 pub const IMPORT_MAX_DEPTH: u32 = 16;
+/// Estimated filter work (ns of a release build) one rasterisation of an SVG image may spend
+/// (F-14, INPUTSEC-03; `svg::filter_cost`). An image whose filters would cost more at the size it
+/// is drawn is drawn without its filters (`BUDGET_EXCEEDED`, counted in the raster statistics).
+/// 100 ms keeps a frame that rasterises one such image well under the 250 ms stall bound; an
+/// ordinary filtered icon or illustration costs well under 1 ms.
+pub const SVG_FILTER_WORK_BUDGET: u64 = 100_000_000;
 
 pub fn invalid_argument(msg: impl Into<String>) -> Status {
     Status::new(Code::InvalidArgument, Stage::Resource).with_message(msg)

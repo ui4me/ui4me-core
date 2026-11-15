@@ -39,6 +39,55 @@ pub(crate) fn parse_opts(quirks: QuirksMode) -> ParseOpts {
     }
 }
 
+/// Input fed to html5ever per call when a parse has a depth cap (INPUTSEC-05).
+const PARSE_CHUNK: usize = 4096;
+
+thread_local! {
+    static CHUNK: std::cell::Cell<usize> = const { std::cell::Cell::new(PARSE_CHUNK) };
+}
+
+/// Tests only: feed capped parses on this thread in chunks of `bytes` (rounded up to a character
+/// boundary) to show that chunking does not change the tree.
+#[doc(hidden)]
+pub fn set_parse_chunk_for_tests(bytes: usize) {
+    CHUNK.with(|c| c.set(bytes.max(1)));
+}
+
+/// Feed `html` to `parser` and finish it, or stop as soon as the sink is over its depth cap or its
+/// node limit (`sink::ArenaSink::over_limit`): `Err` with the reason and the arena taken out of the
+/// abandoned parse.
+///
+/// html5ever scans the stack of open elements for most tags, so markup that keeps nesting costs
+/// time quadratic in its length; the sink cannot stop the tree builder, so the input is fed in
+/// chunks and the driver stops between two of them. html5ever is a streaming parser (its own
+/// `read_from` feeds 4 KiB reads): a chunked parse builds exactly the tree a whole one builds. A
+/// parse without a cap is fed whole.
+pub(crate) fn feed(
+    mut parser: html5ever::driver::Parser<sink::ArenaSink>,
+    html: &str,
+    capped: bool,
+) -> Result<sink::ParseOutput, Box<(sink::Stop, Arena)>> {
+    if !capped {
+        return Ok(parser.one(html));
+    }
+    let mut rest = html;
+    while !rest.is_empty() {
+        let mut cut = rest.len().min(CHUNK.with(|c| c.get()));
+        while !rest.is_char_boundary(cut) {
+            cut += 1;
+        }
+        let (chunk, tail) = rest.split_at(cut);
+        parser.process(html5ever::tendril::StrTendril::from_slice(chunk));
+        let sink = &parser.tokenizer.sink.sink;
+        if let Some(stop) = sink.over_limit() {
+            return Err(Box::new((stop, sink.take_arena())));
+        }
+        rest = tail;
+    }
+    let out = parser.finish();
+    Ok(out)
+}
+
 /// HTML "maybe clone an option into a selectedcontent", applied to the finished tree for every
 /// `option` in tree order. html5ever 0.40.1 runs it only for explicit `</option>` end tags (its
 /// FIXME, upstream issue 712), so implicitly closed options are handled here; the last selected
@@ -140,11 +189,20 @@ impl Document {
         doc.url = url.to_owned();
         doc.set_lifecycle(Lifecycle::Parsing);
         let arena = std::mem::replace(&mut doc.arena, Arena::new());
-        let out = parse_document(
-            sink::ArenaSink::new(arena),
+        let capped = limits.parse_depth != u64::MAX;
+        let parser = parse_document(
+            sink::ArenaSink::new(arena)
+                .with_max_depth(limits.parse_depth)
+                .with_max_nodes(limits.nodes),
             parse_opts(QuirksMode::NoQuirks),
-        )
-        .one(html);
+        );
+        // A creation that blows a limit leaves no document (FR-002).
+        let out = feed(parser, html, capped).map_err(|stopped| {
+            crate::errors::size_limit(match stopped.0 {
+                sink::Stop::TooDeep => LimitName::ParseDepth.name(),
+                sink::Stop::TooManyNodes => LimitName::Nodes.name(),
+            })
+        })?;
         doc.arena = out.arena;
         let droot = doc.arena.document();
         apply_selectedcontent(&mut doc.arena, droot);

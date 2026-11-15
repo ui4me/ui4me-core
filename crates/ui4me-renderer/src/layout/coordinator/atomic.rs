@@ -14,8 +14,10 @@
 //! a replaced box without a baseline rule, have their bottom margin edge as baseline (`None`).
 //! Atomics are always laid out with `PerformLayout`, even when only measured, because their
 //! baseline needs the positions of their content; `inline-flex` and `inline-grid` take their
-//! first baseline from the flex or grid algorithm. The final layout of a pass clears the cached
-//! results of the subtree first so that the node layouts always belong to the last run.
+//! first baseline from the flex or grid algorithm. The final layout of a pass invalidates the cached
+//! final-layout results of the subtree first so that the node layouts always belong to the last
+//! run (unless the subtree is still laid out as the same final layout left it). Intrinsic widths
+//! and measuring layouts are memoised per pass (INPUTSEC-06).
 
 use taffy::prelude::*;
 use taffy::{LayoutInput, LayoutOutput, LayoutPartialTree, RequestedAxis, RunMode, SizingMode};
@@ -119,14 +121,50 @@ fn rect4(v: [f32; 4]) -> Rect<f32> {
 }
 
 impl HostTree {
-    /// Clear the cached results of `n` and everything below it.
+    /// Invalidate the final-layout results cached for `n` and everything below it (module docs:
+    /// the node layouts must belong to the last run).
+    ///
+    /// Only the final-layout entries go: a cached intrinsic or measured size does not depend on
+    /// where anything was placed. Clearing those too made every container between two nested
+    /// atomics that lays its content out more than once (flex, grid, tables, fieldsets, balanced
+    /// multicol) measure the whole subtree again on every pass: exponential in the nesting depth
+    /// (INPUTSEC-06). A subtree invalidated after the last cache store is still invalid and is
+    /// skipped.
     fn clear_subtree_cache(&mut self, n: usize) {
-        use taffy::CacheTree;
-        self.cache_clear(NodeId::from(n));
-        let kids = self.nodes[n].children.clone();
-        for k in kids {
-            self.clear_subtree_cache(k);
+        let stamp = self.cache_stores;
+        let mut stack = vec![n];
+        while let Some(n) = stack.pop() {
+            let node = &mut self.nodes[n];
+            if node.cleared_at == stamp {
+                continue;
+            }
+            node.cleared_at = stamp;
+            node.finals_cleared_at = stamp;
+            stack.extend_from_slice(&node.children);
         }
+    }
+
+    /// Whether the last final layout of atomic `c` had `input` and its subtree is still laid out as
+    /// it left it: no node of the subtree stored a result since (every layout run of a node that
+    /// is not a cache hit stores one). A final layout repeated under those conditions finds the
+    /// same results and positions without clearing the subtree first (INPUTSEC-06: the passes of
+    /// a balanced multicol container lay out an atomic in its columns once per pass, each pass
+    /// clearing everything below, which was exponential in the nesting of the two).
+    fn final_layout_holds(&self, c: usize, input: &LayoutInput) -> bool {
+        let Some(last) = self.nodes[c].last_final.as_deref() else {
+            return false;
+        };
+        if last.1 != *input {
+            return false;
+        }
+        let mut stack = vec![c];
+        while let Some(n) = stack.pop() {
+            if self.nodes[n].stored_at > last.0 {
+                return false;
+            }
+            stack.extend_from_slice(&self.nodes[n].children);
+        }
+        true
     }
 
     /// Baseline of the node's content from its border-box top, structurally (module docs).
@@ -163,8 +201,37 @@ impl HostTree {
         found
     }
 
-    /// Border-box width of atomic `c` under `space` (an intrinsic run).
+    /// Border-box width of atomic `c` under `space` (an intrinsic run: `MinContent` or
+    /// `MaxContent`).
+    ///
+    /// Memoised per node for the pass (INPUTSEC-06): the `Final` layout of an atomic clears the
+    /// cached results of its subtree (module docs), so without the memo every level of nested
+    /// shrink-to-fit atomics recomputed the intrinsic widths of everything below it, once for each
+    /// layout of its parent: exponential in the nesting depth. The widths depend only on the
+    /// subtree and on the context `memo_key` names.
     fn atomic_intrinsic_width(&mut self, c: usize, space: AvailableSpace) -> f32 {
+        let slot = match space {
+            AvailableSpace::MinContent => Some(0),
+            AvailableSpace::MaxContent => Some(1),
+            AvailableSpace::Definite(_) => None,
+        };
+        let key = self.memo_key(c);
+        let slot = slot.filter(|_| key.is_some());
+        let key = key.unwrap_or(u32::MAX);
+        if let Some(slot) = slot
+            && let Some((k, w)) = self.nodes[c].intrinsic_memo[slot]
+            && k == key
+        {
+            return w;
+        }
+        let w = self.atomic_intrinsic_width_uncached(c, space);
+        if let Some(slot) = slot {
+            self.nodes[c].intrinsic_memo[slot] = Some((key, w));
+        }
+        w
+    }
+
+    fn atomic_intrinsic_width_uncached(&mut self, c: usize, space: AvailableSpace) -> f32 {
         let input = LayoutInput {
             run_mode: RunMode::ComputeSize,
             sizing_mode: SizingMode::InherentSize,
@@ -184,8 +251,103 @@ impl HostTree {
         self.compute_child_layout(NodeId::from(c), input).size.width
     }
 
+    /// The context the intrinsic and measuring layouts of atomic `c` depend on, as a key, or
+    /// `None` when memoising them is not sound: during a size containment probe, and for a
+    /// breakable float inside a fragmentation root (laid out where the previous pass placed it).
+    /// Every other atomic or float is laid out with the fragmentation context suspended
+    /// (`dispatch`: it is monolithic). The only other context is the containing-block fallback
+    /// width of ratio-only replaced content (`container_width`, `compute_replaced`), which counts
+    /// only when the subtree holds a replaced or control box.
+    fn memo_key(&mut self, c: usize) -> Option<u32> {
+        if self.empty_probe.is_some()
+            || (self.frag.is_some() && self.nodes[c].frag_facts.breakable_float())
+        {
+            return None;
+        }
+        let prefix = self.leaf_prefix.get_or_insert_with(|| {
+            let mut v = Vec::with_capacity(self.nodes.len() + 1);
+            let mut n = 0u32;
+            v.push(0);
+            for node in &self.nodes {
+                n += u32::from(node.leaf.is_some());
+                v.push(n);
+            }
+            v
+        });
+        // `add` pushes a subtree contiguously: `c..subtree_end` is the subtree of `c`.
+        let end = self.nodes[c].subtree_end.clamp(c + 1, self.nodes.len());
+        let leafy = prefix
+            .get(end)
+            .zip(prefix.get(c))
+            .is_none_or(|(e, b)| e != b);
+        Some(if leafy {
+            self.container_width
+                .last()
+                .copied()
+                .flatten()
+                .map_or(u32::MAX, f32::to_bits)
+        } else {
+            0
+        })
+    }
+
     /// `layout_atomic` for node `c` (module docs).
+    ///
+    /// A `Measure` layout is memoised per node for the pass (INPUTSEC-06), keyed by the available
+    /// width and the context of the intrinsic widths: a box between two nested atomics that
+    /// measures its content before its final layout (the content box of a `button`, a table cell)
+    /// otherwise laid the levels below it out twice per level. A hit writes back what the layout
+    /// wrote to the node itself; the subtree keeps its last positions, and the final layout lays
+    /// it out again (it clears the subtree's cached results first).
     pub(crate) fn layout_atomic_child(&mut self, c: usize, mode: AtomicMode) -> AtomicResult {
+        let AtomicMode::Measure { available } = mode else {
+            return self.layout_atomic_child_uncached(c, mode);
+        };
+        let Some(context) = self.memo_key(c) else {
+            return self.layout_atomic_child_uncached(c, mode);
+        };
+        let key = (available.to_bits(), context);
+        if let Some(m) = self.nodes[c].measure_memo.as_deref()
+            && m.key == key
+        {
+            let (size, margin, padding, border, overflow, baselines, metrics) = (
+                m.size,
+                m.margin,
+                m.padding,
+                m.border,
+                m.scrollable_overflow_rect,
+                m.baselines,
+                m.metrics,
+            );
+            let node = &mut self.nodes[c];
+            node.atomic_oof = taffy::OofCandidates::new();
+            node.layout.size = size;
+            node.layout.margin = margin;
+            node.layout.padding = padding;
+            node.layout.border = border;
+            node.layout.scrollable_overflow_rect = overflow;
+            node.baselines = baselines;
+            return AtomicResult::Metrics(metrics);
+        }
+        let r = self.layout_atomic_child_uncached(c, mode);
+        if let AtomicResult::Metrics(metrics) = r {
+            let node = &self.nodes[c];
+            let memo = super::host_tree::MeasureMemo {
+                key,
+                size: node.layout.size,
+                margin: node.layout.margin,
+                padding: node.layout.padding,
+                border: node.layout.border,
+                scrollable_overflow_rect: node.layout.scrollable_overflow_rect,
+                baselines: node.baselines,
+                metrics,
+            };
+            self.nodes[c].measure_memo = Some(Box::new(memo));
+        }
+        r
+    }
+
+    fn layout_atomic_child_uncached(&mut self, c: usize, mode: AtomicMode) -> AtomicResult {
         let css = self.nodes[c]
             .css
             .clone()
@@ -239,9 +401,6 @@ impl HostTree {
                         .unwrap_or(f32::INFINITY);
                     known_w = Some(w.min(hi).max(lo));
                 }
-                if fin {
-                    self.clear_subtree_cache(c);
-                }
                 let space_w = match (known_w, avail_border) {
                     (Some(w), _) => AvailableSpace::Definite(w),
                     (None, Some(a)) => AvailableSpace::Definite(a),
@@ -269,6 +428,9 @@ impl HostTree {
                     },
                     vertical_margins_are_collapsible: Line::FALSE,
                 };
+                if fin && !self.final_layout_holds(c, &input) {
+                    self.clear_subtree_cache(c);
+                }
                 let mut out: LayoutOutput = self.compute_child_layout(NodeId::from(c), input);
                 // An outside `::marker` (CSS Lists 3 section 3.1): its border box ends at the start
                 // edge of the line, so its margin box is zero wide (a negative start margin of its
@@ -309,22 +471,27 @@ impl HostTree {
                 // edges) sits on the central baseline of the line's strut, expressed as the alphabetic
                 // baseline the line aligns on. An orthogonal atomic has no baseline in this frame.
                 let n = &self.nodes[c];
-                if n.parent_wm.is_vertical() {
+                let metrics = if n.parent_wm.is_vertical() {
                     let own = baseline
                         .filter(|_| n.outer.is_none())
                         .map(|b| b + m[0] - n.central)
                         .unwrap_or(margin_height / 2.0);
-                    return AtomicResult::Metrics(AtomicMetrics {
+                    AtomicMetrics {
                         margin_width: out.size.width + m[1] + m[3],
                         margin_height,
                         baseline: Some(own + n.strut_central),
-                    });
+                    }
+                } else {
+                    AtomicMetrics {
+                        margin_width: out.size.width + m[1] + m[3],
+                        margin_height,
+                        baseline: baseline.map(|b| b + m[0]),
+                    }
+                };
+                if fin {
+                    self.nodes[c].last_final = Some(Box::new((self.cache_stores, input)));
                 }
-                AtomicResult::Metrics(AtomicMetrics {
-                    margin_width: out.size.width + m[1] + m[3],
-                    margin_height,
-                    baseline: baseline.map(|b| b + m[0]),
-                })
+                AtomicResult::Metrics(metrics)
             }
         }
     }

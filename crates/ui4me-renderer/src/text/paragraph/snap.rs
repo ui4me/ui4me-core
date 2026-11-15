@@ -397,6 +397,13 @@ pub(crate) struct HyphenInput<'a> {
     pub runs: &'a [Option<super::source::SynthRun>],
 }
 
+/// Running width sums from one start unit (`SnapTable::running`).
+struct Running {
+    start: usize,
+    snapped: Vec<f32>,
+    fractional: Vec<f32>,
+}
+
 /// Widths of a unit range: whole-pixel and fractional, without and with hanging spaces.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct SpanWidths {
@@ -704,6 +711,47 @@ impl SnapTable {
             .unwrap_or(self.clusters.len())
     }
 
+    /// Running sums for [`Self::widths`] of every range `start..e`, `e` in `start..=end` (HOST-06 /
+    /// F-14: the line choice and the re-synchronisation measured each candidate end with a fresh
+    /// sum over the line, quadratic per line and cubic per paragraph; 4,000 inline inputs took
+    /// 16 s). The sums run left to right from the same start value as `widths`, so every entry is
+    /// bit-identical to the fresh sum.
+    fn running(&self, start: usize, end: usize) -> Running {
+        let start = start.min(self.clusters.len());
+        let end = end.clamp(start, self.clusters.len());
+        let zero: f32 = std::iter::empty::<f32>().sum();
+        let (mut s, mut f) = (zero, zero);
+        let mut snapped = Vec::with_capacity(end - start + 1);
+        let mut fractional = Vec::with_capacity(end - start + 1);
+        snapped.push(s);
+        fractional.push(f);
+        for c in &self.clusters[start..end] {
+            s += c.snapped;
+            f += c.fractional;
+            snapped.push(s);
+            fractional.push(f);
+        }
+        Running {
+            start,
+            snapped,
+            fractional,
+        }
+    }
+
+    /// `widths(run.start..end)` from the running sums (`end` within the range they cover).
+    fn widths_in(&self, run: &Running, end: usize) -> SpanWidths {
+        let end = end.clamp(run.start, run.start + run.snapped.len() - 1);
+        let cs = &self.clusters[run.start..end];
+        let trailing = cs.iter().rev().take_while(|c| c.hangs).count();
+        let (full, body) = (end - run.start, end - run.start - trailing);
+        SpanWidths {
+            snapped: run.snapped[body],
+            snapped_full: run.snapped[full],
+            fractional: run.fractional[body],
+            fractional_full: run.fractional[full],
+        }
+    }
+
     pub(crate) fn widths(&self, r: Range<usize>) -> SpanWidths {
         let cs = &self.clusters[r.start.min(self.clusters.len())..r.end.min(self.clusters.len())];
         let trailing = cs.iter().rev().take_while(|c| c.hangs).count();
@@ -786,8 +834,12 @@ impl SnapTable {
             })
             .collect();
         let first = *candidates.first()?;
+        let run = self.running(start, *candidates.last()?);
         // Chromium compares LayoutUnit widths; whole-pixel widths need only a float tolerance.
-        let fits = |e: usize| self.line_width(start..e) <= available + 1e-3;
+        let fits = |e: usize| {
+            self.widths_in(&run, e).snapped + self.hyphen_at(e).map_or(0.0, |h| h.width)
+                <= available + 1e-3
+        };
         let idx = candidates.iter().rposition(|&e| fits(e)).unwrap_or(0);
         if !fits(candidates[idx]) {
             // Nothing fits: an emergency break inside the first word, when `overflow-wrap` allows
@@ -977,13 +1029,21 @@ impl SnapTable {
             hint,
             (self.widths(start..hint).fractional_full - advance).abs(),
         );
+        let last = self
+            .breaks
+            .iter()
+            .chain(self.emergency.iter().map(|e| &e.0))
+            .copied()
+            .max()
+            .unwrap_or(start);
+        let run = self.running(start, last);
         for &o in self
             .breaks
             .iter()
             .chain(self.emergency.iter().map(|e| &e.0))
             .filter(|&&o| o > start)
         {
-            let d = (self.widths(start..o).fractional_full - advance).abs();
+            let d = (self.widths_in(&run, o).fractional_full - advance).abs();
             if d + 1e-4 < best.1 {
                 best = (o, d);
             }

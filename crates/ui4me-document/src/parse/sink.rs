@@ -14,6 +14,12 @@
 //!   one `UNSUPPORTED_FEATURE` diagnostic reports them; FR-018).
 //! * A fragment parse uses a scratch root (`with_root`) in the same arena, so the real Document is
 //!   never touched until the result is moved into a staging fragment (research R-05).
+//! * INPUTSEC-05: with a depth cap (`with_max_depth`), the sink notes when a node is inserted
+//!   deeper than the cap or the arena holds more live nodes than the node limit (`over_limit`);
+//!   the driver stops feeding input at the next chunk. The node count only grows during a parse,
+//!   and the one post-parse step that frees nodes (`apply_selectedcontent`) frees nothing without
+//!   a `selectedcontent` element, so the node stop applies only while none was created: a parse it
+//!   stops would fail the node limit afterwards anyway.
 
 use crate::arena::Arena;
 use crate::document::{DocumentMode, ParserDiagnostics};
@@ -31,6 +37,21 @@ pub struct ArenaSink {
     diagnostics: RefCell<ParserDiagnostics>,
     mode: Cell<DocumentMode>,
     line: Cell<u64>,
+    /// Deepest node the parse may create (`u64::MAX`: no cap), and whether one was deeper.
+    max_depth: u64,
+    too_deep: Cell<bool>,
+    /// The node limit of the stop (`u64::MAX`: none), whether the arena went over it, and whether
+    /// a `selectedcontent` element was created (which disables the stop).
+    max_nodes: u64,
+    too_many: Cell<bool>,
+    selectedcontent: Cell<bool>,
+}
+
+/// Why a capped parse stopped early.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Stop {
+    TooDeep,
+    TooManyNodes,
 }
 
 /// What a finished parse hands back to the Document.
@@ -55,6 +76,70 @@ impl ArenaSink {
             diagnostics: RefCell::default(),
             mode: Cell::new(DocumentMode::NoQuirks),
             line: Cell::new(1),
+            max_depth: u64::MAX,
+            too_deep: Cell::new(false),
+            max_nodes: u64::MAX,
+            too_many: Cell::new(false),
+            selectedcontent: Cell::new(false),
+        }
+    }
+
+    /// Stop once the arena holds more than `max_nodes` live nodes (module docs).
+    pub fn with_max_nodes(mut self, max_nodes: u64) -> ArenaSink {
+        self.max_nodes = max_nodes;
+        self
+    }
+
+    /// Why the parse should stop, if it should.
+    pub fn over_limit(&self) -> Option<Stop> {
+        if self.too_deep.get() {
+            Some(Stop::TooDeep)
+        } else if self.too_many.get() && !self.selectedcontent.get() {
+            Some(Stop::TooManyNodes)
+        } else {
+            None
+        }
+    }
+
+    fn count_node(&self, a: &Arena) {
+        if a.live_count() as u64 > self.max_nodes {
+            self.too_many.set(true);
+        }
+    }
+
+    /// Note any node inserted deeper than `max_depth` below the parse root (`too_deep`).
+    pub fn with_max_depth(mut self, max_depth: u64) -> ArenaSink {
+        self.max_depth = max_depth;
+        self
+    }
+
+    /// Take the arena out of an abandoned parse (the parser and its handles are dropped).
+    pub fn take_arena(&self) -> Arena {
+        std::mem::replace(&mut *self.arena.borrow_mut(), Arena::new())
+    }
+
+    /// Note a node inserted under `parent` if it is deeper than the cap: the depth of `parent`
+    /// plus one, the parse root being 0 and template contents one level below their template, as
+    /// the hosted document validator counts. The walk stops at the cap.
+    fn check_depth(&self, a: &Arena, parent: NodeId) {
+        if self.max_depth == u64::MAX || self.too_deep.get() {
+            return;
+        }
+        let mut depth = 1u64;
+        let mut cur = parent;
+        loop {
+            let node = a.node(cur);
+            let next = match (&node.data, node.parent) {
+                (_, Some(p)) => p,
+                (NodeData::DocumentFragment { template: Some(t) }, None) => *t,
+                _ => break,
+            };
+            depth += 1;
+            if depth > self.max_depth {
+                self.too_deep.set(true);
+                return;
+            }
+            cur = next;
         }
     }
 
@@ -76,8 +161,12 @@ impl ArenaSink {
         e.parser_inserted = true;
         e.mathml_integration_point = flags.mathml_annotation_xml_integration_point;
         let template = e.is_html_named("template");
+        if e.is_html_named("selectedcontent") {
+            self.selectedcontent.set(true);
+        }
         let mut a = self.arena.borrow_mut();
         let id = a.alloc(NodeData::Element(e));
+        self.count_node(&a);
         if template {
             let frag = a.alloc(NodeData::DocumentFragment { template: Some(id) });
             a.get_mut(id)
@@ -91,6 +180,7 @@ impl ArenaSink {
     /// Append, merging adjacent text (tree-builder contract).
     fn append_to(&self, parent: NodeId, child: NodeOrText<NodeId>, before: Option<NodeId>) {
         let mut a = self.arena.borrow_mut();
+        self.check_depth(&a, parent);
         match child {
             NodeOrText::AppendText(text) => {
                 let kids = &a.node(parent).children;
@@ -109,6 +199,7 @@ impl ArenaSink {
                     return;
                 }
                 let t = a.alloc(NodeData::Text(text.to_string()));
+                self.count_node(&a);
                 a.insert_trusted(parent, t, before);
             }
             NodeOrText::AppendNode(node) => {

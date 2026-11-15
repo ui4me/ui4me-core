@@ -14,6 +14,9 @@
 //! * Rendering is static: usvg has no scripting, animation or interactivity. `currentColor`
 //!   resolves inside the document; the initial colour is black.
 //! * The natural size comes from the owned pre-scan, never from usvg's `default_size`.
+//! * F-14: a document with filters is also parsed with every filter disabled (an injected
+//!   `* { filter: none !important }`, which wins over attributes and author rules); a raster whose
+//!   estimated filter work (`filter_cost`) exceeds `SVG_FILTER_WORK_BUDGET` is drawn from that tree.
 
 use super::prescan;
 use crate::decode::{
@@ -34,6 +37,8 @@ pub struct UsvgRenderer;
 /// The tree behind an [`SvgTree`] handle.
 struct ParsedTree {
     tree: usvg::Tree,
+    /// The same document with every filter disabled, when it has filters (F-14).
+    unfiltered: Option<usvg::Tree>,
     /// No intrinsic ratio: the tree is stretched over the raster.
     fill: bool,
     /// A zero-sized `viewBox` disables rendering: the raster stays transparent.
@@ -89,6 +94,7 @@ fn resolve_data(
     ctx: &Arc<Ctx>,
     depth: u32,
     used: u32,
+    no_filters: bool,
     mime: &str,
     data: Arc<Vec<u8>>,
 ) -> Option<usvg::ImageKind> {
@@ -155,7 +161,7 @@ fn resolve_data(
         return None;
     }
     ctx.state.lock().unwrap_or_else(|p| p.into_inner()).elements += scan.elements as u64;
-    let opts = make_options(ctx, depth + 1, used + scan.depth);
+    let opts = make_options(ctx, depth + 1, used + scan.depth, no_filters);
     match usvg::Tree::from_data(&data, &opts) {
         Ok(tree) => Some(usvg::ImageKind::SVG(tree)),
         Err(_) => {
@@ -173,8 +179,13 @@ fn resolve_string(ctx: &Arc<Ctx>, href: &str) -> Option<usvg::ImageKind> {
     None
 }
 
+/// Injected before the document's own style sheets; `!important` wins over presentation
+/// attributes, author rules and `style` attributes alike (usvg applies the first important one).
+const NO_FILTERS: &str = "*{filter:none!important}";
+
 /// The options of one parse level; every field is set explicitly (never `Options::default()`).
-fn make_options(ctx: &Arc<Ctx>, depth: u32, used: u32) -> usvg::Options<'static> {
+/// `no_filters` disables every filter of the document and of its nested documents (F-14).
+fn make_options(ctx: &Arc<Ctx>, depth: u32, used: u32, no_filters: bool) -> usvg::Options<'static> {
     let (cd, cs) = (ctx.clone(), ctx.clone());
     usvg::Options {
         resources_dir: None,
@@ -187,10 +198,12 @@ fn make_options(ctx: &Arc<Ctx>, depth: u32, used: u32) -> usvg::Options<'static>
         image_rendering: usvg::ImageRendering::OptimizeQuality,
         default_size: usvg::Size::from_wh(FALLBACK_SIZE.0, FALLBACK_SIZE.1).expect("positive size"),
         image_href_resolver: usvg::ImageHrefResolver {
-            resolve_data: Box::new(move |mime, data, _| resolve_data(&cd, depth, used, mime, data)),
+            resolve_data: Box::new(move |mime, data, _| {
+                resolve_data(&cd, depth, used, no_filters, mime, data)
+            }),
             resolve_string: Box::new(move |href, _| resolve_string(&cs, href)),
         },
-        style_sheet: None,
+        style_sheet: no_filters.then(|| NO_FILTERS.to_string()),
     }
 }
 
@@ -221,7 +234,7 @@ impl SvgRenderer for UsvgRenderer {
                 ..Default::default()
             }),
         });
-        let tree = usvg::Tree::from_data(bytes, &make_options(&ctx, 0, pre.depth))
+        let tree = usvg::Tree::from_data(bytes, &make_options(&ctx, 0, pre.depth, false))
             .map_err(map_usvg_error)?;
         let mut st = ctx.state.lock().unwrap_or_else(|p| p.into_inner());
         if let Some(f) = st.fatal.take() {
@@ -237,9 +250,24 @@ impl SvgRenderer for UsvgRenderer {
         // content is laid out against the box it is drawn into (SVG 2 "width/height auto", CSS
         // Images 3 section 5.1), so it fills the raster instead of being letterboxed.
         let fill = pre.natural.ratio.is_none() || pre.stretch;
+        // F-14: the fallback for a raster whose filters are over budget. Its own warnings are those
+        // of the first parse (the same references), so a separate context collects and drops them.
+        let unfiltered = super::filter_cost::has_filters(&tree)
+            .then(|| {
+                let quiet = Arc::new(Ctx {
+                    opts: options.clone(),
+                    state: Mutex::new(State {
+                        elements: pre.elements as u64,
+                        ..Default::default()
+                    }),
+                });
+                usvg::Tree::from_data(bytes, &make_options(&quiet, 0, pre.depth, true)).ok()
+            })
+            .flatten();
         Ok(SvgParsed {
             tree: Arc::new(ParsedTree {
                 tree,
+                unfiltered,
                 fill,
                 disabled: pre.disabled,
             }) as SvgTree,
@@ -255,6 +283,16 @@ impl SvgRenderer for UsvgRenderer {
         width_px: u32,
         height_px: u32,
     ) -> Result<DecodedImage, Status> {
+        self.rasterize_bounded(tree, width_px, height_px)
+            .map(|(d, _)| d)
+    }
+
+    fn rasterize_bounded(
+        &self,
+        tree: &SvgTree,
+        width_px: u32,
+        height_px: u32,
+    ) -> Result<(DecodedImage, bool), Status> {
         let parsed = tree
             .downcast_ref::<ParsedTree>()
             .ok_or_else(|| err(Code::InvalidArgument, "not a usvg tree"))?;
@@ -279,14 +317,32 @@ impl SvgRenderer for UsvgRenderer {
             let ty = (height_px as f32 - size.height() * s) / 2.0;
             resvg::tiny_skia::Transform::from_row(s, 0.0, 0.0, s, tx, ty)
         };
-        if !parsed.disabled {
-            resvg::render(tree, transform, &mut pixmap.as_mut());
+        // F-14: filters over the work budget at this size are not run.
+        let mut degraded = false;
+        let mut draw = tree;
+        if super::filter_cost::filter_work(tree, transform, width_px, height_px)
+            > crate::policy::SVG_FILTER_WORK_BUDGET
+        {
+            let Some(unfiltered) = parsed.unfiltered.as_ref() else {
+                return Err(err(
+                    Code::BudgetExceeded,
+                    "SVG filters exceed the work budget and the image has no unfiltered form",
+                ));
+            };
+            draw = unfiltered;
+            degraded = true;
         }
-        Ok(DecodedImage {
-            width: width_px,
-            height: height_px,
-            data: pixmap.take(),
-        })
+        if !parsed.disabled {
+            resvg::render(draw, transform, &mut pixmap.as_mut());
+        }
+        Ok((
+            DecodedImage {
+                width: width_px,
+                height: height_px,
+                data: pixmap.take(),
+            },
+            degraded,
+        ))
     }
 }
 
