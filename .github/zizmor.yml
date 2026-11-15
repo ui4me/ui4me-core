@@ -1,0 +1,7 @@
+# zizmor configuration (run in CI: workflow lint job).
+rules:
+  # GitHub's "$/" self-repository reference syntax is newer than actionlint
+  # 1.7.12 understands; local "./.github/workflows/build-dist.yml" calls are
+  # equivalent for a workflow in this repository.
+  self-repository:
+    disable: true

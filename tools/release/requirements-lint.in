@@ -1,0 +1,2 @@
+# Workflow linter for CI (F-23). Regenerate: uv pip compile --universal --generate-hashes --python-version 3.12 requirements-lint.in -o requirements-lint.txt
+zizmor==1.32.0

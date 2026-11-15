@@ -1,39 +1,255 @@
+# Continuous integration for pull requests and main. Never publishes.
+#
+# The job names are the contract with tools/release/required_checks.json: the
+# publish workflows refuse a commit unless every listed job concluded success
+# for it (tools/release/ci_gate.py). tools/test_workflows.py checks both sides.
 name: Host verification
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Superseded PR pushes are cancelled; every main commit keeps its own run,
+  # because the publish gate needs a completed run for the exact SHA.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  CARGO_BUILD_JOBS: '2'
+  RUST_TEST_THREADS: '2'
+  CARGO_TERM_COLOR: never
 jobs:
   verify:
+    name: verify (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-2022]
     runs-on: ${{ matrix.os }}
+    # Cold runs took 19 min (Linux) and 26 min (Windows) before clippy and
+    # Pester were added to this job; 90 min leaves room for a cold cache.
+    timeout-minutes: 90
     env:
-      CARGO_BUILD_JOBS: "2"
-      RUST_TEST_THREADS: "2"
+      # The structural workflow tests must not skip in CI for lack of PyYAML.
+      UI4ME_REQUIRE_WORKFLOW_TESTS: '1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Linux build prerequisites
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwayland-dev libxkbcommon-dev libdbus-1-dev
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
       - name: Install pinned Rust toolchain
         shell: bash
         run: rustup show active-toolchain && rustup component add rustfmt clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install CI self-test tools (hash-pinned)
+        run: python -m pip install --require-hashes -r tools/release/requirements-ci.txt
       - name: Verify shared contracts and backend protocol
         run: python tools/verify.py --keep-going
       - name: Lints
+        # Independent of the verifier result (F-09): a failing test must not
+        # hide the lint signal.
+        if: ${{ !cancelled() }}
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: PowerShell skill reference matches the command reference
+        if: ${{ !cancelled() }}
+        run: python tools/release/sync_powershell_docs.py --check
+      - name: Pester on PowerShell 7 with the real host
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          $hostBinary = if ($IsWindows) { 'target/debug/ui4me-host.exe' } else { 'target/debug/ui4me-host' }
+          ./tools/release/run_pester.ps1 -HostBinary $hostBinary
+      - name: Pester on Windows PowerShell 5.1 with the real host
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        shell: powershell
+        run: .\tools\release\run_pester.ps1 -HostBinary target\debug\ui4me-host.exe
       - name: Preserve verification output
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: verification-${{ matrix.os }}
           path: verification/
           if-no-files-found: warn
+
+  linux-host:
+    # One debug host for the interpreter matrix and the clean-machine jobs.
+    name: host (linux debug)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Linux build prerequisites
+        run: sudo apt-get update && sudo apt-get install -y libwayland-dev libxkbcommon-dev libdbus-1-dev
+      - name: Install pinned Rust toolchain
+        run: rustup show active-toolchain
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Build the host and a throwaway test wheel
+        run: |
+          set -euo pipefail
+          cargo build --locked -p ui4me-host
+          mkdir -p ci-host
+          strip --strip-debug -o ci-host/ui4me-host target/debug/ui4me-host
+          ci-host/ui4me-host --version
+          python -m pip install --require-hashes -r tools/release/requirements-release.txt
+          # A debug host in a wheel is refused unless explicitly allowed; this
+          # wheel only feeds the clean-machine jobs below and is never published.
+          UI4ME_WHEEL_HOST_BINARY="$PWD/ci-host/ui4me-host" UI4ME_WHEEL_ALLOW_DEBUG_HOST=1 \
+            python -m build --wheel --outdir ci-wheel
+          ls -l ci-host ci-wheel
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-linux-host
+          path: ci-host/ui4me-host
+          if-no-files-found: error
+          retention-days: 3
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-linux-test-wheel
+          path: ci-wheel/*.whl
+          if-no-files-found: error
+          retention-days: 3
+
+  python:
+    # Every interpreter the package claims (F-22 / RELEASE-08), against the real host.
+    name: python (${{ matrix.python }})
+    needs: linux-host
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.11', '3.12', '3.13', '3.14']
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ci-linux-host
+          path: target/debug
+      - name: Binding tests against the real host (headless test mode)
+        run: |
+          set -euo pipefail
+          chmod 755 target/debug/ui4me-host
+          python -VV
+          cd tools
+          python -m unittest -v test_bootstrap test_application test_reference_client
+
+  clean-wheel:
+    # A fresh interpreter image with nothing but the wheel (T12): no Rust, no checkout on sys.path.
+    name: clean wheel (${{ matrix.image }})
+    needs: linux-host
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: python:3.10-slim
+            ref: python:3.10-slim@sha256:6ff506466f8b1e981719b468cc0023b8ef000b983cdec0eafe119d01f379e31d
+          - image: python:3.14-slim
+            ref: python:3.14-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container:
+      image: ${{ matrix.ref }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ci-linux-test-wheel
+          path: wheel
+      - name: Install the wheel offline and smoke-test it
+        run: |
+          set -eu
+          python -VV
+          python -m pip install --no-index --no-deps --disable-pip-version-check --root-user-action=ignore wheel/*.whl
+          cd /tmp
+          python "$GITHUB_WORKSPACE/tools/release/smoke_installed_wheel.py"
+
+  powershell-allusers:
+    # RELEASE-06 / F-19: AllUsers install as root, then use as a non-root user.
+    name: powershell allusers (linux)
+    needs: linux-host
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ci-linux-host
+          path: ci-host
+      - name: Stage the source module with the host and install it for all users in a container
+        run: |
+          set -euo pipefail
+          mkdir -p staged
+          cp -R powershell/UI4ME.Core staged/
+          mkdir -p staged/UI4ME.Core/runtimes/linux-x64/ui4me_core/_bin
+          cp ci-host/ui4me-host staged/UI4ME.Core/runtimes/linux-x64/ui4me_core/_bin/ui4me-host
+          docker run --rm --name "ui4me-allusers-${GITHUB_RUN_ID}" \
+            -v "$PWD/tools/release:/tools:ro" -v "$PWD/staged:/module:ro" \
+            mcr.microsoft.com/powershell:7.4-ubuntu-22.04@sha256:62300a213a9293916333df2b014cd3a8f22fb0b0b65f2bb446aaf436bcf8c868 \
+            sh /tools/smoke_psmodule_allusers.sh /module/UI4ME.Core
+
+  workflow-lint:
+    name: workflow lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: actionlint (pinned image)
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" -w /repo \
+            rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 -no-color
+      - name: zizmor (hash-pinned)
+        run: |
+          python -m pip install --require-hashes -r tools/release/requirements-lint.txt
+          zizmor --offline --persona=regular --format=plain .github/
+      - name: Structural workflow tests
+        env:
+          UI4ME_REQUIRE_WORKFLOW_TESTS: '1'
+        run: |
+          python -m pip install --require-hashes -r tools/release/requirements-ci.txt
+          cd tools && python -m unittest -v test_workflows test_ci_gate test_ci_signal
+
+  cargo-deny:
+    # Deterministic part of the dependency policy (P8); advisories run nightly.
+    name: cargo deny
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned cargo-deny
+        run: tools/release/install_cargo_deny.sh "$RUNNER_TEMP/cargo-deny"
+      - name: Licenses, bans and sources
+        run: |
+          rustup show active-toolchain
+          "$RUNNER_TEMP/cargo-deny/cargo-deny" --locked check bans licenses sources
