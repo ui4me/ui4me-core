@@ -140,6 +140,25 @@ fn session_id() -> Result<u32> {
     Ok(value)
 }
 
+/// HOST-12: pipe names are one namespace for every session, so a process of another session
+/// could have created the name first. Nothing (activation arguments, working directory) is sent
+/// to a pipe whose server runs in a different session than this process.
+fn verify_pipe_server_session(handle: &Handle) -> io::Result<()> {
+    let mut server = 0;
+    // SAFETY: a connected client pipe handle and a valid output location.
+    if unsafe { GetNamedPipeServerSessionId(handle.0, &mut server) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let own = session_id().map_err(|e| io::Error::other(format!("{e:#}")))?;
+    if server != own {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("the instance pipe is served from another session ({server}, not {own})"),
+        ));
+    }
+    Ok(())
+}
+
 struct Descriptor(LocalAllocation);
 impl Descriptor {
     fn for_logon() -> Result<Self> {
@@ -439,12 +458,16 @@ impl NativeStream {
                     0,
                     null(),
                     OPEN_EXISTING,
-                    FILE_FLAG_OVERLAPPED,
+                    // HOST-12: the server may identify this client but never impersonate it.
+                    FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION,
                     null_mut(),
                 )
             };
             match Handle::checked(raw) {
-                Ok(handle) => return Ok(Self::new(handle)),
+                Ok(handle) => {
+                    verify_pipe_server_session(&handle)?;
+                    return Ok(Self::new(handle));
+                }
                 Err(error)
                     if matches!(
                         error.raw_os_error().map(|v| v as u32),

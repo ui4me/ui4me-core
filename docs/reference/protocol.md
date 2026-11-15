@@ -22,10 +22,10 @@ The host creates a private endpoint, starts the backend from the [manifest](host
 
 | Platform | Endpoint (`UI4ME_ENDPOINT`) | Protection |
 | --- | --- | --- |
-| Linux | Unix stream socket `$XDG_RUNTIME_DIR/ui4me-host/<key>.sock` (falls back to `<tmp>/ui4me-runtime-<uid>/…` without `XDG_RUNTIME_DIR`) | Directory mode `0700` owned by the user (checked, symlinks refused); socket mode `0600` |
-| Windows | Named pipe `\\.\pipe\ui4me-host-<key>` | Byte-mode pipe, `PIPE_REJECT_REMOTE_CLIENTS`, protected DACL granting access only to the current logon SID |
+| Linux | Unix stream socket `$XDG_RUNTIME_DIR/ui4me-host/<key>.sock` (falls back to `<tmp>/ui4me-runtime-<uid>/…` without `XDG_RUNTIME_DIR`) | Directory created with mode `0700` in one step, owned by the user (checked, symlinks refused; a fallback directory pre-created by another user is refused with its owner named); socket mode `0600` |
+| Windows | Named pipe `\\.\pipe\ui4me-host-<key>` | Byte-mode pipe, `PIPE_REJECT_REMOTE_CLIENTS`, protected DACL granting access only to the current logon SID. A forwarding launch connects at identification level (the server cannot impersonate it) and refuses a pipe served from another session |
 
-`<key>` is a hex hash of the app ID and desktop session for single-instance apps, or random otherwise. There is no TCP listener. Treat the endpoint as an opaque string from the environment; do not construct it.
+`<key>` is a hex hash of the app ID and desktop session for single-instance apps, or 12 random bytes otherwise (never derived from the token). There is no TCP listener. Treat the endpoint as an opaque string from the environment; do not construct it.
 
 Connection limits (host side): at most 8 simultaneous connections; a connection must send its first frame within 15 seconds; a connection that has not authenticated with `host.hello` is closed after about 5 seconds. Only one connection can be the authenticated backend.
 

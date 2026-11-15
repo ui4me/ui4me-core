@@ -113,19 +113,36 @@ pub fn runtime_directory() -> Result<PathBuf> {
 }
 
 fn ensure_private_directory(path: &Path) -> Result<()> {
-    match std::fs::create_dir(path) {
-        Ok(()) => std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?,
+    use std::os::unix::fs::DirBuilderExt;
+    // HOST-13: created private in one step (mode 0700, the umask can only remove bits), so the
+    // directory is never visible with wider permissions, even briefly.
+    match std::fs::DirBuilder::new().mode(0o700).create(path) {
+        Ok(()) => (),
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => (),
         Err(error) => return Err(error.into()),
     }
     let metadata = std::fs::symlink_metadata(path)?;
-    if !metadata.is_dir()
-        || metadata.file_type().is_symlink()
-        || metadata.uid() != unsafe { libc::geteuid() }
-        || metadata.mode() & 0o077 != 0
-    {
+    let euid = unsafe { libc::geteuid() };
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
         bail!(
-            "private runtime directory has unsafe ownership or permissions: {}",
+            "private runtime directory is not a directory: {}",
+            path.display()
+        );
+    }
+    if metadata.uid() != euid {
+        // A predictable fallback under the shared temporary directory can be pre-created by
+        // another user (fails closed). Name the owner so the cause is clear.
+        bail!(
+            "private runtime directory {} belongs to uid {}, not to this user (uid {euid}); \
+             set XDG_RUNTIME_DIR to a private directory",
+            path.display(),
+            metadata.uid()
+        );
+    }
+    if metadata.mode() & 0o077 != 0 {
+        bail!(
+            "private runtime directory has unsafe permissions {:o}: {}",
+            metadata.mode() & 0o777,
             path.display()
         );
     }
@@ -995,6 +1012,22 @@ mod tests {
         let (forwarded, skipped) = systemd_environment([(non_utf8_name, OsString::from("x"))]);
         assert!(forwarded.is_empty());
         assert_eq!(skipped.len(), 1);
+    }
+
+    /// HOST-13: the directory is created private in one step; an existing directory with group
+    /// or other access is refused with its mode in the message.
+    #[test]
+    fn private_directories_are_created_private_and_wide_ones_refused() {
+        let base = tempfile::tempdir().unwrap();
+        let created = base.path().join("created");
+        ensure_private_directory(&created).unwrap();
+        let mode = std::fs::metadata(&created).unwrap().mode() & 0o777;
+        assert_eq!(mode, 0o700);
+        let wide = base.path().join("wide");
+        std::fs::create_dir(&wide).unwrap();
+        std::fs::set_permissions(&wide, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let error = format!("{:#}", ensure_private_directory(&wide).unwrap_err());
+        assert!(error.contains("unsafe permissions 755"), "{error}");
     }
 
     #[test]

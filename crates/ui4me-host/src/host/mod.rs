@@ -476,6 +476,14 @@ fn random_token() -> Result<String> {
     Ok(bytes.iter().map(|v| format!("{v:02x}")).collect())
 }
 
+/// HOST-11: the endpoint key of an `instance = "multiple"` host. It is public (socket path,
+/// pipe name, `UI4ME_ENDPOINT`, logs), so it is drawn independently of the secret token.
+fn multiple_instance_key() -> Result<String> {
+    let mut bytes = [0u8; 12];
+    getrandom::fill(&mut bytes).map_err(|e| anyhow::anyhow!("OS random source: {e}"))?;
+    Ok(bytes.iter().map(|v| format!("{v:02x}")).collect())
+}
+
 impl Host {
     fn new(
         config: AppConfig,
@@ -492,10 +500,10 @@ impl Host {
         }
         let icon = crate::icons::load(config.app.icon.as_deref())?;
         let token = random_token()?;
-        let instance_key = instance
-            .as_ref()
-            .map(|i| i.instance_key.clone())
-            .unwrap_or_else(|| token[..24].to_owned());
+        let instance_key = match &instance {
+            Some(lock) => lock.instance_key.clone(),
+            None => multiple_instance_key()?,
+        };
         let server = if standalone {
             None
         } else {
@@ -1972,6 +1980,18 @@ mod tests {
             "response"
         );
         host.server.as_mut().unwrap().close();
+    }
+
+    /// HOST-11: no part of the secret token becomes a public endpoint name.
+    #[test]
+    fn multiple_instance_endpoint_key_is_independent_of_the_token() {
+        let key = multiple_instance_key().unwrap();
+        assert_eq!(key.len(), 24);
+        assert!(key.bytes().all(|b| b.is_ascii_hexdigit()));
+        assert_ne!(key, multiple_instance_key().unwrap());
+        let token = random_token().unwrap();
+        assert!(!token.contains(&key));
+        assert!(crate::platform::endpoint_for(&key).is_ok());
     }
 
     #[test]
