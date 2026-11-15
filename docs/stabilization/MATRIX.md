@@ -16,18 +16,18 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | F-09 | Medium | process | F | FIXED_VERIFIED | tools/test_ci_signal.py, test_workflows.py::test_lint_runs_even_when_the_verifier_fails | verify.py default stages green on non-release tree (ws F and integration python suite) | n/a | 099f238 026d68f |  |
 | F-10 | High | process | F | FIXED_VERIFIED | tools/test_ci_gate.py (recorded API: d053e09 refused, c6fd71d accepted, missing refused) | unit tests + live read-only API run | n/a | 9240d35 126075e | Workflow wiring unrun on GitHub. |
 | F-11 | Medium | process | F | IN_PROGRESS | test_release_artifacts.py | pending | pending | 5d1dc25 8aa7f4a 126075e |  |
-| F-12 | Medium | runtime | G | OPEN | T3 | pending | pending |  |  |
+| F-12 | Medium | runtime | G | FIXED_VERIFIED | host::headless::tests, tools/test_headless_clock.py (T3) | T3 burst passes (baseline -32601); RSS growth 10k writes 2,460 -> 136 KiB | T3 transition burst and R5(c) pass natively (evidence/lead/windows-lifecycle-81b8c85.md) | 85c817f | Unsubscribed-type assertion needs host-side subscription (3.1, not done). Headless CPU use higher while transitions run. |
 | F-13 | Medium | runtime | E | IN_PROGRESS | T9 | pending | pending |  |  |
 | F-14 | Medium | runtime | H | OPEN | T6 | pending | pending |  |  |
 | F-15 | Medium | runtime | H | OPEN | T6 | pending | pending |  |  |
-| F-18 | Medium | runtime | G | OPEN | T15 | pending | pending |  |  |
+| F-18 | Medium | runtime | G | FIXED_VERIFIED | platform::linux::tests::supervised_environment_skips_what_systemd_rejects, test_host_lifecycle::test_t15_supervised_start_with_rejected_environment | real systemd-run; baseline: Cannot assign environment variable BASH_FUNC_x%% | n/a | 3dc57a7 |  |
 | F-19 | Medium | runtime | E | IN_PROGRESS | T12 | pending | pending |  |  |
 | F-20 | Medium | process | F | NOT_REPRODUCED |  | gh api: visibility=public; PublicEvent 2026-11-12 by owner; 18/19 metadata URLs 200 (CHANGELOG 404 until on main) | pending | 37c0399 |  |
 | F-21 | Medium | process | F | IN_PROGRESS | tools/test_version_source.py | pending | pending | d24fbe0 805e59e |  |
 | F-22 | Medium | process | F | IN_PROGRESS | T11, T14 | pending | pending | 026d68f |  |
 | F-23 | Medium | process | F | FIXED_VERIFIED | test_workflows.py, zizmor 0 / actionlint 0, cargo deny check | local zizmor, actionlint, cargo deny | n/a | 14b1ae3 026d68f 126075e | Windows binary unsigned (owner: certificate needed); attestations unrun. |
 | F-24 | Medium | process | F | FIXED_VERIFIED | test_release_metadata.py | python suite | n/a | 37c0399 61c381b | Changelog 1.0.2 section to finalise; qualification records not yet generated from tools. |
-| F-25 | Low-Medium | runtime | G | OPEN | T15 | pending | pending |  |  |
+| F-25 | Low-Medium | runtime | G | IN_PROGRESS | AcceptLoopTests, TerminationSignalTests, RelaunchTests, PolicyAnswerTests, host::tests::error_answers_to_policy_requests_are_no_decision | all T15 tests pass; each fails on baseline | host lib tests + PolicyAnswerTests pass; Ctrl+Break delivers app.shutdown (baseline not) but launcher dies 0xC000013A (evidence/lead/windows-lifecycle-81b8c85.md) | 7813ef8 92977d2 1d2753a 2c1233a 0adab8c f5b3fb7 |  |
 | F-26 | Low-Medium | runtime | E | IN_PROGRESS | T9 | pending | pending |  |  |
 | F-27 | Low-Medium | runtime | F | IN_PROGRESS |  | pending | pending |  |  |
 | F-28 | Medium | runtime | E | IN_PROGRESS | T9, T16 | pending | pending |  |  |
@@ -43,25 +43,25 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | --- | --- | --- | --- | --- | --- | --- |
 | HOST-01 | High→Critical (F-02) | F-02 | A | FIXED_VERIFIED | c90062f 78df633 8c8cab3 eae0ad9 |  |
 | HOST-02 | High→advisory (§2.3) |  | G | FIXED_VERIFIED | c90062f | PR #3 not merged; F-02 fixed without dropping. Advisory closed. |
-| HOST-03 | Medium | F-18 | G | OPEN |  |  |
-| HOST-04 | Low-Med | F-25 | G | OPEN |  |  |
-| HOST-05 | Low-Med |  | G | OPEN |  |  |
-| HOST-06 | Low | F-14 | H | OPEN |  |  |
-| HOST-07 | Low-Med | F-25 | G | OPEN |  |  |
-| HOST-08 | Low | F-25 | G | IN_PROGRESS | c90062f 78df633 8c8cab3 eae0ad9 |  |
+| HOST-03 | Medium | F-18 | G | FIXED_VERIFIED | 3dc57a7 |  |
+| HOST-04 | Low-Med | F-25 | G | FIXED_VERIFIED | 7813ef8 0adab8c |  |
+| HOST-05 | Low-Med |  | G | FIXED_VERIFIED | eb4bb24 |  |
+| HOST-06 | Low | F-14 | H | IN_PROGRESS |  | request_submit linear in release (24/31/44 ms at 1k/2k/4k fields). Superlinear cost is first layout of many inline inputs (0.52/2.33/17.3 s) - handed to ws H. |
+| HOST-07 | Low-Med | F-25 | G | IN_PROGRESS | 92977d2 f5b3fb7 |  |
+| HOST-08 | Low | F-25 | G | FIXED_VERIFIED | 8c8cab3 |  |
 | HOST-09 | Low | F-02 | A | FIXED_VERIFIED | c90062f 78df633 8c8cab3 eae0ad9 |  |
-| HOST-10 | Low | F-25 | G | OPEN |  |  |
-| HOST-11 | Low |  | G | OPEN |  |  |
-| HOST-12 | Low |  | G | OPEN |  |  |
-| HOST-13 | Low |  | G | OPEN |  |  |
-| HOST-14 | Low |  | G | OPEN |  |  |
-| HOST-15 | Low-Med | F-25 | G | OPEN |  |  |
-| HOST-16 | Low |  | G | OPEN |  |  |
-| HOST-17 | Low |  | G | OPEN |  |  |
+| HOST-10 | Low | F-25 | G | FIXED_VERIFIED | 1d2753a |  |
+| HOST-11 | Low |  | G | FIXED_VERIFIED | 203a8fb |  |
+| HOST-12 | Low |  | G | IN_PROGRESS | 203a8fb | SQOS identification + session check done; server SID check deferred (false refusal risk, needs elevated/non-elevated Windows pairs). |
+| HOST-13 | Low |  | G | FIXED_VERIFIED | 203a8fb |  |
+| HOST-14 | Low |  | G | FIXED_VERIFIED | eb210dc |  |
+| HOST-15 | Low-Med | F-25 | G | FIXED_VERIFIED | 2c1233a |  |
+| HOST-16 | Low |  | G | FIXED_VERIFIED | dfa29a1 | Panic hook only; catch_unwind around document commands deferred (changes failure semantics across renderer boundary). |
+| HOST-17 | Low |  | G | FIXED_VERIFIED | 859955d |  |
 | RENDER-01 | High | F-04 | C | FIXED_VERIFIED | 7c111c8 |  |
 | RENDER-02 | High→Critical (F-01) | F-01 | B | FIXED_VERIFIED | 96c549e 554b58d |  |
 | RENDER-03 | Medium | F-06 | B | FIXED_VERIFIED | 7587eb3 |  |
-| RENDER-04 | Low | F-12 | G | OPEN |  |  |
+| RENDER-04 | Low | F-12 | G | FIXED_VERIFIED | 85c817f |  |
 | RENDER-05 | Medium→High (F-16a) | F-16a | C | FIXED_VERIFIED | 3335e26 |  |
 | RENDER-06 | Medium | F-16b | C+D | FIXED_VERIFIED | c955e44 |  |
 | RENDER-07 | Medium | F-16b | C+D | DEFERRED |  | Measured 26-27 ms per set_text at 2,000 rows (layout ~17, scene ~5, raster ~4-5). O(dirty) pipeline is roadmap 8.1, optional; postponed per 08 until measured need beyond R5(b) 100 ms budget, which is met. |
@@ -161,7 +161,7 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | --- | --- | --- | --- | --- |
 | T1 | FIXED_VERIFIED | crates/ui4me-renderer/tests/stack_depth.rs, crates/ui4me-assets/tests/svg_depth.rs | cargo test (default); release in nightly | Native Windows pass. inline-block pending F-14. |
 | T2 | FIXED_VERIFIED | crates/ui4me-host/src/transport.rs tests | cargo test (default) | Fails on baseline (message 236 refused). |
-| T3 | OPEN |  |  |  |
+| T3 | FIXED_VERIFIED | tools/test_headless_clock.py | python stage | Linux + Windows |
 | T4 | FIXED_VERIFIED | renderer font_identity_tests, tests/font_identity_soak.rs | cargo test (default) | Baseline: +78.3 MiB; fixed +95 KiB; native Windows pass |
 | T5 | IN_PROGRESS | renderer document::geometry_tests |  |  |
 | T6 | IN_PROGRESS | fuzz_gate.rs, fuzz_resources.rs (#[ignore]) | nightly (ws F) | Small-stack workers, depth/SVG generators; filter-cost generator pending ws H. |
@@ -173,7 +173,7 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | T12 | IN_PROGRESS | ci.yml clean-wheel + allusers jobs, verify-published.yml |  |  |
 | T13 | FIXED_VERIFIED | regression::append_cliff, a11y presence counters | cargo test (default) | append shapes 1 paragraph; 0 a11y builds per 100 ticks without AT |
 | T14 | IN_PROGRESS | tools/windowed_smoke.py + nightly |  |  |
-| T15 | OPEN |  |  |  |
+| T15 | IN_PROGRESS | tools/test_host_lifecycle.py, host unit tests | python stage | Linux full; Windows subset |
 | T16 | OPEN |  |  |  |
 
 ## Release gates
@@ -184,11 +184,11 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | R2 | Documented limits render without abort on production stacks | FAILING | MET (pending inline-block, F-14) | T1 Linux+Windows; Windows windowed depth 250 div/fieldset, SVG 700 |
 | R3 | 10,000-event bursts / 2,000 events/s for 60 s: no disconnect, no dropped control notification | FAILING | FAILING |  |
 | R4 | Memory: counting-allocator soak <1 MiB; 30-min windowed soak <5 MiB/5% | FAILING | PARTIAL: R4a MET; R4b (30-min windowed soak) not automated | font_identity_soak; 900 s windowed Linux flat; Windows flat |
-| R5 | Stalls bounded (pathological <250 ms or rejected; reference docs <100 ms; frame gap <50 ms draining) | FAILING | FAILING |  |
+| R5 | Stalls bounded (pathological <250 ms or rejected; reference docs <100 ms; frame gap <50 ms draining) | FAILING | PARTIAL | R5(c) headless 19 ms; F-16a append 55 ms; pathological inputs pending ws H |
 | R6 | Keyboard reachability/operability; focus scrolled into view | FAILING | FAILING |  |
 | R7 | Geometry consistency across caret/selection/IME/AT/get_rect vs hit testing | FAILING | FAILING |  |
 | R8 | AT contract checks automated + manual Orca/NVDA checklist | UNVERIFIED | UNVERIFIED |  |
-| R9 | Backend crash/freeze/veto, signals, session end handled as documented | PARTIAL | PARTIAL |  |
+| R9 | Backend crash/freeze/veto, signals, session end handled as documented | PARTIAL | PARTIAL (improved) | SIGTERM/SIGINT/SIGHUP deliver app.shutdown (Linux); Windows Ctrl+Break delivers app.shutdown, launcher still dies; session end unverified |
 | R10 | Bindings never die silently on user-code errors | FAILING | FAILING |  |
 | P1 | Release commit has green required CI on every OS, enforced by publish workflow | FAILING | FAILING |  |
 | P2 | Ordinary changes can be green; lint always runs | FAILING | FAILING |  |
@@ -209,4 +209,4 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | P17 | Vendored dependencies verifiably equal upstream plus patches | MET manually | MET manually |  |
 | P18 | Secrets least-privilege | MET | MET |  |
 
-Consolidated status counts: FIXED_VERIFIED 10, IN_PROGRESS 14, NOT_REPRODUCED 1, OPEN 5
+Consolidated status counts: FIXED_VERIFIED 12, IN_PROGRESS 15, NOT_REPRODUCED 1, OPEN 2

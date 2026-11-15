@@ -492,15 +492,21 @@
     "T3"
    ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending",
+    "linux": "T3 burst passes (baseline -32601); RSS growth 10k writes 2,460 -> 136 KiB",
+    "windows": "T3 transition burst and R5(c) pass natively (evidence/lead/windows-lifecycle-81b8c85.md)",
     "required": "both"
    },
-   "status": "OPEN",
-   "commits": [],
-   "remaining_risk": "",
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "85c817f"
+   ],
+   "remaining_risk": "Unsubscribed-type assertion needs host-side subscription (3.1, not done). Headless CPU use higher while transitions run.",
    "owner_decision": false,
-   "notes": ""
+   "notes": "",
+   "tests": [
+    "host::headless::tests",
+    "tools/test_headless_clock.py (T3)"
+   ]
   },
   {
    "id": "F-13",
@@ -806,15 +812,21 @@
     "T15"
    ],
    "verification": {
-    "linux": "pending",
+    "linux": "real systemd-run; baseline: Cannot assign environment variable BASH_FUNC_x%%",
     "windows": "pending",
-    "required": "both"
+    "required": "linux"
    },
-   "status": "OPEN",
-   "commits": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "3dc57a7"
+   ],
    "remaining_risk": "",
    "owner_decision": false,
-   "notes": ""
+   "notes": "",
+   "tests": [
+    "platform::linux::tests::supervised_environment_skips_what_systemd_rejects",
+    "test_host_lifecycle::test_t15_supervised_start_with_rejected_environment"
+   ]
   },
   {
    "id": "F-19",
@@ -1081,15 +1093,29 @@
     "T15"
    ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending",
+    "linux": "all T15 tests pass; each fails on baseline",
+    "windows": "host lib tests + PolicyAnswerTests pass; Ctrl+Break delivers app.shutdown (baseline not) but launcher dies 0xC000013A (evidence/lead/windows-lifecycle-81b8c85.md)",
     "required": "both"
    },
-   "status": "OPEN",
-   "commits": [],
+   "status": "IN_PROGRESS",
+   "commits": [
+    "7813ef8",
+    "92977d2",
+    "1d2753a",
+    "2c1233a",
+    "0adab8c",
+    "f5b3fb7"
+   ],
    "remaining_risk": "",
    "owner_decision": false,
-   "notes": ""
+   "notes": "Remaining: direct-start launcher dies on console Ctrl+Break (handed to ws E, BIND-10); WM_ENDSESSION unverified natively; HOST-12 SID check deferred; KillMode=mixed deferred.",
+   "tests": [
+    "AcceptLoopTests",
+    "TerminationSignalTests",
+    "RelaunchTests",
+    "PolicyAnswerTests",
+    "host::tests::error_answers_to_policy_requests_are_no_decision"
+   ]
   },
   {
    "id": "F-26",
@@ -1319,12 +1345,16 @@
    "reproduction": "`env -u UI4ME_TEST_MODE 'BASH_FUNC_foo%%=() { echo; }' ./ui4me-host run --app /nonexistent/app.toml` (also `LATIN=$'caf\\xe9'`).",
    "root_cause": "forwarding the whole environment without validating systemd's constraints.",
    "correction": "in `bootstrap_supervised`, forward only names matching `^[A-Za-z_][A-Za-z0-9_]*$` whose value is valid UTF-8 (`std::env::vars_os` + `to_str`); log skipped names (names only) at debug; document that such variables are not inherited under supervision. Unit test: build the argument list with a synthetic env containing `A-B`, `BASH_FUNC_x%%`, non-UTF-8 value and assert they are excluded; optional inte",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "3dc57a7"
+   ],
+   "tests": [
+    "see consolidated / ws G report"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "ws G tests (fail on baseline)",
+    "windows": "host lib tests natively"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1343,12 +1373,17 @@
    "reproduction": "`python3 fd_test.py 19` → \"socket file still exists: False\", late connect ENOENT, no log line.",
    "root_cause": "treating transient accept/instance errors as fatal.",
    "correction": "in the accept loop, classify errors: `EMFILE/ENFILE/ENOBUFS/ENOMEM/ECONNABORTED/EPROTO` (Linux) and `ERROR_NO_DATA/ERROR_PIPE_BUSY/ERROR_BROKEN_PIPE` (Windows) → log (rate-limited), sleep 50–100 ms, continue; Windows: on `ERROR_NO_DATA`, `DisconnectNamedPipe` + reuse the instance. Host: log `Disconnected(0, reason)` at error level. Tests: Linux unit test with a lowered `RLIMIT_NOFILE` in a child p",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "7813ef8",
+    "0adab8c"
+   ],
+   "tests": [
+    "see consolidated / ws G report"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "ws G tests (fail on baseline)",
+    "windows": "host lib tests natively"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1365,12 +1400,16 @@
    "reproduction": "not run; test: native or loop-simulated host, enqueue 300 notifications at once, measure time until the last is dispatched.",
    "root_cause": "",
    "correction": "in `pump`, if the 64-event loop ended because of the budget (not `Empty`), call `(self.wake)()` (or `set_control_flow(Poll)` for the next iteration). Unit test: fake wake counter asserted after a pump with >64 queued events.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "eb4bb24"
+   ],
+   "tests": [
+    "see consolidated / ws G report"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "ws G tests (fail on baseline)",
+    "windows": "host lib tests natively"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1389,7 +1428,7 @@
    "reproduction": "`python3 adv_run.py fast_reader_single_command_burst ADV_N=1000`.",
    "root_cause": "",
    "correction": "(a) renderer: find the superlinear path in interactive validation (`request_submit` / `invalid` dispatch); (b) host: measure per-command duration and log commands > 100 ms with op name; (c) longer term, a per-pump time budget (process messages until ~8 ms elapsed, then yield and re-wake) instead of a fixed count of 64. Document the tradeoff.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -1397,7 +1436,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "request_submit linear in release (24/31/44 ms at 1k/2k/4k fields). Superlinear cost is first layout of many inline inputs (0.52/2.33/17.3 s) - handed to ws H."
   },
   {
    "id": "HOST-07",
@@ -1413,12 +1452,17 @@
    "reproduction": "`python3 sigterm_test.py SIGTERM`.",
    "root_cause": "",
    "correction": "Linux: `signalfd`/self-pipe thread for SIGTERM/SIGINT/SIGHUP → set a flag + wake → `begin_shutdown()` (or `request_quit(\"session_end\")` with a short deadline) — note the backend receives SIGTERM directly under `control-group`; consider `KillMode=mixed` so only the main process (host) gets SIGTERM and the host drives the backend shutdown within `TimeoutStopSec`. Windows: handle `WM_QUERYENDSESSION`",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "IN_PROGRESS",
+   "commits": [
+    "92977d2",
+    "f5b3fb7"
+   ],
+   "tests": [
+    "see consolidated / ws G report"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "ws G tests (fail on baseline)",
+    "windows": "host lib tests natively"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1437,17 +1481,16 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "in `send`, on first failure set `self.client_dead = true` (or check `server.is_connected`) and skip further sends silently; log once per connection with a counter. Give force quit its own log message and document its exit status (currently 1).",
-   "status": "IN_PROGRESS",
+   "status": "FIXED_VERIFIED",
    "commits": [
-    "c90062f",
-    "78df633",
-    "8c8cab3",
-    "eae0ad9"
+    "8c8cab3"
    ],
-   "tests": [],
+   "tests": [
+    "see consolidated / ws G report"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "ws G tests (fail on baseline)",
+    "windows": "host lib tests natively"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1497,12 +1540,16 @@
    "reproduction": "`python3 secondary_test.py` → \"exit 1 after 0.01 s; Primary instance is shutting down (RPC -32004)\".",
    "root_cause": "",
    "correction": "on `CLOSED` or connect failure, poll `InstanceLock::acquire` (Linux flock, Windows mutex) until `shutdown_timeout_ms + margin`; if it becomes primary, continue a normal start. Test: `secondary_test.py` expecting the second launch to run its backend.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "1d2753a"
+   ],
+   "tests": [
+    "see consolidated / ws G report"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "ws G tests (fail on baseline)",
+    "windows": "host lib tests natively"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1519,12 +1566,16 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "203a8fb"
+   ],
+   "tests": [
+    "see consolidated / ws G report"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "ws G tests (fail on baseline)",
+    "windows": "host lib tests natively"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1541,15 +1592,19 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "connect with `SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION`; after connect verify the server via `GetNamedPipeServerProcessId` + process token user/logon SID (or the pipe's owner SID via `GetSecurityInfo`) before sending anything. Log a clear error on bind failure due to a foreign owner. Complexity: S–M. Confidence: Medium.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "IN_PROGRESS",
+   "commits": [
+    "203a8fb"
+   ],
+   "tests": [
+    "see consolidated / ws G report"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "ws G tests (fail on baseline)",
+    "windows": "host lib tests natively"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "SQOS identification + session check done; server SID check deferred (false refusal risk, needs elevated/non-elevated Windows pairs)."
   },
   {
    "id": "HOST-13",
@@ -1563,12 +1618,16 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "203a8fb"
+   ],
+   "tests": [
+    "see consolidated / ws G report"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "ws G tests (fail on baseline)",
+    "windows": "host lib tests natively"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1585,12 +1644,16 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "eb210dc"
+   ],
+   "tests": [
+    "see consolidated / ws G report"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "ws G tests (fail on baseline)",
+    "windows": "host lib tests natively"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1609,12 +1672,16 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "2c1233a"
+   ],
+   "tests": [
+    "see consolidated / ws G report"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "ws G tests (fail on baseline)",
+    "windows": "host lib tests natively"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1631,15 +1698,19 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "dfa29a1"
+   ],
+   "tests": [
+    "see consolidated / ws G report"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "ws G tests (fail on baseline)",
+    "windows": "host lib tests natively"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Panic hook only; catch_unwind around document commands deferred (changes failure semantics across renderer boundary)."
   },
   {
    "id": "HOST-17",
@@ -1653,12 +1724,16 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "decode `{}`-param methods with a `deny_unknown_fields` empty struct (or fix the doc); allow-list `token`, `protocol_version`, `client` in hello; update docs; delete the dead constant. Complexity: S. Confidence: High.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "859955d"
+   ],
+   "tests": [
+    "see consolidated / ws G report"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "ws G tests (fail on baseline)",
+    "windows": "host lib tests natively"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1762,12 +1837,16 @@
    "reproduction": "`cd exp/RENDER/headless && python3 run.py set_text 10000 0` vs `... 10000 50`.",
    "root_cause": "",
    "correction": "(1) Bound the segment: when `segment.len()` exceeds `WINDOW`, drop it and set an `overflowed` flag on the epoch; `StyleBridge::restyle` then restyles the document conservatively (the cold path already exists) and `box_damage` builds in full. (2) Make `DirtySets` coalesce with a `HashMap<(Reason, Subject), usize>` index and cap per-reason subjects (widen to `Subject::Document` past a threshold). (3",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "85c817f"
+   ],
+   "tests": [
+    "see consolidated / ws G report"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "ws G tests (fail on baseline)",
+    "windows": "host lib tests natively"
    },
    "remaining_risk": "",
    "notes": ""
@@ -3979,8 +4058,8 @@
    "kind": "gate",
    "title": "Stalls bounded (pathological <250 ms or rejected; reference docs <100 ms; frame gap <50 ms draining)",
    "baseline": "FAILING",
-   "status": "FAILING",
-   "evidence": "",
+   "status": "PARTIAL",
+   "evidence": "R5(c) headless 19 ms; F-16a append 55 ms; pathological inputs pending ws H",
    "notes": ""
   },
   {
@@ -4015,8 +4094,8 @@
    "kind": "gate",
    "title": "Backend crash/freeze/veto, signals, session end handled as documented",
    "baseline": "PARTIAL",
-   "status": "PARTIAL",
-   "evidence": "",
+   "status": "PARTIAL (improved)",
+   "evidence": "SIGTERM/SIGINT/SIGHUP deliver app.shutdown (Linux); Windows Ctrl+Break delivers app.shutdown, launcher still dies; session end unverified",
    "notes": ""
   },
   {
@@ -4211,10 +4290,10 @@
   {
    "id": "T3",
    "kind": "test",
-   "status": "OPEN",
-   "location": "",
-   "ci": "",
-   "notes": ""
+   "status": "FIXED_VERIFIED",
+   "location": "tools/test_headless_clock.py",
+   "ci": "python stage",
+   "notes": "Linux + Windows"
   },
   {
    "id": "T4",
@@ -4307,10 +4386,10 @@
   {
    "id": "T15",
    "kind": "test",
-   "status": "OPEN",
-   "location": "",
-   "ci": "",
-   "notes": ""
+   "status": "IN_PROGRESS",
+   "location": "tools/test_host_lifecycle.py, host unit tests",
+   "ci": "python stage",
+   "notes": "Linux full; Windows subset"
   },
   {
    "id": "T16",
