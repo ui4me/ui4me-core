@@ -676,6 +676,7 @@ impl VelloRaster {
                         fonts: fonts.clone(),
                         images: images.clone(),
                         reports: Vec::new(),
+                        transforms: Default::default(),
                     };
                     if let Some(root) = backdrop_root {
                         let belongs = |mut scope: Option<ScopeId>| {

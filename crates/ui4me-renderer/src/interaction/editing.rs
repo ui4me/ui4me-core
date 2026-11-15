@@ -38,6 +38,12 @@ pub struct EditGeometry {
     pub origin: (f64, f64),
     /// The control's inner scroll offset in force.
     pub scroll: (f64, f64),
+    /// The inner (content) space at scroll offset `(0, 0)` → viewport: scroll containers, the
+    /// nearest fixed ancestor, sticky shifts and CSS transforms, as painted and hit-tested
+    /// (`document::geometry`). `origin` is the image of `(0, 0)`.
+    pub to_viewport: ui4me_engine_types::geometry::transform::Affine2D,
+    /// The inverse of `to_viewport` (viewport → inner space).
+    pub from_viewport: ui4me_engine_types::geometry::transform::Affine2D,
 }
 
 impl EditGeometry {
@@ -49,10 +55,18 @@ impl EditGeometry {
     }
     /// A viewport point in the (scrolled) text space of the inner area.
     fn to_local(&self, x: f64, y: f64) -> (f32, f32) {
-        (
-            (x - self.origin.0 + self.scroll.0) as f32,
-            (y - self.origin.1 + self.scroll.1) as f32,
-        )
+        let p = self
+            .from_viewport
+            .map_point(ui4me_engine_types::geometry::transform::PointF { x, y });
+        ((p.x + self.scroll.0) as f32, (p.y + self.scroll.1) as f32)
+    }
+    /// The viewport bounding box `(x, y, width, height)` of a rectangle in the (scrolled) text
+    /// space of the inner area.
+    pub fn text_rect_to_viewport(&self, x: f64, y: f64, w: f64, h: f64) -> (f64, f64, f64, f64) {
+        let (x0, y0) = (x - self.scroll.0, y - self.scroll.1);
+        let (a, b, c, d) =
+            crate::document::geometry::map_bounds(&self.to_viewport, x0, y0, x0 + w, y0 + h);
+        (a, b, c - a, d - b)
     }
     /// The value offset nearest to a viewport point.
     pub fn offset_at_point(&self, x: f64, y: f64) -> u32 {

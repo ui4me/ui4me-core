@@ -667,9 +667,29 @@ fn select_range(d: &mut Document, select: NodeId, a: u32, b: u32) -> bool {
 
 // ----------------------------------------------------------------------------- select pointer
 
-type SelectGeometry = ((f64, f64), SelectGeom);
+/// The space the published rows and popup panel are given in: the select's border box (with the
+/// listbox scroll applied). Maps viewport points into it through the geometry service's inverse
+/// transform, so transformed, fixed and scrolled selects pick the option under the pointer.
+#[derive(Clone, Copy, Debug)]
+struct RowSpace {
+    /// Viewport → the control's inner (content) space at scroll offset (0, 0).
+    from_viewport: ui4me_engine_types::geometry::transform::Affine2D,
+    /// Inner space → row space: the inner area's origin in the border box plus the scroll offset.
+    offset: (f64, f64),
+}
 
-/// The geometry of an open popup or a listbox: the select's border-box origin in the viewport and
+impl RowSpace {
+    fn local(&self, x: f64, y: f64) -> (f32, f32) {
+        let p = self
+            .from_viewport
+            .map_point(ui4me_engine_types::geometry::transform::PointF { x, y });
+        ((p.x + self.offset.0) as f32, (p.y + self.offset.1) as f32)
+    }
+}
+
+type SelectGeometry = (RowSpace, SelectGeom);
+
+/// The geometry of an open popup or a listbox: the mapping into the select's border-box space and
 /// its published rows.
 fn select_geometry(
     host: &mut dyn DispatchHost,
@@ -687,23 +707,26 @@ fn select_geometry(
     } else {
         g.scroll
     };
-    let origin = (
-        g.origin.0 - g.inner.viewport.origin.x.to_f64() - scroll.0,
-        g.origin.1 - g.inner.viewport.origin.y.to_f64() - scroll.1,
-    );
-    Ok(Some((origin, *sel)))
+    let space = RowSpace {
+        from_viewport: g.from_viewport,
+        offset: (
+            g.inner.viewport.origin.x.to_f64() + scroll.0,
+            g.inner.viewport.origin.y.to_f64() + scroll.1,
+        ),
+    };
+    Ok(Some((space, *sel)))
 }
 
-fn row_at(origin: (f64, f64), g: &SelectGeom, x: f64, y: f64) -> Option<SelectRowGeom> {
-    let (lx, ly) = ((x - origin.0) as f32, (y - origin.1) as f32);
+fn row_at(space: RowSpace, g: &SelectGeom, x: f64, y: f64) -> Option<SelectRowGeom> {
+    let (lx, ly) = space.local(x, y);
     g.rows
         .iter()
         .find(|r| lx >= r.x && lx < r.x + r.width && ly >= r.y && ly < r.y + r.height)
         .cloned()
 }
 
-fn in_panel(origin: (f64, f64), g: &SelectGeom, x: f64, y: f64) -> bool {
-    let (lx, ly) = ((x - origin.0) as f32, (y - origin.1) as f32);
+fn in_panel(space: RowSpace, g: &SelectGeom, x: f64, y: f64) -> bool {
+    let (lx, ly) = space.local(x, y);
     g.popup
         && lx >= g.panel[0]
         && lx < g.panel[0] + g.panel[2]
@@ -781,7 +804,7 @@ pub(crate) fn pointer_down(
             }
         }
     } else if ty.as_deref() == Some("range") {
-        let changed = set_range_from_point(host, doc, target, p.x)?;
+        let changed = set_range_from_point(host, doc, target, p.x, p.y)?;
         eng(host, doc, |ix, _| {
             if let Some(s) = ix.controls_state(doc) {
                 s.range_drag = Some(RangeDrag {
@@ -819,7 +842,7 @@ pub(crate) fn pointer_move(
     if let Some(drag) = rt(host, |ix| {
         ix.docs.get(&doc).and_then(|s| s.controls.range_drag)
     }) && p.buttons & 1 != 0
-        && set_range_from_point(host, doc, drag.node, p.x)?
+        && set_range_from_point(host, doc, drag.node, p.x, p.y)?
     {
         eng(host, doc, |ix, _| {
             if let Some(s) = ix.controls_state(doc)
@@ -1010,8 +1033,10 @@ fn set_range_from_point(
     doc: DocumentId,
     node: NodeId,
     x: f64,
+    y: f64,
 ) -> Result<bool, Status> {
-    let Some(r) = host.element_content_rect(doc, node)? else {
+    // The pointer in the content box's own (untransformed) space, and the box's size.
+    let Some((lx, _, w, h)) = host.element_content_point(doc, node, x, y)? else {
         return Ok(false);
     };
     eng(host, doc, |_, d| {
@@ -1019,9 +1044,9 @@ fn set_range_from_point(
             return false;
         };
         let (min, max) = (model.min.unwrap_or(0.0), model.max.unwrap_or(100.0));
-        let thumb = r.3.clamp(8.0, 16.0);
-        let span = (r.2 - thumb).max(1.0);
-        let mut t = ((x - r.0 - thumb / 2.0) / span).clamp(0.0, 1.0);
+        let thumb = h.clamp(8.0, 16.0);
+        let span = (w - thumb).max(1.0);
+        let mut t = ((lx - thumb / 2.0) / span).clamp(0.0, 1.0);
         if crate::style::dir::is_rtl(d, node) {
             t = 1.0 - t;
         }

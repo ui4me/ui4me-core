@@ -271,7 +271,8 @@ pub trait DispatchHost {
         let _ = doc;
     }
     /// The content box of an element from the committed layout (flushes first), `(x, y, width,
-    /// height)` in viewport space; `None` when it has no box or the host has no layout. Default: none.
+    /// height)` in viewport space (the bounding box of the transformed box); `None` when it has no
+    /// box or the host has no layout. Default: none.
     fn element_content_rect(
         &mut self,
         doc: DocumentId,
@@ -279,6 +280,20 @@ pub trait DispatchHost {
     ) -> Result<Option<(f64, f64, f64, f64)>, Status> {
         let _ = (doc, node);
         Ok(None)
+    }
+    /// A viewport point in an element's content-box space (its top-left at `(0, 0)`, before CSS
+    /// transforms), with the content box's size: `(x, y, width, height)`. Default: derived from
+    /// [`Self::element_content_rect`] (translation only).
+    fn element_content_point(
+        &mut self,
+        doc: DocumentId,
+        node: NodeId,
+        x: f64,
+        y: f64,
+    ) -> Result<Option<(f64, f64, f64, f64)>, Status> {
+        Ok(self
+            .element_content_rect(doc, node)?
+            .map(|(cx, cy, w, h)| (x - cx, y - cy, w, h)))
     }
     /// Set the scroll offset of a target, clamped to the published scrollable overflow and
     /// snapped to 1/64 px (layout's `ScrollOffsets`), and note the scroll input to the pipeline
