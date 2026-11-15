@@ -522,7 +522,8 @@ The wire protocol is described in [protocol](protocol.md); normal applications d
 | One IPC message | 2 MiB after JSON encoding |
 | HTML source per load | 1 MiB |
 | Text per `set_text`/`set_value`/`append_text` | 16 KiB |
-| Nodes / nesting depth | 65,536 / 256 |
+| Nodes / nesting depth | 65,536 / 256; a mutation that would nest deeper fails with `SIZE_LIMIT` ([details](../concepts/html-css-scope.md#limits)) |
+| SVG image nesting | 128 levels including referenced content; deeper images fail to decode |
 | Stylesheets added at runtime | 64, each up to 1 MiB |
 | Default-action rules | 256 per document |
 | Live documents per host | 16 |
