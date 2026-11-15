@@ -186,6 +186,9 @@ pub struct Host {
     _instance: Option<InstanceLock>,
     client: Option<u64>,
     connected: HashMap<u64, Instant>,
+    /// HOST-08: connections whose output was refused once. They are being
+    /// disconnected; further messages to them are counted, not sent or logged.
+    undeliverable: HashMap<u64, u64>,
     token: String,
     wake: Wake,
     windows: BTreeMap<String, WindowRecord>,
@@ -193,6 +196,8 @@ pub struct Host {
     next_window: u64,
     started: Instant,
     quit_deadline: Option<Instant>,
+    /// The quit deadline was set by a force quit, not by a slow backend.
+    force_quit: bool,
     next_job: u64,
     jobs: HashMap<u64, PendingJob>,
     job_tx: mpsc::SyncSender<JobResult>,
@@ -413,6 +418,7 @@ impl Host {
             _instance: instance,
             client: None,
             connected: HashMap::new(),
+            undeliverable: HashMap::new(),
             token,
             wake,
             windows: BTreeMap::new(),
@@ -420,6 +426,7 @@ impl Host {
             next_window: 1,
             started: Instant::now(),
             quit_deadline: None,
+            force_quit: false,
             next_job: 1,
             jobs: HashMap::new(),
             job_tx,
@@ -439,11 +446,45 @@ impl Host {
         })
     }
 
+    /// Queue one message. The transport bounds output by bytes only, so this
+    /// fails only for a peer that has stopped reading (or is already closed).
+    /// HOST-08: the first failure logs once and disconnects; every later
+    /// message to that connection is counted and reported once when the
+    /// disconnect is processed, instead of one warning (and one disconnect
+    /// attempt) per message.
     fn send(&mut self, connection: u64, value: Value) {
-        if let Some(server) = &self.server {
-            if let Err(error) = server.reply(connection, value) {
-                tracing::warn!(%error, "peer cannot receive bounded output");
-                server.disconnect(connection);
+        let Some(server) = &self.server else {
+            return;
+        };
+        if let Some(suppressed) = self.undeliverable.get_mut(&connection) {
+            *suppressed += 1;
+            return;
+        }
+        if !self.connected.contains_key(&connection) {
+            // The disconnect was already processed (e.g. a late job result).
+            tracing::debug!(connection, "message for a closed connection not sent");
+            return;
+        }
+        if let Err(error) = server.reply(connection, value) {
+            tracing::warn!(
+                connection,
+                error = format!("{error:#}"),
+                "connection cannot receive output; disconnecting it"
+            );
+            self.undeliverable.insert(connection, 0);
+            server.disconnect(connection);
+        }
+    }
+    /// Forget a connection whose `Disconnected` event has been processed.
+    fn connection_closed(&mut self, connection: u64) {
+        self.connected.remove(&connection);
+        if let Some(suppressed) = self.undeliverable.remove(&connection) {
+            if suppressed > 0 {
+                tracing::warn!(
+                    connection,
+                    suppressed,
+                    "further messages were not sent to the disconnected connection"
+                );
             }
         }
     }
@@ -498,7 +539,7 @@ impl Host {
                 }
                 TransportEvent::Message(id, value) => self.message(id, value, event_loop),
                 TransportEvent::Disconnected(id, reason) => {
-                    self.connected.remove(&id);
+                    self.connection_closed(id);
                     if self.client == Some(id) {
                         self.client = None;
                         if !matches!(
@@ -650,9 +691,15 @@ impl Host {
                     let _ = backend.kill();
                 }
                 self.exit_code.store(1, Ordering::Relaxed);
-                tracing::error!(
-                    "backend exceeded shutdown deadline; managed workers are being terminated"
-                );
+                if self.force_quit {
+                    // HOST-08: a force quit is a deliberate request, not a
+                    // backend that missed its deadline. The exit status stays 1.
+                    tracing::warn!("force quit: backend and managed workers are being terminated");
+                } else {
+                    tracing::error!(
+                        "backend exceeded shutdown deadline; managed workers are being terminated"
+                    );
+                }
                 self.stop(event_loop);
             }
         }
@@ -1013,6 +1060,7 @@ impl Host {
             let _ = backend.kill();
         }
         self.quit_deadline = Some(Instant::now());
+        self.force_quit = true;
     }
 
     fn stop(&mut self, event_loop: Option<&dyn ActiveEventLoop>) {
@@ -1239,6 +1287,7 @@ mod tests {
             _instance: None,
             client: Some(7),
             connected: HashMap::new(),
+            undeliverable: HashMap::new(),
             token: String::new(),
             wake: Arc::new(|| {}),
             windows: BTreeMap::new(),
@@ -1246,6 +1295,7 @@ mod tests {
             next_window: 1,
             started: Instant::now(),
             quit_deadline: None,
+            force_quit: false,
             next_job: 1,
             jobs: HashMap::new(),
             job_tx,
@@ -1282,6 +1332,63 @@ mod tests {
                 closing: false,
             },
         );
+    }
+
+    /// HOST-08: after the first refused message the connection is marked dead
+    /// and disconnected once; the rest of the burst is only counted.
+    #[test]
+    fn refused_output_disconnects_once_and_counts_the_rest() {
+        let app = format!("org.ui4me.host08.{}", std::process::id());
+        let lock = crate::platform::InstanceLock::acquire(&app).unwrap();
+        let mut host = controller(true);
+        let server = Server::bind(&app, &lock.instance_key, Arc::new(|| {})).unwrap();
+        // A peer that never reads.
+        let _peer =
+            crate::platform::NativeStream::connect(&server.endpoint, Duration::from_secs(5))
+                .unwrap();
+        let connection = match server
+            .incoming
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+        {
+            TransportEvent::Connected(id) => id,
+            other => panic!("unexpected {other:?}"),
+        };
+        host.server = Some(server);
+        host.connected.insert(connection, Instant::now());
+        host.client = Some(connection);
+        let payload = "x".repeat(256 * 1024);
+        let mut sent = 0;
+        while !host.undeliverable.contains_key(&connection) {
+            host.notify("test.fill", json!({"payload": payload}));
+            sent += 1;
+            assert!(sent < 1000, "the byte cap never refused output");
+        }
+        assert!(sent > 24, "refused well before the 8 MiB budget: {sent}");
+        for _ in 0..500 {
+            host.notify("document.event", json!({"type":"transitionrun"}));
+        }
+        assert_eq!(host.undeliverable[&connection], 500);
+        let server = host.server.as_ref().unwrap();
+        assert!(!server.is_connected(connection));
+        loop {
+            if let TransportEvent::Disconnected(id, _) = server
+                .incoming
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+            {
+                assert_eq!(id, connection);
+                break;
+            }
+        }
+        host.connection_closed(connection);
+        assert!(host.undeliverable.is_empty());
+        host.notify("document.event", json!({"type":"late"}));
+        assert!(
+            host.undeliverable.is_empty(),
+            "closed connection is not retried"
+        );
+        host.server.as_mut().unwrap().close();
     }
 
     #[cfg(target_os = "linux")]
