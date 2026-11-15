@@ -262,6 +262,42 @@ pub(crate) fn focus_update(
     origin: DispatchOrigin,
     source: FocusSource,
 ) -> Result<(), Status> {
+    focus_update_with(
+        host,
+        doc,
+        new,
+        origin,
+        source,
+        source != FocusSource::Pointer,
+    )
+}
+
+/// [`focus_update`] without scrolling the new focus into view: a dialog or popover giving focus
+/// back to the element focused before it (HTML: "the viewport should not be scrolled by doing
+/// this step").
+pub(crate) fn restore_focus(
+    host: &mut dyn DispatchHost,
+    doc: DocumentId,
+    to: NodeId,
+) -> Result<(), Status> {
+    focus_update_with(
+        host,
+        doc,
+        Some(to),
+        DispatchOrigin::Focus,
+        FocusSource::Script,
+        false,
+    )
+}
+
+fn focus_update_with(
+    host: &mut dyn DispatchHost,
+    doc: DocumentId,
+    new: Option<NodeId>,
+    origin: DispatchOrigin,
+    source: FocusSource,
+    reveal: bool,
+) -> Result<(), Status> {
     let new = match new {
         Some(node) if !host.focus_target_visible(doc, node)? => None,
         other => other,
@@ -335,7 +371,7 @@ pub(crate) fn focus_update(
             // moved focus (the pressed element is already visible; browsers do not scroll on click
             // focus). A focus/focusin listener may have moved focus on: only the element still
             // focused is revealed. Before the editing hook, so the IME area it reports is current.
-            if source != FocusSource::Pointer && rt(host, |ix| ix.focused_element(doc)) == Some(n) {
+            if reveal && rt(host, |ix| ix.focused_element(doc)) == Some(n) {
                 let _ = host.reveal_focused(doc, n);
             }
             let _ = crate::interaction::editing::on_focus(

@@ -266,6 +266,25 @@ fn tab_inside_a_scrolled_modal_dialog_reveals_the_control() {
     assert_eq!(hit["element"], "b", "hit {hit}");
 }
 
+#[test]
+fn closing_a_dialog_restores_focus_without_scrolling() {
+    // HTML dialog close: "the viewport should not be scrolled by" restoring focus.
+    let mut d = doc(
+        "<!doctype html><style>body{margin:0}button{display:block;height:30px}#gap{height:2000px}\
+         </style><button id=opener>open</button><div id=gap></div>\
+         <dialog id=dlg><button id=inside>in</button></dialog>",
+        400,
+        300,
+    );
+    d.focus("opener").unwrap();
+    d.show_dialog("dlg", true).unwrap();
+    assert_eq!(focused(&d), "inside");
+    d.scroll_to(None, None, Some(900.0)).unwrap();
+    d.close_dialog("dlg", None).unwrap();
+    assert_eq!(focused(&d), "opener", "focus goes back to the opener");
+    assert_eq!(page_y(&mut d), 900.0, "restoring focus does not scroll");
+}
+
 // ---------------------------------------------------------------------------------------------
 // T10 keyboard activation matrix (F-17 / INTERACT-05): Enter and Space on each kind of control,
 // against browser behaviour.
