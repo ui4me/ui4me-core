@@ -78,7 +78,7 @@ Start-UI4MEScript [-Name] [-AppId] [-Version] [-Icon] [-Instance single|multiple
 | `-ShutdownTimeoutMilliseconds` | 100-120000. How long an orderly shutdown may take before the host stops the backend. |
 | `-MaxWindows` | 1-64. Maximum number of windows this application may open. |
 | `-ArgumentList` | Arguments for the backend run (default: see below). |
-| `-ScriptPath` | Names the script when it cannot be detected. |
+| `-ScriptPath` | The `.ps1` file the host runs again as the backend. Default: the script this PowerShell process was started with (`pwsh -File app.ps1`), also when `Start-UI4MEScript` is called from a function in a dot-sourced helper or in your own module; for a script started from an open prompt, the outermost `.ps1` on the call stack. |
 
 Invalid values throw before anything starts.
 
@@ -110,7 +110,8 @@ Consequences:
   open prompt (`./app.ps1 -Name x`) passes none unless you give `-ArgumentList`.
 - The backend has no console input, so `Read-Host` cannot be used. Output still reaches your
   terminal through the launcher.
-- **Lifetime.** Ctrl+C in the launcher stops the host (exit code 130). If the launcher
+- **Lifetime.** Ctrl+C in the launcher stops the host and exits with code 130 (a hard stop:
+  the backend gets no `app.shutdown`). If the launcher
   process dies, the host is stopped too (a kill-on-close job on Windows; `setpriv
   --pdeathsig` on Linux when `setpriv` is available).
 - **Errors.** An uncaught error in the backend ends it: PowerShell prints the error, the host
@@ -233,7 +234,8 @@ Platform notes: on Wayland a client cannot focus, position or un-minimize its ow
 deadline while still answering lifecycle requests. `-FileName` applies to `SaveFile`,
 `-Multiple` to `OpenFiles`. Filters: `@(@{ name = 'Images'; extensions = @('png', 'jpg') })`;
 extensions have no leading dot (`'*'` matches everything). `-NoWait` returns a
-`UI4ME.Request` immediately: `Wait-UI4MERpc` gives the result, and `Stop-UI4MERpc` asks the
+`UI4ME.Request` immediately: `Wait-UI4MERpc` gives the result (without a deadline by default,
+like the dialog itself; pass `-TimeoutMilliseconds` to set one), and `Stop-UI4MERpc` asks the
 host to close the native dialog.
 
 **Frameless windows.** With `-Decorations $false`, mark a title-bar area in HTML with
@@ -276,6 +278,7 @@ values. Keep behavior in PowerShell and use `<input>`/`<textarea>` for editing.
 | --- | --- |
 | `Get-UI4MEDocumentText -Document -Element` / `Set-UI4MEDocumentText -Document -Element -Text` | Read/replace the element's text content. `Set-UI4MEDocumentText` never parses HTML, so it is safe for user input. |
 | `Set-UI4MEDocumentAttribute -Document -Element -Name [-Value ''] [-Remove]` | Set or remove an attribute (`-Value ''` sets a boolean attribute such as `disabled`). |
+| `Get-UI4MEAttributes -Document (-Element \| -Node)` | All attributes of an element as an ordered dictionary (`$a['title']`), sorted by name. Works for every attribute name, including names PowerShell reserves for its own members (`psbase`, `psobject`, ...). |
 | `Set-UI4MEClass -Document -Element -Name [-Remove]` | Add or remove a class. |
 | `Set-UI4MEDocumentHtml -Document -Element -Html [-Position replace\|beforebegin\|afterbegin\|beforeend\|afterend]` | Replace the children with (default), or insert, **trusted** HTML. |
 | `Remove-UI4MEElement -Document -Element` | Remove an element and its subtree. |
@@ -560,8 +563,14 @@ to work, so catch `UI4ME.RpcException` around them.
 
 Errors thrown inside event and notification callbacks are written to standard error (shown
 by the launcher, or in the host log) as `UI4ME: event handler for 'click' failed: ...`; the
-application keeps running. A policy callback that throws counts as a failed decision: the
-window stays open or the application keeps running.
+application keeps running and the other handlers for the same event still run. A policy
+callback that throws counts as a failed decision: the window stays open or the application
+keeps running.
+
+Leave a callback with `return`. `break` or `continue` outside a loop in a callback ends only
+that callback (with a `UI4ME:` warning on standard error, and no output, so a policy vetoes);
+in 1.0.1 it escaped into the module and could skip other handlers or end a wait. `exit` in a
+callback ends the backend process with that code, as anywhere in PowerShell.
 
 ## Callbacks, ordering and closures
 
@@ -624,8 +633,12 @@ not your script. Pass collections or other objects in as captured locals (as abo
 state in a hashtable).
 
 **Policy callbacks** (`Set-UI4MEBeforeClose`, `Set-UI4MEBeforeQuit`) decide by their *last*
-output value: `$true` allows, `$false` or no output vetoes. Earlier output in the block is
-ignored. A policy callback that throws counts as a failed decision.
+output value, which must be a boolean: `$true` allows; `$false`, no output, or any
+non-boolean last value vetoes. Earlier output in the block is ignored. A non-boolean last
+value (the string `'false'` or `'true'`, a number such as the index that `$list.Add(...)`
+returns) vetoes and writes a `UI4ME:` warning; in 1.0.1 it was converted with `[bool]`, so
+`'false'` allowed. End the block with `$true` or `$false`, and discard other output with
+`$null = ...`. A policy callback that throws counts as a failed decision.
 
 ## Raw protocol
 
@@ -633,11 +646,11 @@ ignored. A policy callback that throws counts as a failed decision.
 | --- | --- |
 | `Invoke-UI4MERpc -Application -Method [-Parameters @{}] [-TimeoutMilliseconds 15000]` | Call any host method and return its result. `dialog.*` methods wait without a deadline by default; `-1` waits forever. Events keep being processed while waiting. |
 | `Start-UI4MERpc -Application -Method [-Parameters @{}]` | Send a request without waiting; returns a `UI4ME.Request`. |
-| `Wait-UI4MERpc -Request [-TimeoutMilliseconds 15000]` | Wait for a request's result while pumping. On timeout the request is cancelled and `UI4ME.RpcTimeoutException` is thrown. A request can be awaited once. |
+| `Wait-UI4MERpc -Request [-TimeoutMilliseconds 15000]` | Wait for a request's result while pumping. The default is 15 seconds, or no deadline for `dialog.*` requests (as with `Invoke-UI4MERpc`). On timeout the request is cancelled and `UI4ME.RpcTimeoutException` is thrown. A request can be awaited once. |
 | `Stop-UI4MERpc -Request` | Ask the host to cancel (for example, close a native dialog). Not a rollback. |
 | `Send-UI4MENotification -Application -Method [-Parameters @{}]` | Send a notification (no reply). |
 | `Register-UI4MENotification -Application -Method -Callback` | One callback per host notification method (see [Application commands](#application-commands)). |
-| `$app.ShutdownRequested`, `$app.Transport.DroppedNotifications` | Shutdown requested by the host; notifications dropped because the bounded queue overflowed. |
+| `$app.ShutdownRequested`, `$app.Transport.DroppedNotifications` | Shutdown requested by the host; notifications dropped because the bounded queue overflowed (`DroppedCoalescible` + `DroppedDiscrete`; `DroppedControl` is always 0). `$app.Transport.FilteredNotifications` counts unsubscribed notifications discarded on arrival. |
 
 The wire protocol is described in [protocol](https://github.com/ui4me/ui4me-core/blob/main/docs/reference/protocol.md); normal applications do not need it.
 

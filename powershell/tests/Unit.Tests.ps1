@@ -14,7 +14,7 @@ Describe 'UI4ME.Core manifest and exports' {
         $declared = @($m.ExportedFunctions.Keys | Sort-Object)
         $actual = @((Get-Command -Module UI4ME.Core -CommandType Function).Name | Sort-Object)
         ($actual -join ',') | Should -Be ($declared -join ',')
-        $actual.Count | Should -Be 83
+        $actual.Count | Should -Be 84   # 1.0.1 had 83; Get-UI4MEAttributes was added (BIND-PS-01)
     }
     It 'documents every exported command with a synopsis or help' {
         foreach ($c in Get-Command -Module UI4ME.Core) {
@@ -59,6 +59,16 @@ Describe 'UI4ME JSON codec' {
         $v = [UI4ME.Json]::Parse('{"A":1,"a":2}')
         $v['A'] | Should -Be 1
         $v['a'] | Should -Be 2
+    }
+    It 'keeps members whose names PowerShell reserves, and the empty name (BIND-PS-01)' {
+        $v = [UI4ME.Json]::Parse('{"psbase":1,"":2,"a":3,"PSObject":{"PSTypeNames":4},"psadapted":5,"psextended":6}')
+        $v | Should -BeOfType ([System.Collections.IDictionary])
+        $v['psbase'] | Should -Be 1
+        $v[''] | Should -Be 2
+        $v['a'] | Should -Be 3
+        $v['PSObject']['PSTypeNames'] | Should -Be 4
+        & (Get-Module UI4ME.Core) { param($o) Get-UI4MEField $o 'psextended' } $v | Should -Be 6
+        ([UI4ME.Json]::Parse('{"plain":{"b":1}}')).plain.b | Should -Be 1   # ordinary objects stay PSObjects
     }
     It 'rejects invalid input' {
         foreach ($bad in @('{"a":1,"a":2}', '[1,]', '{"a":NaN}', '"\x"', "`"a`nb`"", '01', '1.', '{"a":1} x', '[' * 200 + ']' * 200)) {

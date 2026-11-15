@@ -152,11 +152,24 @@ function Invoke-UI4MECallback {
     $Application.Depth++
     $wasDispatching = $Application.Dispatching
     $Application.Dispatching = $true
-    try { return ,@(& $Callback @Arguments) }
-    finally {
+    $output = @()
+    $completed = $false
+    try {
+        # A `break` or `continue` outside a loop in the callback would unwind
+        # to the nearest enclosing loop: one of this module's. This sentinel
+        # loop contains it, so other handlers and the pump keep running.
+        foreach ($sentinel in 1) {
+            $output = @(& $Callback @Arguments)
+            $completed = $true
+        }
+    } finally {
         $Application.Dispatching = $wasDispatching
         $Application.Depth--
     }
+    if (-not $completed) {
+        Write-UI4MELog "a callback used 'break' or 'continue' outside a loop; use 'return' to leave a UI4ME callback (its output was discarded)"
+    }
+    return ,$output
 }
 
 function Invoke-UI4MEDocumentHandlers {
@@ -233,9 +246,17 @@ function Invoke-UI4MENotification {
 }
 
 function ConvertTo-UI4MEDecision {
-    param([object[]]$Output)
+    # A policy allows only with an explicit $true as its last output. No
+    # output, $false and anything else (a string such as 'false', a number
+    # from $list.Add(...)) keep the window open / the app running.
+    param([object[]]$Output, [string]$Name = 'policy')
     if ($Output.Count -eq 0) { return $false }
-    return [bool]$Output[$Output.Count - 1]
+    $last = $Output[$Output.Count - 1]
+    if ($last -is [bool]) { return [bool]$last }
+    if ($last -is [System.Management.Automation.SwitchParameter]) { return $last.IsPresent }
+    $shown = if ($null -eq $last) { '$null' } else { "$($last.GetType().Name) '$last'" }
+    Write-UI4MELog "$Name returned $shown as its last output, not `$true or `$false; treated as a veto. End the scriptblock with `$true to allow."
+    return $false
 }
 
 function Set-UI4MEWindowClosed {
@@ -318,11 +339,11 @@ function Invoke-UI4MEHostRequest {
                 $callback = $null
                 if ($id -and $Application.BeforeClose.ContainsKey($id)) { $callback = $Application.BeforeClose[$id] }
                 if ($null -eq $callback) { $result = @{ allow = $true } }
-                else { $result = @{ allow = (ConvertTo-UI4MEDecision (Invoke-UI4MECallback $Application $callback @($params))) } }
+                else { $result = @{ allow = (ConvertTo-UI4MEDecision (Invoke-UI4MECallback $Application $callback @($params)) "Set-UI4MEBeforeClose policy for window $id") } }
             }
             'app.before_quit' {
                 if ($null -eq $Application.BeforeQuit) { $result = @{ allow = $true } }
-                else { $result = @{ allow = (ConvertTo-UI4MEDecision (Invoke-UI4MECallback $Application $Application.BeforeQuit @($params))) } }
+                else { $result = @{ allow = (ConvertTo-UI4MEDecision (Invoke-UI4MECallback $Application $Application.BeforeQuit @($params)) 'Set-UI4MEBeforeQuit policy') } }
             }
             'app.shutdown' { $Application.ShutdownRequested = $true; $result = @{ ok = $true } }
             default { $failure = @{ code = -32601; message = "Unknown method: $($Message.Method)" } }
@@ -436,8 +457,10 @@ function Start-UI4MERpc {
     Assert-UI4MEApplication $Application
     $Application.NextId++
     $id = 'ps-' + $Application.NextId.ToString([Globalization.CultureInfo]::InvariantCulture)
+    # User-operated native dialogs have no deadline unless the caller sets one.
+    $defaultTimeout = if ($Method.StartsWith('dialog.')) { -1 } else { 15000 }
     $request = [pscustomobject]@{ Application = $Application; Id = $id; Method = $Method
-        Completed = $false; Cancelled = $false; Failed = $false }
+        Completed = $false; Cancelled = $false; Failed = $false; DefaultTimeoutMilliseconds = $defaultTimeout }
     $request.PSObject.TypeNames.Insert(0, 'UI4ME.Request')
     $Application.Transport.Register($id)
     $Application.Pending[$id] = $request
@@ -473,13 +496,17 @@ function Wait-UI4MERpc {
     .SYNOPSIS
     Waits for a request's result while pumping events. -1 waits indefinitely.
     .DESCRIPTION
-    On timeout the request is cancelled and UI4ME.RpcTimeoutException is thrown;
-    the native outcome is then unknown. Host errors throw UI4ME.RpcException
-    with Code, RpcMessage and RpcData.
+    The default timeout is 15 seconds, or unlimited for dialog.* requests (user operated, for
+    example Show-UI4MEFileDialog -NoWait). On timeout the request is cancelled and
+    UI4ME.RpcTimeoutException is thrown; the native outcome is then unknown. Host errors throw
+    UI4ME.RpcException with Code, RpcMessage and RpcData.
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Request, [ValidateRange(-1, 2147483647)][int]$TimeoutMilliseconds = 15000)
     if (-not (Test-UI4METype $Request 'UI4ME.Request')) { throw 'Expected a UI4ME.Request from Start-UI4MERpc' }
+    if (-not $PSBoundParameters.ContainsKey('TimeoutMilliseconds') -and $null -ne $Request.PSObject.Properties['DefaultTimeoutMilliseconds']) {
+        $TimeoutMilliseconds = $Request.DefaultTimeoutMilliseconds
+    }
     $app = $Request.Application
     $clock = [Diagnostics.Stopwatch]::StartNew()
     while ($true) {
@@ -924,6 +951,28 @@ function Set-UI4MEDocumentAttribute {
     if ($Remove) { $null = Invoke-UI4MEDocumentCommand $Document 'remove_attribute' @{ element = $Element; name = $Name } }
     else { $null = Invoke-UI4MEDocumentCommand $Document 'set_attribute' @{ element = $Element; name = $Name; value = $Value } }
 }
+function Get-UI4MEAttributes {
+    <#
+    .SYNOPSIS
+    Returns an element's attributes as a name/value dictionary (sorted by name).
+    .DESCRIPTION
+    Works for any attribute name, including names PowerShell reserves for its own members
+    (psbase, psobject, ...). Names keep their exact case.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Document, [string]$Element, $Node)
+    $p = @{}
+    Add-UI4METarget $p $Document $Element $Node -Required
+    $attributes = Get-UI4MEField (Invoke-UI4MEDocumentCommand $Document 'get_attributes' $p) 'attributes'
+    $names = New-Object 'System.Collections.Generic.List[string]'
+    if ($attributes -is [System.Collections.IDictionary]) { foreach ($key in $attributes.Keys) { $names.Add([string]$key) } }
+    elseif ($null -ne $attributes) { foreach ($property in $attributes.PSObject.Properties) { $names.Add($property.Name) } }
+    $names.Sort([StringComparer]::Ordinal)
+    $result = New-Object System.Collections.Specialized.OrderedDictionary ([StringComparer]::Ordinal)
+    foreach ($name in $names) { $result.Add($name, [string](Get-UI4MEField $attributes $name)) }
+    return $result
+}
+
 function Set-UI4MEClass {
     <# .SYNOPSIS Adds a class to an element, or removes it with -Remove. #>
     [CmdletBinding()]
@@ -1494,6 +1543,27 @@ function Get-UI4MEScriptArguments {
     return ,@()
 }
 
+function Get-UI4MEEntryScript {
+    # The script this PowerShell process runs (pwsh -File app.ps1), not the
+    # file that happens to contain the Start-UI4MEScript call (a dot-sourced
+    # helper or a module function). Falls back to the outermost .ps1 on the
+    # call stack (a script started from a prompt), then to the caller.
+    param([string]$Caller)
+    $comparison = if ($script:UI4MEIsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    $scripts = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($frame in @(Get-PSCallStack)) {
+        if ($frame.ScriptName -and [IO.Path]::GetExtension($frame.ScriptName) -ieq '.ps1') { $scripts.Add($frame.ScriptName) }
+    }
+    $all = [Environment]::GetCommandLineArgs()
+    for ($i = 1; $i -lt $all.Count; $i++) {
+        if (-not $all[$i].EndsWith('.ps1', [StringComparison]::OrdinalIgnoreCase)) { continue }
+        try { $full = [IO.Path]::GetFullPath([IO.Path]::Combine([Environment]::CurrentDirectory, $all[$i])) } catch { continue }
+        foreach ($candidate in $scripts) { if ([string]::Equals($candidate, $full, $comparison)) { return $candidate } }
+    }
+    if ($scripts.Count -gt 0) { return $scripts[$scripts.Count - 1] }
+    return $Caller
+}
+
 function Clear-UI4MEStaleStartFolders {
     # Manifests left behind by a launcher that was killed outright. The host
     # reads its manifest only while starting, so a day-old one is never in use.
@@ -1533,6 +1603,10 @@ function Start-UI4MEScript {
     .PARAMETER ArgumentList
     Arguments for the backend run. By default, the arguments that followed the script on the
     pwsh/powershell.exe command line are reused.
+    .PARAMETER ScriptPath
+    The .ps1 file the host runs again as the backend. Default: the script this PowerShell process
+    was started with (pwsh -File app.ps1), even when Start-UI4MEScript is called from a dot-sourced
+    helper or a module function; otherwise the outermost .ps1 on the call stack.
     .EXAMPLE
     $app = Start-UI4MEScript -Name 'Hello UI4ME'
     #>
@@ -1575,7 +1649,7 @@ function Start-UI4MEScript {
     }
 
     # Launcher role.
-    if (-not $ScriptPath) { $ScriptPath = $MyInvocation.PSCommandPath }
+    if (-not $ScriptPath) { $ScriptPath = Get-UI4MEEntryScript $MyInvocation.PSCommandPath }
     if (-not $ScriptPath) { throw 'Start-UI4MEScript must be called from a .ps1 script file (for example pwsh -File ./app.ps1).' }
     $ScriptPath = [IO.Path]::GetFullPath((Resolve-UI4MEPath $ScriptPath))
     if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) { throw "Script not found: $ScriptPath" }
@@ -1611,6 +1685,8 @@ function Start-UI4MEScript {
     [void](New-Item -ItemType Directory -Path $folder)
     $runner = $null
     $code = 1
+    $finished = $false
+    $failed = $false
     $previousMarker = $env:UI4ME_DIRECT_START
     try {
         $manifest = Join-Path $folder 'app.toml'
@@ -1633,12 +1709,21 @@ function Start-UI4MEScript {
         # Short waits keep Ctrl+C responsive; the finally block stops the host.
         while (-not $runner.WaitForExit(200)) { }
         $code = $runner.ExitCode
+        $finished = $true
+    } catch {
+        $failed = $true
+        throw
     } finally {
         if ($null -ne $runner) {
             if (-not $runner.HasExited) { $runner.Stop() }
             $runner.Dispose()
         }
         Remove-Item -LiteralPath $folder -Recurse -Force -ErrorAction SilentlyContinue
+        if (-not $finished -and -not $failed) {
+            # Neither completed nor failed: the pipeline was stopped (Ctrl+C).
+            # PowerShell would end with status 0; use the shell convention.
+            [Environment]::Exit(130)
+        }
     }
     exit $code
 }
@@ -1894,7 +1979,7 @@ Export-ModuleMember -Function @(
     'Open-UI4MEHtml', 'Open-UI4MEFile', 'Remove-UI4MEDocument',
     'Register-UI4MEDocumentEvent', 'Unregister-UI4MEDocumentEvent', 'Invoke-UI4MEDocumentCommand', 'Invoke-UI4MEBatch',
     'Get-UI4MEDocumentText', 'Set-UI4MEDocumentText', 'Get-UI4MEValue', 'Set-UI4MEDocumentValue',
-    'Get-UI4MEChecked', 'Set-UI4MEChecked', 'Set-UI4MEDocumentAttribute', 'Set-UI4MEClass', 'Set-UI4MEDocumentHtml',
+    'Get-UI4MEChecked', 'Set-UI4MEChecked', 'Set-UI4MEDocumentAttribute', 'Get-UI4MEAttributes', 'Set-UI4MEClass', 'Set-UI4MEDocumentHtml',
     'Remove-UI4MEElement', 'Find-UI4MEElement',
     'Add-UI4MEStylesheet', 'Get-UI4MEStylesheets', 'Set-UI4MEStylesheet', 'Get-UI4MEComputedStyle',
     'Get-UI4MEEnvironment', 'Set-UI4MEEnvironment', 'Get-UI4MEScroll', 'Set-UI4MEScroll',

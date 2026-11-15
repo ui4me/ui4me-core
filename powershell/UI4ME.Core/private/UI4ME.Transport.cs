@@ -109,6 +109,12 @@ namespace UI4ME {
                         throw new ProtocolException("Invalid JSON value");
                 }
             }
+            // Names PowerShell refuses for note properties (case-insensitive),
+            // plus "": PSNoteProperty throws for them on the reader thread.
+            private static readonly HashSet<string> ReservedMemberNames = new HashSet<string>(
+                new string[] { "", "psobject", "psbase", "psadapted", "psextended", "pstypenames" },
+                StringComparer.OrdinalIgnoreCase);
+
             private object ReadObject(int depth) {
                 Position++;
                 List<KeyValuePair<string, object>> members = new List<KeyValuePair<string, object>>();
@@ -122,7 +128,7 @@ namespace UI4ME {
                     if (Peek() != '"') throw new ProtocolException("Expected JSON member name");
                     string name = ReadString();
                     if (!exact.Add(name)) throw new ProtocolException("Duplicate JSON member: " + name);
-                    if (!folded.Add(name)) caseCollision = true;
+                    if (!folded.Add(name) || ReservedMemberNames.Contains(name)) caseCollision = true;
                     SkipWhitespace();
                     if (Peek() != ':') throw new ProtocolException("Expected ':' in JSON object");
                     Position++;
@@ -134,17 +140,23 @@ namespace UI4ME {
                     if (next == '}') break;
                     if (next != ',') throw new ProtocolException("Expected ',' or '}' in JSON object");
                 }
-                if (caseCollision) {
-                    // PowerShell member names are case-insensitive. Preserve
-                    // distinct keys such as {"A":1,"a":2} in an ordinal table.
-                    Hashtable table = new Hashtable(StringComparer.Ordinal);
-                    foreach (KeyValuePair<string, object> member in members) table[member.Key] = member.Value;
-                    return table;
+                if (!caseCollision) {
+                    PSObject result = new PSObject();
+                    try {
+                        foreach (KeyValuePair<string, object> member in members)
+                            result.Properties.Add(new PSNoteProperty(member.Key, member.Value));
+                        return result;
+                    } catch (Exception) {
+                        // Any other name PowerShell refuses: use the table below.
+                    }
                 }
-                PSObject result = new PSObject();
-                foreach (KeyValuePair<string, object> member in members)
-                    result.Properties.Add(new PSNoteProperty(member.Key, member.Value));
-                return result;
+                // PowerShell member names are case-insensitive and some are
+                // reserved. Preserve keys such as {"A":1,"a":2}, {"psbase":1}
+                // or {"":1} (host results can be keyed by user data, e.g.
+                // get_attributes) in an ordinal table instead.
+                Hashtable table = new Hashtable(StringComparer.Ordinal);
+                foreach (KeyValuePair<string, object> member in members) table[member.Key] = member.Value;
+                return table;
             }
             private object ReadArray(int depth) {
                 Position++;

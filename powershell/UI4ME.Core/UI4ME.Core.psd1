@@ -20,7 +20,7 @@
         'Open-UI4MEFile', 'Remove-UI4MEDocument', 'Register-UI4MEDocumentEvent', 'Unregister-UI4MEDocumentEvent',
         'Invoke-UI4MEDocumentCommand', 'Invoke-UI4MEBatch', 'Get-UI4MEDocumentText', 'Set-UI4MEDocumentText',
         'Get-UI4MEValue', 'Set-UI4MEDocumentValue', 'Get-UI4MEChecked', 'Set-UI4MEChecked',
-        'Set-UI4MEDocumentAttribute', 'Set-UI4MEClass', 'Set-UI4MEDocumentHtml', 'Remove-UI4MEElement',
+        'Set-UI4MEDocumentAttribute', 'Get-UI4MEAttributes', 'Set-UI4MEClass', 'Set-UI4MEDocumentHtml', 'Remove-UI4MEElement',
         'Find-UI4MEElement', 'Add-UI4MEStylesheet', 'Get-UI4MEStylesheets', 'Set-UI4MEStylesheet',
         'Get-UI4MEComputedStyle', 'Get-UI4MEEnvironment', 'Set-UI4MEEnvironment', 'Get-UI4MEScroll',
         'Set-UI4MEScroll', 'Get-UI4MEFocusedElement', 'Set-UI4MEFocus', 'Get-UI4MESelection',
