@@ -1,0 +1,18 @@
+py N=15 rounds_ok=4/4 pass=1 first_burst_reader 35,984 frames/s
+ps N=15 rounds_ok=3/4 pass=0 first_burst_reader 13,508 frames/s
+py N=15 rounds_ok=4/4 pass=1 first_burst_reader 21,664 frames/s
+ps N=15 rounds_ok=4/4 pass=1 first_burst_reader 33,420 frames/s
+py N=15 rounds_ok=4/4 pass=1 first_burst_reader 59,906 frames/s
+ps N=15 rounds_ok=4/4 pass=1 first_burst_reader 31,869 frames/s
+py N=20 rounds_ok=4/4 pass=1 first_burst_reader 40,014 frames/s
+ps N=20 rounds_ok=1/4 pass=0 first_burst_
+py N=20 rounds_ok=1/4 pass=0 first_burst_
+ps N=20 rounds_ok=1/4 pass=0 first_burst_
+py N=20 rounds_ok=4/4 pass=1 first_burst_reader 36,016 frames/s
+ps N=20 rounds_ok=1/4 pass=0 first_burst_
+py N=25 rounds_ok=1/4 pass=0 first_burst_
+ps N=25 rounds_ok=1/4 pass=0 first_burst_
+py N=25 rounds_ok=1/4 pass=0 first_burst_
+ps N=25 rounds_ok=1/4 pass=0 first_burst_
+py N=25 rounds_ok=1/4 pass=0 first_burst_
+ps N=25 rounds_ok=1/4 pass=0 first_burst_

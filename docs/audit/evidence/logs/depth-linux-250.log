@@ -1,0 +1,2 @@
+TEXT deep RECT {'rect': {'height': 22.0, 'width': 38.0, 'x': 8.0, 'y': 8.0}}
+DEPTH_PASS 250

@@ -1,0 +1,19 @@
+[package]
+name = "interact-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+ui4me-renderer = { path = "<repo>/crates/ui4me-renderer" }
+serde_json = "1"
+accesskit = "=0.25.2"
+
+[profile.dev.package."*"]
+opt-level = 2
+debug = 0
+
+[profile.dev.build-override]
+opt-level = 0

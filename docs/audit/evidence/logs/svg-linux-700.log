@@ -1,0 +1,2 @@
+thread 'ui4me-assets-0' (1039080) has overflowed its stack
+fatal runtime error: stack overflow, aborting

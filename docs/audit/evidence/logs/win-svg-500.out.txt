@@ -1,0 +1,2 @@
+TEXT start
+SVG_PASS 500

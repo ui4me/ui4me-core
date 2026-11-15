@@ -1,0 +1,1 @@
+thread 'ui4me-assets-0' (2468) has overflowed its stack
