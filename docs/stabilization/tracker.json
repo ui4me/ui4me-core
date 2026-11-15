@@ -237,15 +237,21 @@
     "T5"
    ],
    "verification": {
-    "linux": "pending",
+    "linux": "Linux headless: cargo test renderer/host + verify.py (ws D); integration Python suite",
     "windows": "pending",
     "required": "both"
    },
    "status": "IN_PROGRESS",
-   "commits": [],
-   "remaining_risk": "",
+   "commits": [
+    "c712525",
+    "136a214"
+   ],
+   "remaining_risk": "Selection extents exact only for translations under scale/rotate.",
    "owner_decision": false,
-   "notes": ""
+   "notes": "Native IME/AT bounds check pending.",
+   "tests": [
+    "document::geometry_tests (T5 incl. proptest)"
+   ]
   },
   {
    "id": "F-08",
@@ -272,15 +278,21 @@
     "T10"
    ],
    "verification": {
-    "linux": "pending",
+    "linux": "Linux headless: cargo test renderer/host + verify.py (ws D); integration Python suite",
     "windows": "pending",
     "required": "both"
    },
    "status": "IN_PROGRESS",
-   "commits": [],
+   "commits": [
+    "c4ba3ad",
+    "0d1f6d0"
+   ],
    "remaining_risk": "",
    "owner_decision": false,
-   "notes": ""
+   "notes": "Code fixed; native Windows/Orca/NVDA check pending.",
+   "tests": [
+    "document::interact_tests (focus reveal)"
+   ]
   },
   {
    "id": "F-09",
@@ -308,15 +320,22 @@
     "T7"
    ],
    "verification": {
-    "linux": "pending",
+    "linux": "verify.py default stages green on non-release tree (ws F and integration python suite)",
     "windows": "pending",
-    "required": "both"
+    "required": "linux"
    },
-   "status": "IN_PROGRESS",
-   "commits": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "099f238",
+    "026d68f"
+   ],
    "remaining_risk": "",
    "owner_decision": false,
-   "notes": ""
+   "notes": "GitHub-side run not yet observed (nothing pushed).",
+   "tests": [
+    "tools/test_ci_signal.py",
+    "test_workflows.py::test_lint_runs_even_when_the_verifier_fails"
+   ]
   },
   {
    "id": "F-10",
@@ -345,15 +364,21 @@
     "T8"
    ],
    "verification": {
-    "linux": "pending",
+    "linux": "unit tests + live read-only API run",
     "windows": "pending",
-    "required": "both"
+    "required": "linux"
    },
-   "status": "IN_PROGRESS",
-   "commits": [],
-   "remaining_risk": "",
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "9240d35",
+    "126075e"
+   ],
+   "remaining_risk": "Workflow wiring unrun on GitHub.",
    "owner_decision": false,
-   "notes": ""
+   "notes": "",
+   "tests": [
+    "tools/test_ci_gate.py (recorded API: d053e09 refused, c6fd71d accepted, missing refused)"
+   ]
   },
   {
    "id": "F-11",
@@ -387,10 +412,17 @@
     "required": "both"
    },
    "status": "IN_PROGRESS",
-   "commits": [],
+   "commits": [
+    "5d1dc25",
+    "8aa7f4a",
+    "126075e"
+   ],
    "remaining_risk": "",
    "owner_decision": false,
-   "notes": ""
+   "notes": "Interim 6.0 tooling done; needs Windows qualification of the exact RC wheel.",
+   "tests": [
+    "test_release_artifacts.py"
+   ]
   },
   {
    "id": "F-12",
@@ -635,15 +667,20 @@
     "T10"
    ],
    "verification": {
-    "linux": "pending",
+    "linux": "Linux headless: cargo test renderer/host + verify.py (ws D); integration Python suite",
     "windows": "pending",
     "required": "both"
    },
    "status": "IN_PROGRESS",
-   "commits": [],
+   "commits": [
+    "4b186e7"
+   ],
    "remaining_risk": "",
    "owner_decision": false,
-   "notes": ""
+   "notes": "Native check pending.",
+   "tests": [
+    "document::interact_tests (link Enter, T10 matrix)"
+   ]
   },
   {
    "id": "F-17b",
@@ -671,15 +708,22 @@
     "T10"
    ],
    "verification": {
-    "linux": "pending",
+    "linux": "Linux headless: cargo test renderer/host + verify.py (ws D); integration Python suite",
     "windows": "pending",
     "required": "both"
    },
    "status": "IN_PROGRESS",
-   "commits": [],
+   "commits": [
+    "efee6a2",
+    "a25f757"
+   ],
    "remaining_risk": "",
    "owner_decision": false,
-   "notes": ""
+   "notes": "Russian layout native check pending.",
+   "tests": [
+    "keyboard::shortcut_key tests",
+    "click common-ancestor tests"
+   ]
   },
   {
    "id": "F-18",
@@ -775,15 +819,17 @@
    "overlap": "",
    "tests_required": [],
    "verification": {
-    "linux": "pending",
+    "linux": "gh api: visibility=public; PublicEvent 2026-11-12 by owner; 18/19 metadata URLs 200 (CHANGELOG 404 until on main)",
     "windows": "pending",
     "required": "both"
    },
-   "status": "IN_PROGRESS",
-   "commits": [],
+   "status": "NOT_REPRODUCED",
+   "commits": [
+    "37c0399"
+   ],
    "remaining_risk": "",
    "owner_decision": true,
-   "notes": ""
+   "notes": "Repository was already public (owner PublicEvent 2026-11-12). Remaining: CHANGELOG URL resolves once merged to main; check_metadata_urls.py in preflight."
   },
   {
    "id": "F-21",
@@ -815,10 +861,16 @@
     "required": "both"
    },
    "status": "IN_PROGRESS",
-   "commits": [],
+   "commits": [
+    "d24fbe0",
+    "805e59e"
+   ],
    "remaining_risk": "",
    "owner_decision": false,
-   "notes": ""
+   "notes": "Tooling done; mass bump pending (lead, after integration).",
+   "tests": [
+    "tools/test_version_source.py"
+   ]
   },
   {
    "id": "F-22",
@@ -852,10 +904,12 @@
     "required": "both"
    },
    "status": "IN_PROGRESS",
-   "commits": [],
+   "commits": [
+    "026d68f"
+   ],
    "remaining_risk": "",
    "owner_decision": false,
-   "notes": ""
+   "notes": "Matrix/Pester/clean-machine jobs wired; unrun on GitHub; 3.10 and AllUsers jobs depend on ws E."
   },
   {
    "id": "F-23",
@@ -882,15 +936,24 @@
    "overlap": "",
    "tests_required": [],
    "verification": {
-    "linux": "pending",
+    "linux": "local zizmor, actionlint, cargo deny",
     "windows": "pending",
-    "required": "both"
+    "required": "linux"
    },
-   "status": "IN_PROGRESS",
-   "commits": [],
-   "remaining_risk": "",
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "14b1ae3",
+    "026d68f",
+    "126075e"
+   ],
+   "remaining_risk": "Windows binary unsigned (owner: certificate needed); attestations unrun.",
    "owner_decision": false,
-   "notes": ""
+   "notes": "",
+   "tests": [
+    "test_workflows.py",
+    "zizmor 0 / actionlint 0",
+    "cargo deny check"
+   ]
   },
   {
    "id": "F-24",
@@ -917,15 +980,21 @@
    "overlap": "",
    "tests_required": [],
    "verification": {
-    "linux": "pending",
+    "linux": "python suite",
     "windows": "pending",
-    "required": "both"
+    "required": "linux"
    },
-   "status": "IN_PROGRESS",
-   "commits": [],
-   "remaining_risk": "",
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "37c0399",
+    "61c381b"
+   ],
+   "remaining_risk": "Changelog 1.0.2 section to finalise; qualification records not yet generated from tools.",
    "owner_decision": false,
-   "notes": ""
+   "notes": "",
+   "tests": [
+    "test_release_metadata.py"
+   ]
   },
   {
    "id": "F-25",
@@ -1037,7 +1106,7 @@
    "commits": [],
    "remaining_risk": "",
    "owner_decision": false,
-   "notes": ""
+   "notes": "verify_patches.sh and cargo deny scheduled nightly (14b1ae3); fork reduction postponed per 08."
   },
   {
    "id": "F-28",
@@ -1738,7 +1807,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "nightly CI job running each harness for a fixed seed and 120 s in release, worker stack 1 MiB; add generators for deep nesting (≥ 256 via move/insert chains), huge tables (`<td>` × 10⁴, `colspan=1000`), 10⁵ siblings, extreme numeric CSS combined with `calc()` NaN paths. **Complexity**: S. **Confidence**: High.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -1830,7 +1899,7 @@
    "reproduction": "`interact-probe tabscroll`.",
    "root_cause": "HTML's focusing steps include \"scroll into view (nearest)\". That step was never implemented, and the module header of `keyboard.rs` lists related navigation work as not done.",
    "correction": "- In `focus_update`, after `set_focus` succeeds, scroll the new focus target into view with `block: nearest, inline: nearest`, `instant`, unless `FocusSource::Pointer` is set. Pointer focus is already visible, and browsers do not scroll on click focus.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -1854,7 +1923,7 @@
    "reproduction": "- `interact-probe fixed select` gives the main-tree results.",
    "root_cause": "Five copies of the \"viewport offset of node\" computation exist. PR #4 patched one of them.",
    "correction": "- Introduce one `DocumentPipeline::viewport_offset(node) -> (dx, dy)`, or better a `node_to_viewport` transform (see INTERACT-03). It should sum sticky, anchor and scroll offsets up to and including the nearest fixed ancestor.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -1878,7 +1947,7 @@
    "reproduction": "`interact-probe transform select`.",
    "root_cause": "The layout fragment tree has no transforms. Paint and hit testing apply them in the scene, but geometry consumers read layout rects.",
    "correction": "- Expose from the committed scene or hit index a per-element `local_to_viewport: Affine2D`, including scroll, sticky, fixed and transforms.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -1902,7 +1971,7 @@
    "reproduction": "`interact-probe anim perf`.",
    "root_cause": "- The a11y build is keyed on \"needs repaint\" instead of \"semantics or geometry changed\".",
    "correction": "1. Track a semantic epoch in `Document`, bumped by DOM, attribute, value, selection, focus, layout-geometry and scroll changes but not by caret blink or paint-only animation ticks. Rebuild only when it changed. Throttle geometry-only rebuilds (scroll, animations that move layout) to at most 10 Hz.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -1926,7 +1995,7 @@
    "reproduction": "`interact-probe link`.",
    "root_cause": "",
    "correction": "- In the Enter arm, also dispatch the synthetic `click` for `a[href]` and `area[href]`. Enter fires on keydown and Space must not activate links, as in browsers.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -1950,7 +2019,7 @@
    "reproduction": "`interact-probe layout`.",
    "root_cause": "",
    "correction": "- Add `fn shortcut_letter(key: &str, code: &str) -> Option<char>`. When Ctrl/Meta is held and `key` is not ASCII, derive the letter from `code` (`KeyA`..`KeyZ` → a..z). This is the Chromium, GTK and Qt approach, applied only when the layout produces no Latin letter.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -1974,7 +2043,7 @@
    "reproduction": "`interact-probe click`.",
    "root_cause": "",
    "correction": "- On release, compute the nearest common inclusive ancestor of `press_target` and the release target in the flat tree. If both are connected, dispatch `click`, `auxclick` and `contextmenu` there, per UI Events and Pointer Events.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -2020,7 +2089,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "- On `cfg(windows)`, when `ime.password` is set, send `ImeRequest::Disable`, or never enable, so keys arrive as plain `KeyboardInput` text.",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -2028,7 +2097,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Deferred: patched winit-win32 ImeRequest::Disable semantics unverified; needs native Windows IME test (proposal: disable IME when ime.password on cfg(windows))."
   },
   {
    "id": "INTERACT-10",
@@ -2042,9 +2111,13 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "- On `WindowFocus{false}`, if a capture or a pending capture exists, dispatch `pointercancel` then `lostpointercapture` and clear `capture`, as browsers do when the OS steals the pointer.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "IN_PROGRESS",
+   "commits": [
+    "4738155"
+   ],
+   "tests": [
+    "pointer capture focus-loss test"
+   ],
    "verification": {
     "linux": "pending",
     "windows": "pending"
@@ -2086,7 +2159,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "- Instead of time-based suppression, drop only events that predate the reset. Track an \"IME generation\", bump it on `Disable`, and accept events once an `Ime::Enabled` arrives for the new generation.",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -2094,7 +2167,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Deferred: depends on native IM event ordering (Wayland text-input, IMM32); removing quiet window could reintroduce stale-commit bug."
   },
   {
    "id": "INTERACT-13",
@@ -2108,7 +2181,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "- Windows: `lines * SPI_GETWHEELSCROLLLINES * ~33 px` (or treat the page setting `-1` as a page).",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -2116,7 +2189,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Deferred: SPI_GETWHEELSCROLLLINES changes Windows scroll speed; needs native verification."
   },
   {
    "id": "INTERACT-14",
@@ -3224,7 +3297,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "add a committed `deny.toml` and a CI job running `cargo deny check advisories licenses sources`; `ignore` the four unmaintained IDs with a dated rationale so a *new* advisory still fails the build. Track `fontdue`->`skrifa` (already a direct dep) to drop `ttf-parser`, and the zbus 5/6 `names` migration. Complexity: S. Confidence: High.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3248,7 +3321,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "run both `verify.sh` in CI (provision the pristine checkout, or vendor a hash of it); record the upstream base revisions and a cadence for pulling security fixes; verify the published sdist actually contains the patched Stylo sources (MPL-2.0 §3.2); consider whether the subgrid fork can be upstreamed to shed the maintenance burden. Complexity: S (CI gate) / L (subgrid upstreaming). Confidence: Hig",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3316,7 +3389,7 @@
    "reproduction": "`gh run list --repo ui4me/ui4me-core --limit 30` and compare rows 43484564824 and 43484619109. `gh api repos/ui4me/ui4me-core/environments`.",
    "root_cause": "The gate is documentation only (`docs/release/publishing.md:7`, \"All gates … pass\"). The plan has no protection features, and the workflow has no CI-status check.",
    "correction": "1. In `publish.yaml` `preflight` (after line 54) and `publish-powershell.yaml` `build-and-check`, add a step that fails unless every required check run for `$SHA` concluded `success`. For example, `gh api repos/$GITHUB_REPOSITORY/commits/$SHA/check-runs --paginate --jq '.check_runs[]|[.name,.conclusion]|@tsv'` must contain `verify (ubuntu-24.04)\\tsuccess` and `verify (windows-2022)\\tsuccess`, plus",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3340,7 +3413,7 @@
    "reproduction": "Push any one-line source change: CI goes red. Locally, `touch notes.txt && python3 tools/release/refresh_source_manifest.py --check` exits 1 (follows from the code: an untracked, non-ignored file is included).",
    "root_cause": "The manifest is a legacy of archive-based delivery. `provenance-1.0.0.json` records an input zip with no `.git`, and `verify_package.py`'s docstring says \"Verify the delivered source manifest before importing\". In a Git repository the commit or tree hash already is a tamper-evident manifest, and an unsigned in-tree hash list adds no security: whoever edits a file can regenerate it. Placing a relea",
    "correction": "1. Delete `test_checked_manifest_matches_entire_source`. Keep the generator unit tests (`:19-51`).",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3364,7 +3437,7 @@
    "reproduction": "`gh release download v1.0.1 --pattern '*.whl'`, then hash `ui4me_core/_bin/ui4me-host*` inside each wheel and compare with `qualification-1.0.1.json`.",
    "root_cause": "The process qualifies local candidates, and then CI rebuilds them for publication.",
    "correction": "Switch to promote-not-rebuild, as PSGallery already does:",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3388,7 +3461,7 @@
    "reproduction": "`gh run list` (row 43512337180) and `git ls-remote --tags origin`.",
    "root_cause": "",
    "correction": "1. In `build-and-check`, resolve `TAG_SHA=$(git ls-remote origin \"refs/tags/v$VERSION^{}\" …)`, falling back to the lightweight ref, and `test \"$(git rev-parse HEAD)\" = \"$TAG_SHA\"`. Or check out `ref: v${{ inputs.version }}` explicitly instead of `main`.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3412,7 +3485,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "Decide on visibility. If the repo stays private, point metadata at a public docs site or Pages site, and at the sdist-contained LICENSE. Add a check to the publish preflight that every URL in `project.urls` and `PrivateData.PSData.*Uri` returns 200 when fetched without credentials.",
-   "status": "OPEN",
+   "status": "NOT_REPRODUCED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3420,7 +3493,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Repository public since 2026-11-12; links resolve (see F-20)."
   },
   {
    "id": "RELEASE-06",
@@ -3460,7 +3533,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "1. Make `Cargo.toml [workspace.package].version` the single source.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3484,7 +3557,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "1. Add a cheap Linux matrix job: build the host once, then `uv run --python {3.10,3.11,3.13,3.14} python -m unittest tools/test_bootstrap.py tools/test_application.py tools/test_reference_client.py` with `UI4ME_HOST_BINARY=target/debug/ui4me-host`.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3508,7 +3581,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "1. Pin all `uses:` to full SHAs with a version comment and add `.github/dependabot.yml` for `github-actions`, `cargo` and `pip`.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3532,7 +3605,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "1. Make the qualification record machine-generated: `native_acceptance.py` (schema 2), the Pester `Qualify.ps1` output and `verify.py` `report.json` merged by a `tools/release/make_record.py` that embeds the artifact hashes and the evidence-file SHA-256s.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3556,7 +3629,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "1. Add `docs/release/versioning.md` stating SemVer for the public Python and PowerShell APIs and the manifest schema, the protocol version policy, the supported-platform policy, and the deprecation window.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3580,7 +3653,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "- Going forward: PR-only `main` (requires RELEASE-01's plan or visibility change), squash-merge only, delete-branch-on-merge, CODEOWNERS for `crates/ui4me-host/src/transport.rs`, `.github/`, `tools/release/` and `third_party/`, and PR and issue templates with a \"native-qualification needed?\" checkbox.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3602,7 +3675,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "1. Create an annotated tag and a **draft** release with all assets first.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3624,7 +3697,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "- Use `on: push: branches: [main]` plus `pull_request`.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3646,7 +3719,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "- Parse the workflows with `yaml.safe_load` and assert on the structure (triggers, `jobs.pypi.needs`, `permissions`, `environment.name`). Add actionlint and zizmor (RELEASE-09).",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3668,7 +3741,7 @@
    "reproduction": "`exp/RELEASE/contributor.sh` (see `contributor.log`).",
    "root_cause": "",
    "correction": "- In the test, either set `XDG_RUNTIME_DIR` to a private temp dir in `run_app`'s env, or assert only that no `*.toml` or temp manifest remains.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3690,7 +3763,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "- Rename the build override to `UI4ME_WHEEL_HOST_BINARY`, separate from the runtime override.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3712,7 +3785,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "- Move the build into a reusable workflow `build-dist.yml` (`on: workflow_call` and `workflow_dispatch`). `publish.yaml` would call it and then promote. Delete `release-linux.yml` and `release-windows.yml`.",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3734,7 +3807,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "- Add `nightly.yml` (`schedule:` plus `workflow_dispatch`, Linux only) with these steps:",
-   "status": "OPEN",
+   "status": "IN_PROGRESS",
    "commits": [],
    "tests": [],
    "verification": {
@@ -4035,8 +4108,8 @@
   {
    "id": "T5",
    "kind": "test",
-   "status": "OPEN",
-   "location": "",
+   "status": "IN_PROGRESS",
+   "location": "renderer document::geometry_tests",
    "ci": "",
    "notes": ""
   },
@@ -4051,16 +4124,16 @@
   {
    "id": "T7",
    "kind": "test",
-   "status": "OPEN",
-   "location": "",
+   "status": "IN_PROGRESS",
+   "location": "tools/test_ci_signal.py, test_workflows.py",
    "ci": "",
    "notes": ""
   },
   {
    "id": "T8",
    "kind": "test",
-   "status": "OPEN",
-   "location": "",
+   "status": "IN_PROGRESS",
+   "location": "tools/test_ci_gate.py",
    "ci": "",
    "notes": ""
   },
@@ -4075,24 +4148,24 @@
   {
    "id": "T10",
    "kind": "test",
-   "status": "OPEN",
-   "location": "",
+   "status": "IN_PROGRESS",
+   "location": "renderer document::interact_tests",
    "ci": "",
    "notes": ""
   },
   {
    "id": "T11",
    "kind": "test",
-   "status": "OPEN",
-   "location": "",
+   "status": "IN_PROGRESS",
+   "location": "ci.yml python matrix 3.10-3.14 + Pester (unrun on GitHub)",
    "ci": "",
    "notes": ""
   },
   {
    "id": "T12",
    "kind": "test",
-   "status": "OPEN",
-   "location": "",
+   "status": "IN_PROGRESS",
+   "location": "ci.yml clean-wheel + allusers jobs, verify-published.yml",
    "ci": "",
    "notes": ""
   },
@@ -4107,8 +4180,8 @@
   {
    "id": "T14",
    "kind": "test",
-   "status": "OPEN",
-   "location": "",
+   "status": "IN_PROGRESS",
+   "location": "tools/windowed_smoke.py + nightly",
    "ci": "",
    "notes": ""
   },
