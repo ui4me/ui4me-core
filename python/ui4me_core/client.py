@@ -7,6 +7,7 @@ await host RPCs. Both directions use the same length-prefixed JSON-RPC profile.
 
 from __future__ import annotations
 
+import collections
 import concurrent.futures
 import ctypes
 import json
@@ -17,6 +18,7 @@ import struct
 import sys
 import threading
 import time
+import traceback
 from typing import Any, Callable
 
 CLIENT_VERSION = "1.0.1"  # Kept equal to ui4me_core.__version__ (checked by tests).
@@ -24,7 +26,120 @@ CLIENT_VERSION = "1.0.1"  # Kept equal to ui4me_core.__version__ (checked by tes
 MAX_FRAME_BYTES = 2 * 1024 * 1024
 MAX_PENDING = 128
 MAX_QUEUED_BYTES = 8 * 1024 * 1024
+MAX_QUEUED_CALLBACKS = 128
 _DEFAULT_TIMEOUT = object()
+
+# Delivery classes for host messages waiting for a callback worker (see
+# classify_message and docs/reference/protocol.md, "Writing a binding").
+CONTROL = "control"          # never dropped; bypasses the queue bound
+DISCRETE = "discrete"        # dropped only when nothing coalescible is queued
+COALESCIBLE = "coalescible"  # dropped first; a later one supersedes it
+
+_CONTROL_METHODS = frozenset({
+    "app.shutdown", "app.activated", "request.cancelled", "document.error",
+    "desktop.preferences_changed",
+})
+_LIFECYCLE_REQUESTS = frozenset({"window.before_close", "app.before_quit", "app.shutdown"})
+_CONTROL_WINDOW_EVENTS = frozenset({"closed", "close_requested"})
+_COALESCIBLE_WINDOW_EVENTS = frozenset({"resized", "scale_changed"})
+_COALESCIBLE_DOCUMENT_EVENTS = frozenset({
+    "pointermove", "pointerover", "pointerout", "mousemove", "mouseover", "mouseout",
+    "wheel", "scroll", "selectionchange", "dragover", "drag_feedback",
+})
+
+
+def classify_message(method: str, params: dict | None, *, request: bool = False) -> str:
+    """Return how a host message may be treated when callbacks fall behind.
+
+    Lifecycle requests and control notifications (window ``closed`` and
+    ``close_requested``, ``document.error``, ``app.shutdown``,
+    ``app.activated``, ``request.cancelled``, ``desktop.preferences_changed``)
+    are ``CONTROL``. High-frequency, non-semantic events (pointer and mouse
+    moves, ``wheel``, ``scroll``, ``selectionchange``, drag-over, CSS
+    ``transition*``/``animation*``, window ``resized``/``scale_changed``) are
+    ``COALESCIBLE``. Everything else, such as ``click`` or ``input``, is
+    ``DISCRETE``.
+    """
+    if request:
+        return CONTROL if method in _LIFECYCLE_REQUESTS else DISCRETE
+    if method in _CONTROL_METHODS:
+        return CONTROL
+    params = params if isinstance(params, dict) else {}
+    if method == "window.event":
+        kind = params.get("type")
+        if kind in _CONTROL_WINDOW_EVENTS:
+            return CONTROL
+        return COALESCIBLE if kind in _COALESCIBLE_WINDOW_EVENTS else DISCRETE
+    if method == "document.event":
+        event = params.get("event")
+        kind = event.get("type") if isinstance(event, dict) else None
+        if isinstance(kind, str) and (kind in _COALESCIBLE_DOCUMENT_EVENTS
+                                      or kind.startswith(("transition", "animation"))):
+            return COALESCIBLE
+    return DISCRETE
+
+
+class _CallbackQueue:
+    """A bounded FIFO for callback workers that knows which messages matter.
+
+    ``CONTROL`` messages are always admitted and never evicted (their volume
+    is bounded by the host: one per window, document, request or lifecycle
+    step). When ``capacity`` other messages are queued, a new message first
+    evicts the oldest queued ``COALESCIBLE`` one; if there is none, the new
+    message is refused. Kept messages stay in arrival order.
+    """
+
+    def __init__(self, capacity: int):
+        self._items: collections.deque = collections.deque()
+        self._capacity = capacity
+        self._bounded = 0
+        self._ready = threading.Condition(threading.Lock())
+        self.unfinished_tasks = 0
+        self.drained = threading.Event()  # set whenever the queue becomes empty
+        self.drained.set()
+
+    def put(self, message: dict, kind: str) -> tuple[bool, list]:
+        """Queue ``message``; return (admitted, evicted [(message, kind)])."""
+        evicted = []
+        with self._ready:
+            if kind != CONTROL and self._bounded >= self._capacity:
+                for index, (queued, queued_kind) in enumerate(self._items):
+                    if queued_kind == COALESCIBLE:
+                        del self._items[index]
+                        self._bounded -= 1
+                        self.unfinished_tasks -= 1
+                        evicted.append((queued, queued_kind))
+                        break
+                else:
+                    return False, evicted
+            self._items.append((message, kind))
+            if kind != CONTROL:
+                self._bounded += 1
+            self.unfinished_tasks += 1
+            self.drained.clear()
+            self._ready.notify()
+        return True, evicted
+
+    def get(self, timeout: float) -> dict:
+        with self._ready:
+            if not self._items:
+                self._ready.wait(timeout)
+            if not self._items:
+                raise queue.Empty
+            message, kind = self._items.popleft()
+            if kind != CONTROL:
+                self._bounded -= 1
+            if not self._items:
+                self.drained.set()
+            return message
+
+    def task_done(self) -> None:
+        with self._ready:
+            self.unfinished_tasks -= 1
+
+    def qsize(self) -> int:
+        with self._ready:
+            return len(self._items)
 
 
 class ProtocolError(Exception):
@@ -273,6 +388,33 @@ def write_all(stream, frame: bytes) -> None:
         remaining = remaining[size:]
 
 
+def _log(text: str) -> None:
+    try:
+        print(f"UI4ME: {text}", file=sys.stderr, flush=True)
+    except Exception:  # Logging must never fail the transport.
+        pass
+
+
+def _exit_status(error: BaseException) -> int:
+    """The process exit status Python would use for this exception."""
+    if isinstance(error, KeyboardInterrupt):
+        return 130
+    code = getattr(error, "code", None)
+    if code is None:
+        return 0
+    if isinstance(code, int) and not isinstance(code, bool):
+        return code
+    _log(str(code))
+    return 1
+
+
+if issubclass(concurrent.futures.TimeoutError, TimeoutError):  # Python 3.11+
+    _CallTimeout = TimeoutError
+else:  # pragma: no cover - Python 3.10
+    class _CallTimeout(TimeoutError, concurrent.futures.TimeoutError):
+        """A call() timeout; both the builtin and the futures class catch it."""
+
+
 def use_utf8_stdio() -> None:
     """Write UTF-8 to stdout/stderr when they are the host's log pipes.
 
@@ -297,13 +439,27 @@ class RpcClient:
         self._handlers: dict[str, Callable[[dict], Any]] = {}
         self._notifications: dict[str, Callable[[dict], None]] = {}
         self._outgoing = queue.Queue(maxsize=256)
-        self._callbacks = queue.Queue(maxsize=128)
+        self._callbacks = _CallbackQueue(MAX_QUEUED_CALLBACKS)
         # Optional application-event ordering must not serialize lifecycle
         # policy requests behind a user callback waiting for a native dialog.
         # The default client retains its qualified callback-pool behavior.
-        self._ordered_notifications = queue.Queue(maxsize=128) if ordered_notifications else None
+        self._ordered_notifications = _CallbackQueue(MAX_QUEUED_CALLBACKS) if ordered_notifications else None
         self._queued_bytes = 0
+        # Notifications discarded because callbacks fell behind, in total and
+        # per delivery class. CONTROL is never dropped, so it stays 0.
         self.dropped_notifications = 0
+        self.dropped_by_kind = {CONTROL: 0, DISCRETE: 0, COALESCIBLE: 0}
+        # Notifications nobody subscribed to (see notification_filter); these
+        # never occupy a queue slot and are not drops.
+        self.filtered_notifications = 0
+        # Optional reader-thread predicate (method, params) -> keep? It must
+        # be fast and must not block or run application code.
+        self.notification_filter: Callable[[str, dict], bool] | None = None
+        self._received_hooks: dict[str, Callable[[dict], None]] = {}
+        self._stats_lock = threading.Lock()
+        self._burst_drops = 0
+        # Exit status requested by SystemExit/KeyboardInterrupt in a callback.
+        self.exit_status: int | None = None
         self._failure: BaseException | None = None
         self.on_request("window.before_close", lambda _: {"allow": True})
         self.on_request("app.before_quit", lambda _: {"allow": True})
@@ -344,6 +500,63 @@ class RpcClient:
 
     def on_notification(self, method: str, callback: Callable[[dict], None]) -> None:
         self._notifications[method] = callback
+
+    def on_notification_received(self, method: str, hook: Callable[[dict], None] | None) -> None:
+        """Run ``hook(params)`` on the reader thread as each such notification
+        arrives, before it is queued for its callback. For bookkeeping only
+        (marking a window closed): it must not block, take locks that user
+        code can hold across RPCs, or run application callbacks."""
+        if hook is None:
+            self._received_hooks.pop(method, None)
+        else:
+            self._received_hooks[method] = hook
+
+    def _count_drop(self, message: dict, kind: str) -> None:
+        with self._stats_lock:
+            self.dropped_notifications += 1
+            self.dropped_by_kind[kind] += 1
+            self._burst_drops += 1
+            first = self._burst_drops == 1
+        if first:
+            event = message.get("params", {}).get("event") if isinstance(message.get("params"), dict) else None
+            what = event.get("type") if isinstance(event, dict) else message.get("method")
+            _log("event callbacks are behind (a callback is slow or blocked); dropping queued "
+                 f"events, pointer/scroll/animation first (first dropped: {what}). Window "
+                 "lifecycle, errors and shutdown are never dropped.")
+
+    def _end_drop_burst(self) -> None:
+        with self._stats_lock:
+            dropped, self._burst_drops = self._burst_drops, 0
+        if dropped:
+            _log(f"event callbacks caught up; {dropped} event(s) were dropped "
+                 f"({self.dropped_notifications} in total)")
+
+    def _report_callback_error(self, error: BaseException, context: str, *, request_quit: bool = True) -> None:
+        """Make a failed callback visible. SystemExit and KeyboardInterrupt
+        raised in a callback request an orderly application quit instead of
+        silently ending the worker thread; run() then exits with that status."""
+        if isinstance(error, (SystemExit, KeyboardInterrupt)):
+            status = _exit_status(error)
+            if self.exit_status is None or (status and not self.exit_status):
+                self.exit_status = status
+            action = "requesting application quit" if request_quit else "allowing the quit"
+            _log(f"{type(error).__name__}({status}) raised in {context}; {action} "
+                 f"(exit status {status})")
+            if request_quit and not self.closed:
+                try:
+                    future = self.call_async("app.request_quit")
+                    future.add_done_callback(lambda done: done.cancelled() or done.exception())
+                except (DisconnectedError, RpcError, ProtocolError):
+                    pass
+            return
+        try:
+            print(f"UI4ME: {context} failed:", file=sys.stderr)
+            traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
+            sys.stderr.flush()
+        except Exception:  # Reporting must never kill the worker.
+            pass
+
+    report_callback_error = _report_callback_error
 
     def _enqueue(self, message: dict) -> None:
         frame = encode_frame(message)
@@ -395,9 +608,13 @@ class RpcClient:
         future = self.call_async(method, params)
         try:
             return future.result(timeout)
-        except concurrent.futures.TimeoutError:
+        except concurrent.futures.TimeoutError as error:
             future.cancel()  # Outcome may be unknown; this is not a rollback.
-            raise
+            if isinstance(error, TimeoutError):
+                raise  # Python 3.11+: the same class as the builtin.
+            # Python 3.10: concurrent.futures.TimeoutError is a separate class;
+            # raise one that `except TimeoutError` (documented) also catches.
+            raise _CallTimeout(f"{method} timed out after {timeout} s; its outcome is unknown") from None
 
     def notify(self, method: str, params: dict | None = None) -> None:
         self._enqueue({"jsonrpc": "2.0", "method": method, "params": params or {}})
@@ -428,18 +645,7 @@ class RpcClient:
                         raise ProtocolError("Invalid host request")
                     if "id" in message and not isinstance(message["id"], str):
                         raise ProtocolError("Request IDs must be strings")
-                    callbacks = self._callbacks
-                    if (self._ordered_notifications is not None and "id" not in message
-                            and message["method"] != "app.shutdown"):
-                        callbacks = self._ordered_notifications
-                    try:
-                        callbacks.put_nowait(message)
-                    except queue.Full:
-                        if "id" in message:
-                            self._enqueue({"jsonrpc": "2.0", "id": message["id"],
-                                           "error": {"code": -32005, "message": "Callback queue is full"}})
-                        else:
-                            self.dropped_notifications += 1
+                    self._admit(message)
                 else:
                     request_id = message.get("id")
                     if not isinstance(request_id, str) or (("result" in message) == ("error" in message)):
@@ -466,18 +672,63 @@ class RpcClient:
         except BaseException as error:
             self._fail(error)
 
+    def _admit(self, message: dict) -> None:
+        """Reader thread: classify, apply bookkeeping, queue. Never blocks."""
+        method, params, request = message["method"], message.get("params", {}), "id" in message
+        if not request:
+            if self.notification_filter is not None:
+                try:
+                    keep = self.notification_filter(method, params)
+                except Exception:
+                    keep = True
+                if not keep:
+                    self.filtered_notifications += 1
+                    return
+            hook = self._received_hooks.get(method)
+            if hook is not None:
+                try:
+                    hook(params)
+                except Exception as error:  # Bookkeeping must never stop the reader.
+                    self._report_callback_error(error, f"bookkeeping for {method}")
+            if method == "app.shutdown":
+                self.shutdown_requested.set()
+        kind = classify_message(method, params, request=request)
+        callbacks = self._callbacks
+        if self._ordered_notifications is not None and not request and method != "app.shutdown":
+            callbacks = self._ordered_notifications
+        admitted, evicted = callbacks.put(message, kind)
+        for dropped, dropped_kind in evicted:
+            self._count_drop(dropped, dropped_kind)
+        if admitted:
+            return
+        if request:
+            self._enqueue({"jsonrpc": "2.0", "id": message["id"],
+                           "error": {"code": -32005, "message": "Callback queue is full"}})
+        else:
+            self._count_drop(message, kind)
+
     def _callback_worker(self, callbacks=None):
         callbacks = self._callbacks if callbacks is None else callbacks
         while not self._closed.is_set():
             try:
                 message = callbacks.get(timeout=0.2)
             except queue.Empty:
+                if self._burst_drops and self._all_drained():
+                    self._end_drop_burst()
                 continue
             try:
                 if not self._dispatch(message):
                     return
+            except BaseException as error:  # Never let one message end the worker.
+                self._report_callback_error(error, f"handling of {message.get('method')}")
             finally:
                 callbacks.task_done()
+            if self._burst_drops and self._all_drained():
+                self._end_drop_burst()
+
+    def _all_drained(self) -> bool:
+        return self._callbacks.drained.is_set() and (
+            self._ordered_notifications is None or self._ordered_notifications.drained.is_set())
 
     def wait_for_notifications(self, timeout: float) -> bool:
         """Wait until ordered notifications already received have been handled.
@@ -503,8 +754,8 @@ class RpcClient:
             if callback:
                 try:
                     callback(params)
-                except Exception as error:
-                    print(f"Notification handler failed: {type(error).__name__}: {error}", flush=True)
+                except BaseException as error:
+                    self._report_callback_error(error, f"{method} notification handler")
             if method == "app.shutdown":
                 self.shutdown_requested.set()
             return True
@@ -517,11 +768,21 @@ class RpcClient:
         except RpcError as error:
             response = {"jsonrpc": "2.0", "id": message["id"], "error": {
                 "code": error.code, "message": error.message, "data": error.data}}
-        except Exception as error:
+        except BaseException as error:
+            # The host treats an error answer to a policy request as "deny".
+            self._report_callback_error(error, f"{method} request handler")
             response = {"jsonrpc": "2.0", "id": message["id"], "error": {
                 "code": -32603, "message": f"Callback failed: {type(error).__name__}"}}
         try:
-            self._enqueue(response)
+            try:
+                self._enqueue(response)
+            except (TypeError, ValueError, RecursionError, ProtocolError) as error:
+                # json.dumps refused the result (NaN, an object, a cycle) or the
+                # frame is too large: answer visibly instead of never answering.
+                self._report_callback_error(error, f"encoding the result of {method}")
+                self._enqueue({"jsonrpc": "2.0", "id": message["id"], "error": {
+                    "code": -32603,
+                    "message": f"Callback result is not JSON-serializable: {type(error).__name__}: {error}"[:1024]}})
             if method == "app.shutdown":
                 self.shutdown_requested.set()
         except (DisconnectedError, RpcError):

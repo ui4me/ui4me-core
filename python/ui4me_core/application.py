@@ -15,13 +15,30 @@ import os
 from pathlib import Path
 import sys
 import threading
+import traceback
 from typing import Any
 
-from .client import DisconnectedError, RpcClient
+from .client import DisconnectedError, RpcClient, RpcError
+
+CLOSED = -32004
+INVALID_STATE = -32008
 
 
 class StaleDocumentError(RuntimeError):
     """The document was replaced, unloaded, or its window was closed."""
+
+
+class HostStaleError(StaleDocumentError, RpcError):
+    """The host answered ``-32004``: the window, document or bitmap no longer
+    exists (for example its ``closed`` event had not been processed yet).
+
+    It is both a ``StaleDocumentError`` (the documented contract for stale
+    handles) and an ``RpcError`` with ``code == -32004`` (what 1.0.1 raised).
+    The facade is retired when this is raised.
+    """
+
+    def __init__(self, code: int, message: str, data: Any = None):
+        RpcError.__init__(self, code, message, data)
 
 
 class Application:
@@ -41,9 +58,26 @@ class Application:
         self._ready = False
         self._window_listeners: list[Callable[[dict], Any]] = []
         self._shutdown_listeners: list[Callable[[], Any]] = []
-        self.rpc.on_notification("document.event", self._document_event)
+        self._activated_listeners: list[Callable[[dict], Any]] = []
+        # Windows/documents retired on the transport's reader thread whose
+        # full cleanup and listener calls are still queued for the event worker.
+        self._closing: dict[str, Window] = {}
+        self._failed_documents: dict[str, Document] = {}
+        # Windows whose first load failed before app.ready (see open_html).
+        self._abandoned: list[Window] = []
+        self._warned_policies: set[int] = set()
+        self._on_document_event = self._document_event
+        self.rpc.on_notification("document.event", self._on_document_event)
         self.rpc.on_notification("document.error", self._document_error)
         self.rpc.on_notification("window.event", self._window_event)
+        self.rpc.on_notification("app.activated", self._activated)
+        received = getattr(self.rpc, "on_notification_received", None)
+        if received is not None:
+            # Control bookkeeping is applied as the message arrives, so a slow
+            # or blocked event callback cannot delay or lose it (F-29).
+            received("window.event", self._window_event_received)
+            received("document.error", self._document_error_received)
+            self.rpc.notification_filter = self._wants_notification
 
     @classmethod
     def start(cls, *, name: str | None = None, app_id: str | None = None,
@@ -114,37 +148,83 @@ class Application:
         return window
 
     def open_file(self, path: str | Path, **window_options) -> Window:
+        """Create a window and load an HTML file into it.
+
+        If loading fails, the exception is raised with the new window as
+        ``error.window``. After ``run()``/``ready()`` that window is closed.
+        Before it, closing a window would cancel the whole application, so
+        the empty window is kept: load a fallback into ``error.window``, or
+        open another window, in which case the unused one is closed as soon
+        as the application is ready.
+        """
         window = self.create_window(**window_options)
         try:
             window.load_file(path)
-        except BaseException:
-            window.request_close()
+        except BaseException as error:
+            self._abandon(window, error)
             raise
         return window
 
     def open_html(self, html: str, *, asset_root: str | Path | None = None,
                   **window_options) -> Window:
+        """Create a window and load ``html`` into it (see ``open_file`` for failures)."""
         window = self.create_window(**window_options)
         try:
             window.load_html(html, asset_root=asset_root)
-        except BaseException:
-            window.request_close()
+        except BaseException as error:
+            self._abandon(window, error)
             raise
         return window
+
+    def _abandon(self, window: Window, error: BaseException) -> None:
+        try:
+            error.window = window  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        if not self._ready:
+            # The host cancels startup when a window closes before app.ready.
+            self._abandoned.append(window)
+            return
+        try:
+            window.request_close()
+        except Exception:  # Never hide the load error behind a cleanup error.
+            pass
 
     def ready(self) -> None:
         if not self._ready:
             self.rpc.call("app.ready")
             self._ready = True
+            abandoned, self._abandoned = self._abandoned, []
+            for window in abandoned:
+                # A first load failed before readiness and the window was never
+                # reused; close it now that closing no longer cancels startup.
+                with self._lock:
+                    others = any(w is not window and not w.closed for w in self._windows.values())
+                if others and not window.closed and window.document is None:
+                    try:
+                        window.request_close()
+                    except Exception:
+                        pass
 
     def run(self) -> None:
         """Announce readiness and wait for an orderly native shutdown.
 
         Before returning, events the host sent ahead of the shutdown (such as
         the last window's ``closed`` event) are delivered (for up to two
-        seconds), then ``on_shutdown`` callbacks run in this thread.
+        seconds), then ``on_shutdown`` callbacks run in this thread. A quit
+        requested before ``run()`` (``request_quit()`` during startup) is an
+        orderly shutdown, not an error. If a callback raised ``SystemExit``
+        (``sys.exit(n)``) or ``KeyboardInterrupt``, the application was asked
+        to quit, and ``run()`` finally raises ``SystemExit`` with that status.
         """
-        self.ready()
+        if not self.rpc.shutdown_requested.is_set():
+            try:
+                self.ready()
+            except RpcError as error:
+                # Quitting during startup makes app.ready fail with -32008;
+                # app.shutdown follows at once in that case.
+                if error.code != INVALID_STATE or not self.rpc.shutdown_requested.wait(2.0):
+                    raise
         while not self.rpc.shutdown_requested.wait(0.1):
             if self.rpc.closed:
                 raise DisconnectedError("The host disconnected before orderly shutdown")
@@ -155,7 +235,10 @@ class Application:
             try:
                 callback()
             except Exception as error:  # One failing hook must not skip the others.
-                print(f"Shutdown callback failed: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
+                self._report(error, "on_shutdown callback")
+        status = getattr(self.rpc, "exit_status", None)
+        if status:
+            raise SystemExit(status)
 
     def on_window_event(self, callback: Callable[[dict], Any]) -> Callable[[], None]:
         """Call ``callback(params)`` for every native window event.
@@ -180,17 +263,74 @@ class Application:
         with self._lock:
             self._shutdown_listeners.append(callback)
 
+    def on_activated(self, callback: Callable[[dict], Any]) -> Callable[[], None]:
+        """Call ``callback(params)`` when a second launch of a single-instance
+        app reached this one (``app.activated``: ``args``, ``cwd``,
+        ``activation_token``). ``args`` is the second host's command line,
+        not the script's arguments. Returns a function that unsubscribes."""
+        with self._lock:
+            self._activated_listeners.append(callback)
+
+        def unsubscribe() -> None:
+            with self._lock:
+                if callback in self._activated_listeners:
+                    self._activated_listeners.remove(callback)
+        return unsubscribe
+
     def request_quit(self) -> None:
         self.rpc.call("app.request_quit")
 
     def on_before_quit(self, callback: Callable[[], bool]) -> None:
-        self.rpc.on_request("app.before_quit", lambda _: {"allow": bool(callback())})
+        """Decide whether the application may quit: return ``True`` to allow.
+
+        Anything else keeps it running: ``False``, an exception (printed with
+        its traceback) or a missing ``return`` (``None``; warned once). Other
+        values are tested for truth, with a warning. ``sys.exit()`` inside it
+        allows the quit."""
+        self.rpc.on_request("app.before_quit", lambda _: {
+            "allow": self._decide(callback, "on_before_quit", "quitting", quit_policy=True)})
 
     def _before_close(self, params: dict) -> dict:
         with self._lock:
             window = self._windows.get(params.get("window_id"))
             callback = getattr(window, "_before_close", None)
-        return {"allow": True if callback is None else bool(callback())}
+        if callback is None:
+            return {"allow": True}
+        return {"allow": self._decide(callback, f"on_before_close for window {window.id}", "closing")}
+
+    def _decide(self, callback: Callable[[], Any], name: str, action: str, *,
+                quit_policy: bool = False) -> bool:
+        """Run a close/quit policy. Fail safe (keep open) but never silently."""
+        try:
+            result = callback()
+        except (SystemExit, KeyboardInterrupt) as error:
+            # sys.exit() in a policy means "quit": a quit policy allows, a
+            # close policy refuses this close and requests the quit instead.
+            self._report(error, f"the {name} callback", request_quit=not quit_policy)
+            return quit_policy
+        except Exception as error:
+            self._report(error, f"the {name} callback ({action} was refused)")
+            return False
+        if isinstance(result, bool):
+            return result
+        key = id(callback)
+        if key not in self._warned_policies:
+            self._warned_policies.add(key)
+            meaning = "allow" if result else "keep open"
+            print(f'UI4ME: {name} callback returned {result!r}; treating it as "{meaning}". '
+                  f"Return True to allow {action}, False to refuse.", file=sys.stderr, flush=True)
+        return bool(result)
+
+    def _report(self, error: BaseException, context: str, *, request_quit: bool = True) -> None:
+        report = getattr(self.rpc, "report_callback_error", None)
+        if report is not None:
+            report(error, context, request_quit=request_quit)
+            return
+        try:
+            print(f"UI4ME: {context} failed:", file=sys.stderr)
+            traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
+        except Exception:
+            pass
 
     def clipboard_text(self) -> str:
         return self.rpc.call("clipboard.read_text")["text"]
@@ -226,6 +366,40 @@ class Application:
             params["window_id"] = window.id
         return self.rpc.call("desktop.reveal_file", params, timeout=60)
 
+    def _wants_notification(self, method: str, params: dict) -> bool:
+        """Reader thread: drop document events no handler is waiting for, so
+        they never occupy a callback queue slot. Lock-free reads only."""
+        if method != "document.event" or self.rpc._notifications.get(method) != self._on_document_event:
+            return True
+        window = self._windows.get(params.get("window_id"))
+        document = window.document if window is not None and not window.closed else None
+        if document is None or document._retired or document.id != params.get("document_id"):
+            return False  # It belongs to a retired document and would be ignored.
+        event = params.get("event")
+        kind = event.get("type") if isinstance(event, dict) else None
+        return any(entry[0] == kind for entry in list(document._handlers))
+
+    def _window_event_received(self, params: dict) -> None:
+        """Reader thread: a closed window is stale at once (lock-free)."""
+        if params.get("type") != "closed":
+            return
+        window = self._windows.pop(params.get("window_id"), None)
+        if window is not None:
+            self._closing[window.id] = window
+            window.closed = True
+            if window.document is not None:
+                window.document._retired = True
+
+    def _document_error_received(self, params: dict) -> None:
+        """Reader thread: a fatally failed document is stale at once."""
+        if not params.get("fatal"):
+            return
+        window = self._windows.get(params.get("window_id"))
+        document = window.document if window is not None else None
+        if document is not None and document.id == params.get("document_id"):
+            self._failed_documents[document.id] = document
+            document._retired = True
+
     def _document_event(self, params: dict) -> None:
         with self._lock:
             window = self._windows.get(params.get("window_id"))
@@ -238,8 +412,9 @@ class Application:
 
     def _window_event(self, params: dict) -> None:
         if params.get("type") == "closed":
+            window_id = params.get("window_id")
             with self._lock:
-                window = self._windows.pop(params.get("window_id"), None)
+                window = self._closing.pop(window_id, None) or self._windows.pop(window_id, None)
                 if window:
                     window.closed = True
                     if window.document:
@@ -249,20 +424,36 @@ class Application:
         for callback in listeners:
             try:
                 callback(params)
-            except Exception as error:
-                print(f"Window event callback failed: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
+            except BaseException as error:  # One failing listener must not skip the others.
+                self._report(error, f"window event listener ({params.get('type')})")
+
+    def _activated(self, params: dict) -> None:
+        with self._lock:
+            listeners = list(self._activated_listeners)
+        for callback in listeners:
+            try:
+                callback(params)
+            except BaseException as error:
+                self._report(error, "on_activated callback")
 
     def _document_error(self, params: dict) -> None:
         with self._lock:
-            window = self._windows.get(params.get("window_id"))
-            document = window.document if window and not window.closed else None
-            if document is None or document.id != params.get("document_id"):
-                return
+            document = self._failed_documents.pop(params.get("document_id"), None)
+            if document is not None:
+                window = document.window
+                if window.closed:
+                    document._retire()
+                    return
+            else:
+                window = self._windows.get(params.get("window_id"))
+                document = window.document if window and not window.closed else None
+                if document is None or document.id != params.get("document_id"):
+                    return
         message = str(params.get("message", "Document operation failed"))[:4096]
         fatal = bool(params.get("fatal", False))
         print(f"UI4ME document error ({window.id}, {document.id}): {message}", file=sys.stderr, flush=True)
         try:
-            document._dispatch({"type": "error", "message": message, "fatal": fatal})
+            document._dispatch({"type": "error", "message": message, "fatal": fatal}, force=fatal)
         finally:
             if fatal:
                 # The host has already unloaded the failed renderer. An error
@@ -275,11 +466,12 @@ class Application:
 
     def close(self) -> None:
         with self._lock:
-            for window in self._windows.values():
+            for window in list(self._windows.values()) + list(self._closing.values()):
                 window.closed = True
                 if window.document:
                     window.document._retire()
             self._windows.clear()
+            self._closing.clear()
         self.rpc.close()
 
     def __enter__(self) -> Application:
@@ -328,10 +520,26 @@ class Window:
         if self.closed:
             raise StaleDocumentError("Window is closed")
 
+    def _call(self, method: str, params: dict, **options) -> Any:
+        """A window request; host -32004 retires this window (HostStaleError)."""
+        try:
+            return self.app.rpc.call(method, params, **options)
+        except RpcError as error:
+            if error.code != CLOSED or isinstance(error, HostStaleError):
+                raise
+            with self.app._lock:
+                self.closed = True
+                if self.app._windows.get(self.id) is self:
+                    del self.app._windows[self.id]
+                    self.app._closing[self.id] = self  # Its closed event finishes the cleanup.
+                if self.document is not None:
+                    self.document._retired = True
+            raise HostStaleError(error.code, error.message, error.data) from None
+
     def _load(self, **source) -> Document:
         if self.closed:
             raise StaleDocumentError("Window is closed")
-        result = self.app.rpc.call("document.load", {"window_id": self.id, **source}, timeout=30)
+        result = self._call("document.load", {"window_id": self.id, **source}, timeout=30)
         document = Document(self, result["document_id"])
         # Retire the old facade only after a successful atomic replacement.
         with self.app._lock:
@@ -354,17 +562,23 @@ class Window:
 
     def set(self, **properties) -> dict:
         self._check()
-        return self.app.rpc.call("window.set", {"window_id": self.id, **properties})
+        return self._call("window.set", {"window_id": self.id, **properties})
 
     def state(self) -> dict:
         self._check()
-        return self.app.rpc.call("window.get", {"window_id": self.id})
+        return self._call("window.get", {"window_id": self.id})
 
     def request_attention(self, kind: str | None = "informational") -> dict:
         self._check()
-        return self.app.rpc.call("window.request_attention", {"window_id": self.id, "kind": kind})
+        return self._call("window.request_attention", {"window_id": self.id, "kind": kind})
 
     def on_before_close(self, callback: Callable[[], bool]) -> None:
+        """Decide whether this window may close: return ``True`` to allow.
+
+        Anything else keeps it open: ``False``, an exception (printed with its
+        traceback) or a missing ``return`` (``None``; warned once). Other
+        values are tested for truth, with a warning. ``sys.exit()`` inside it
+        keeps the window open and requests an application quit."""
         self._check()
         # A request callback is installed once per Application; route by window
         # rather than replacing another window's policy when this is called.
@@ -373,7 +587,7 @@ class Window:
 
     def request_close(self) -> None:
         self._check()
-        self.app.rpc.call("window.request_close", {"window_id": self.id})
+        self._call("window.request_close", {"window_id": self.id})
 
     def _file_dialog(self, kind: str, *, wait: bool, **options):
         self._check()
@@ -381,7 +595,7 @@ class Window:
         # Returning the transport future preserves its cancellation semantics:
         # future.cancel() asks the host to close the actual native dialog.
         if wait:
-            return self.app.rpc.call("dialog." + kind, params, timeout=None)
+            return self._call("dialog." + kind, params, timeout=None)
         return self.app.rpc.call_async("dialog." + kind, params)
 
     def open_files(self, *, multiple: bool = False, title: str | None = None,
@@ -442,10 +656,23 @@ class Document:
         self._check()
         if "op" in fields:
             raise ValueError("op is the operation argument")
-        return self.window.app.rpc.call("document.command", {
+        return self._call("document.command", {
             "window_id": self.window.id, "document_id": self.id,
             "command": {"op": op, **fields},
         })
+
+    def _call(self, method: str, params: dict) -> Any:
+        """A document request; host -32004 retires this document (HostStaleError)."""
+        try:
+            return self.window.app.rpc.call(method, params)
+        except RpcError as error:
+            if error.code != CLOSED or isinstance(error, HostStaleError):
+                raise
+            with self.window.app._lock:
+                self._retire()
+                if self.window.document is self:
+                    self.window.document = None
+            raise HostStaleError(error.code, error.message, error.data) from None
 
     def on(self, event_type: str, callback: Callable[[dict], Any], *,
            element: str | None = None) -> Callable[[], None]:
@@ -468,22 +695,27 @@ class Document:
                     self._handlers.remove(entry)
         return unsubscribe
 
-    def _dispatch(self, event: dict) -> None:
+    def _dispatch(self, event: dict, *, force: bool = False) -> None:
+        # ``force``: deliver a fatal error to the handlers of a document that
+        # the transport already marked stale when the error arrived.
         with self._lock:
-            if self._retired:
+            if self._retired and not force:
                 return
             handlers = list(self._handlers)
         kind, target = event.get("type"), event.get("element")
         route = event.get("path", [])
         for event_type, element, callback in handlers:
-            if self._retired:
+            if self._retired and not force:
                 break
             if kind == event_type and (element is None or element == target or element in route):
-                callback(dict(event, window_id=self.window.id, document_id=self.id))
+                try:
+                    callback(dict(event, window_id=self.window.id, document_id=self.id))
+                except BaseException as error:  # One failing handler must not skip the others.
+                    self.window.app._report(error, f"'{kind}' event handler")
 
     def unload(self) -> None:
         self._check()
-        self.window.app.rpc.call("document.unload", {
+        self._call("document.unload", {
             "window_id": self.window.id, "document_id": self.id,
         })
         with self.window.app._lock:
