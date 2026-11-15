@@ -207,7 +207,8 @@ impl Document {
         let parser = parse_fragment_for_element(sink, parse_opts(quirks), context, false, form);
         let out = match super::feed(parser, html, self.limits.parse_depth != u64::MAX) {
             Ok(out) => out,
-            Err((stop, arena)) => {
+            Err(stopped) => {
+                let (stop, arena) = *stopped;
                 // INPUTSEC-05: the staged nodes all hang below the scratch root.
                 self.arena = arena;
                 self.arena.free_subtree(scratch);

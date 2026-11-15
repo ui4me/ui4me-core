@@ -66,7 +66,7 @@ pub(crate) fn feed(
     mut parser: html5ever::driver::Parser<sink::ArenaSink>,
     html: &str,
     capped: bool,
-) -> Result<sink::ParseOutput, (sink::Stop, Arena)> {
+) -> Result<sink::ParseOutput, Box<(sink::Stop, Arena)>> {
     if !capped {
         return Ok(parser.one(html));
     }
@@ -80,7 +80,7 @@ pub(crate) fn feed(
         parser.process(html5ever::tendril::StrTendril::from_slice(chunk));
         let sink = &parser.tokenizer.sink.sink;
         if let Some(stop) = sink.over_limit() {
-            return Err((stop, sink.take_arena()));
+            return Err(Box::new((stop, sink.take_arena())));
         }
         rest = tail;
     }
@@ -197,8 +197,8 @@ impl Document {
             parse_opts(QuirksMode::NoQuirks),
         );
         // A creation that blows a limit leaves no document (FR-002).
-        let out = feed(parser, html, capped).map_err(|(stop, _)| {
-            crate::errors::size_limit(match stop {
+        let out = feed(parser, html, capped).map_err(|stopped| {
+            crate::errors::size_limit(match stopped.0 {
                 sink::Stop::TooDeep => LimitName::ParseDepth.name(),
                 sink::Stop::TooManyNodes => LimitName::Nodes.name(),
             })
