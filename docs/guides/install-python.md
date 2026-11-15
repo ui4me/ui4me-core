@@ -10,7 +10,7 @@ The same guide for PowerShell is [Install for PowerShell](install-powershell.md)
 | --- | --- |
 | Python 3.10 to 3.14 | Linux x86-64 (glibc 2.34+, Wayland desktop session; qualified on KDE Plasma 6), Windows x64 (Windows 10 or 11, or Windows Server with Desktop Experience; qualified on Windows Server 2022) |
 
-ARM64 and macOS are not supported in 1.0.1, and X11-only Linux sessions are not qualified. See
+ARM64 and macOS are not supported in 1.0.x, and X11-only Linux sessions are not qualified. See
 [platforms](platforms.md) for desktop behavior and the qualified environments.
 
 ## Install

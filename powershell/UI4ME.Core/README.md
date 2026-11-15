@@ -119,7 +119,7 @@ More in the [troubleshooting guide](https://github.com/ui4me/ui4me-core/blob/mai
 - [Examples](https://github.com/ui4me/ui4me-core/tree/main/powershell/examples)
 
 The same guides are in this module's `docs` folder. The native hosts in `runtimes/` are the
-binaries of the `ui4me-core` 1.0.1 Python wheels; `HOST-SOURCE-MANIFEST.json` records their
+binaries of the `ui4me-core` 1.0.2 Python wheels; `HOST-SOURCE-MANIFEST.json` records their
 SHA-256. License texts are in `licenses/` and `runtimes/*/ui4me_core/_bin/THIRD_PARTY_LICENSES.txt`.
 
 Source and issues: https://github.com/ui4me/ui4me-core (MIT license)

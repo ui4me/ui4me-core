@@ -3887,7 +3887,7 @@ dependencies = [
 
 [[package]]
 name = "ui4me-assets"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "brotli-decompressor",
  "data-url",
@@ -3907,7 +3907,7 @@ dependencies = [
 
 [[package]]
 name = "ui4me-document"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "html5ever",
  "markup5ever",
@@ -3920,14 +3920,14 @@ dependencies = [
 
 [[package]]
 name = "ui4me-engine-types"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "proptest",
 ]
 
 [[package]]
 name = "ui4me-host"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "accesskit",
  "accesskit_atspi_common",
@@ -3968,7 +3968,7 @@ dependencies = [
 
 [[package]]
 name = "ui4me-renderer"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "accesskit",
  "app_units",

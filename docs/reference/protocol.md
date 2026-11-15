@@ -1,6 +1,6 @@
 # Host protocol (private, version 1)
 
-> **Status: private and versioned.** The supported programming interfaces are the [Python](python-api.md) and [PowerShell](powershell-api.md) bindings in this repository. This page documents protocol version 1, as implemented by UI4ME Core 1.0.x, for people who maintain those bindings or write another one. Method names, parameters and results can change in a future protocol version; the `protocol_version` handshake is how such a change is detected. UI4ME Core 1.0.1 does not change the protocol.
+> **Status: private and versioned.** The supported programming interfaces are the [Python](python-api.md) and [PowerShell](powershell-api.md) bindings in this repository. This page documents protocol version 1, as implemented by UI4ME Core 1.0.x, for people who maintain those bindings or write another one. Method names, parameters and results can change in a future protocol version; the `protocol_version` handshake is how such a change is detected. UI4ME Core 1.0.1 and 1.0.2 do not change the protocol.
 
 The authoritative sources are `crates/ui4me-host/src/protocol.rs` (framing, message profile, error codes), `transport.rs` (connection limits), `host/mod.rs` (handshake, lifecycle, notifications), `host/requests.rs` (window and native services), `host/documents.rs` and `host/document_commands.rs` (documents), `host/bitmap.rs` (live bitmaps), and the two reference clients, `python/ui4me_core/client.py` (Python) and `powershell/UI4ME.Core/private/UI4ME.Transport.cs` with `UI4ME.Core.psm1` (PowerShell).
 
@@ -103,7 +103,7 @@ The first request on a connection must be `host.hello`. Any other request receiv
 Success result:
 
 ```json
-{"protocol_version":1,"host_version":"1.0.1","app_id":"org.example.App",
+{"protocol_version":1,"host_version":"1.0.2","app_id":"org.example.App",
  "capabilities":{…same object as host.capabilities…}}
 ```
 

@@ -9,6 +9,6 @@ from ._bootstrap import StartupError
 from .live_bitmap import LiveBitmap
 from .launcher import host_binary
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 __all__ = ["Application", "Window", "Document", "Node", "StaleDocumentError", "StartupError",
            "RpcClient", "RpcError", "ProtocolError", "DisconnectedError", "LiveBitmap", "host_binary"]

@@ -1,4 +1,4 @@
-# PowerShell command reference (UI4ME.Core 1.0.1)
+# PowerShell command reference (UI4ME.Core 1.0.2)
 
 `UI4ME.Core` is the PowerShell binding for the UI4ME Core native host. The host (one Rust
 process) owns the native windows, input, IME, HTML/CSS layout and rendering, accessibility and

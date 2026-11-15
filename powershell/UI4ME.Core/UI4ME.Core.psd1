@@ -1,6 +1,6 @@
 @{
     RootModule = 'UI4ME.Core.psm1'
-    ModuleVersion = '1.0.1'
+    ModuleVersion = '1.0.2'
     GUID = '16eaf035-4e6b-4b37-abac-f684c8f00141'
     Author = 'UI4ME contributors'
     CompanyName = 'UI4ME'
@@ -41,7 +41,7 @@
             Tags = @('UI','GUI','HTML','CSS','Native','Desktop','Linux','Windows','Wayland','PowerShell','Rust','PSEdition_Desktop','PSEdition_Core','Beta')
             LicenseUri = 'https://github.com/ui4me/ui4me-core/blob/main/LICENSE'
             ProjectUri = 'https://github.com/ui4me/ui4me-core'
-            ReleaseNotes = '1.0.1: run ordinary scripts directly (pwsh -File ./app.ps1, powershell.exe -File .\app.ps1) with the new Start-UI4MEScript, which starts the bundled native host. New-UI4MEProject generates a directly runnable app.ps1. Wait-UI4ME -UntilShutdown no longer emits a value. Bundles the same native hosts as the ui4me-core 1.0.1 Python wheels. Full notes: https://github.com/ui4me/ui4me-core/blob/main/docs/release/RELEASE_NOTES_1.0.1.md'
+            ReleaseNotes = '1.0.2 (beta): stabilization release. Fixes host crashes on deep documents and crafted SVG (Windows), disconnects under event bursts, dropped window-closed/shutdown notifications, memory growth with repeated font use, content-driven stalls, focus scrolling, Enter on links and shortcuts on non-Latin layouts. Policy callbacks must now output an explicit [bool]. Ctrl+Break no longer opens the debugger in direct start. Bundles the same native hosts as the ui4me-core 1.0.2 Python wheels. Full notes: https://github.com/ui4me/ui4me-core/blob/main/docs/release/RELEASE_NOTES_1.0.2.md'
         }
     }
 }

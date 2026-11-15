@@ -21,7 +21,7 @@ import time
 import traceback
 from typing import Any, Callable
 
-CLIENT_VERSION = "1.0.1"  # Kept equal to ui4me_core.__version__ (checked by tests).
+CLIENT_VERSION = "1.0.2"  # Kept equal to ui4me_core.__version__ (checked by tests).
 
 MAX_FRAME_BYTES = 2 * 1024 * 1024
 MAX_PENDING = 128

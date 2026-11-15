@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Set the UI4ME Core release version in every format-forced location.
 
-    python tools/release/bump_version.py 1.0.2            # rewrite in place
-    python tools/release/bump_version.py 1.0.2 --dry-run  # show what would change
+    python tools/release/bump_version.py X.Y.Z            # rewrite in place
+    python tools/release/bump_version.py X.Y.Z --dry-run  # show what would change
     python tools/release/bump_version.py --list           # inventory of literals
 
 Only the locations in ``version.FORCED`` and the workspace crates' Cargo.lock

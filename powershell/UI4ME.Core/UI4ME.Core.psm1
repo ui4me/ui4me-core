@@ -12,7 +12,7 @@
 # notifications until the callback returns.
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
-$script:UI4MEVersion = '1.0.1'
+$script:UI4MEVersion = '1.0.2'
 $script:UI4MEHelperLoaded = $false
 $script:UI4MEIsWindows = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
 $script:MaximumDeferred = 128
@@ -1459,11 +1459,11 @@ function Get-UI4MEHostPath {
         return [IO.Path]::GetFullPath($env:UI4ME_HOST_BINARY)
     }
     $arch = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-    if ($arch -ne [Runtime.InteropServices.Architecture]::X64) { throw "UI4ME.Core 1.0.1 ships x64 hosts only; this system is $arch" }
+    if ($arch -ne [Runtime.InteropServices.Architecture]::X64) { throw "UI4ME.Core $script:UI4MEVersion ships x64 hosts only; this system is $arch" }
     if ($script:UI4MEIsWindows) { $relative = 'runtimes/win-x64/ui4me_core/_bin/ui4me-host.exe' }
     elseif ([Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([Runtime.InteropServices.OSPlatform]::Linux)) {
         $relative = 'runtimes/linux-x64/ui4me_core/_bin/ui4me-host'
-    } else { throw 'UI4ME.Core 1.0.1 supports Linux and Windows only' }
+    } else { throw "UI4ME.Core $script:UI4MEVersion supports Linux and Windows only" }
     $found = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot $relative))
     if (-not (Test-Path -LiteralPath $found -PathType Leaf)) {
         throw 'The native UI4ME host is missing. Install UI4ME.Core from the PowerShell Gallery, or set UI4ME_HOST_BINARY.'

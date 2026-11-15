@@ -11,7 +11,7 @@ server. The same guide for Python is [Install for Python](install-python.md).
 | PowerShell 7.2 or later (`pwsh`) | Linux x86-64 (glibc 2.34+, Wayland desktop session), Windows x64 |
 | Windows PowerShell 5.1 (`powershell.exe`) | Windows x64 |
 
-ARM64 and macOS are not supported in 1.0.1, and X11-only Linux sessions are not qualified. See
+ARM64 and macOS are not supported in 1.0.x, and X11-only Linux sessions are not qualified. See
 [platforms](platforms.md) for desktop behavior and the qualified environments.
 
 ## Install
