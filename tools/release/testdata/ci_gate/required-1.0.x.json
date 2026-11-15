@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "description": "The required jobs as ci.yml defined them for 1.0.0/1.0.1, matching the recorded responses.",
+  "workflows": [
+    {"file": "ci.yml", "event": "push", "jobs": ["verify (ubuntu-24.04)", "verify (windows-2022)"]}
+  ]
+}
