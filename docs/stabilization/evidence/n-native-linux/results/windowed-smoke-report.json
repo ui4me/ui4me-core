@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "kind": "windowed-smoke",
+  "started_utc": "2026-11-15T07:08:04.599199+00:00",
+  "compositor": "existing",
+  "socket": "wayland-0",
+  "host": "~/projects/ui4me-core-stab/target/release/ui4me-host",
+  "windowed": true,
+  "probes": [
+    {
+      "probe": "first-frame",
+      "argv": [
+        "python3",
+        "first_frame.py"
+      ],
+      "exit_code": 0,
+      "seconds": 1.56,
+      "result": "PASS",
+      "reasons": [],
+      "detail": "text-ok seconds=1.00",
+      "first_frame_logged": true,
+      "stdout_tail": "RESULT PASS first-frame text-ok seconds=1.00",
+      "stderr_tail": "ui4me-host info: host started (headless=False, standalone=False, containment=systemd-user-service)\nui4me-host info: first frame presented (window=w1, since_host_start_ms=53)\nui4me-host warn: backend message took long on the GUI thread (operation=document.load, duration_ms=120)\nui4me-host info: host stopped (exit_code=0)"
+    },
+    {
+      "probe": "depth",
+      "argv": [
+        "python3",
+        "depth.py",
+        "250"
+      ],
+      "exit_code": 0,
+      "seconds": 2.62,
+      "result": "PASS",
+      "reasons": [],
+      "detail": "depth=250 rect={'rect': {'height': 22.0, 'width': 38.0, 'x': 8.0, 'y': 8.0}} seconds=2.08",
+      "first_frame_logged": true,
+      "stdout_tail": "RESULT PASS depth depth=250 rect={'rect': {'height': 22.0, 'width': 38.0, 'x': 8.0, 'y': 8.0}} seconds=2.08",
+      "stderr_tail": "ui4me-host info: host started (headless=False, standalone=False, containment=systemd-user-service)\nui4me-host info: first frame presented (window=w1, since_host_start_ms=52)\nui4me-host info: host stopped (exit_code=0)"
+    },
+    {
+      "probe": "svgdepth",
+      "argv": [
+        "python3",
+        "svgdepth.py",
+        "700"
+      ],
+      "exit_code": 0,
+      "seconds": 3.03,
+      "result": "PASS",
+      "reasons": [],
+      "detail": "depth=700 seconds=2.50",
+      "first_frame_logged": true,
+      "stdout_tail": "RESULT PASS svgdepth depth=700 seconds=2.50",
+      "stderr_tail": "ui4me-host info: host started (headless=False, standalone=False, containment=systemd-user-service)\nui4me-host info: first frame presented (window=w1, since_host_start_ms=53)\nui4me-host info: host stopped (exit_code=0)"
+    },
+    {
+      "probe": "burst",
+      "argv": [
+        "python3",
+        "burst.py",
+        "100",
+        "6"
+      ],
+      "exit_code": 0,
+      "seconds": 3.97,
+      "result": "PASS",
+      "reasons": [],
+      "detail": "controls=100 rounds=6 mode=env events=10148 seconds=3.41",
+      "first_frame_logged": true,
+      "stdout_tail": "ROUND_OK 0 events 1757\nROUND_OK 1 events 3284\nROUND_OK 2 events 4978\nROUND_OK 3 events 6578\nROUND_OK 4 events 8376\nROUND_OK 5 events 10148\nRESULT PASS burst controls=100 rounds=6 mode=env events=10148 seconds=3.41",
+      "stderr_tail": "UI4ME: event callbacks are behind (a callback is slow or blocked); dropping queued events, pointer/scroll/animation first (first dropped: transitionrun). Window lifecycle, errors and shutdown are never dropped.UI4ME: event callbacks caught up; 1 event(s) were dropped (423 in total)\n\nUI4ME: event callbacks are behind (a callback is slow or blocked); dropping queued events, pointer/scroll/animation first (first dropped: transitionrun). Window lifecycle, errors and shutdown are never dropped.\nUI4ME: event callbacks caught up; 96 event(s) were dropped (519 in total)\nUI4ME: event callbacks are behind (a callback is slow or blocked); dropping queued events, pointer/scroll/animation first (first dropped: transitionstart). Window lifecycle, errors and shutdown are never dropped.\nUI4ME: event callbacks caught up; 31 event(s) were dropped (550 in total)\nUI4ME: event callbacks are behind (a callback is slow or blocked); dropping queued events, pointer/scroll/animation first (first dropped: transitionstart). Window lifecycle, errors and shutdown are never dropped.\nUI4ME: event callbacks caught up; 71 event(s) were dropped (621 in total)\nUI4ME: event callbacks are behind (a callback is slow or blocked); dropping queued events, pointer/scroll/animation first (first dropped: transitionend). Window lifecycle, errors and shutdown are never dropped.\nUI4ME: event callbacks caught up; 1 event(s) were dropped (622 in total)\nUI4ME: event callbacks are behind (a callback is slow or blocked); dropping queued events, pointer/scroll/animation first (first dropped: transitionend). Window lifecycle, errors and shutdown are never dropped.UI4ME: event callbacks caught up; 1 event(s) were dropped (623 in total)\n\nUI4ME: event callbacks are behind (a callback is slow or blocked); dropping queued events, pointer/scroll/animation first (first dropped: transitionend). Window lifecycle, errors and shutdown are never dropped.\nUI4ME: event callbacks caught up; 1 event(s) were dropped (624 in total)\nUI4ME: event callbacks are behind (a callback is slow or blocked); dropping queued events, pointer/scroll/animation first (first dropped: transitionrun). Window lifecycle, errors and shutdown are never dropped.\nUI4ME: event callbacks caught up; 1 event(s) were dropped (625 in total)\nUI4ME: event callbacks are behind (a callback is slow or blocked); dropping queued events, pointer/scroll/animation first (first dropped: transitionstart). Window lifecycle, errors and shutdown are never dropped.\nUI4ME: event callbacks caught up; 24 event(s) were dropped (649 in total)\nUI4ME: event callbacks are behind (a callback is slow or blocked); dropping queued events, pointer/scroll/animation first (first dropped: transitionstart). Window lifecycle, errors and shutdown are never dropped.\nUI4ME: event callbacks caught up; 1 event(s) were dropped (650 in total)\nUI4ME: event callbacks are behind (a callback is slow or blocked); dropping queued events, pointer/scroll/animation first (first dropped: transitionend). Window lifecycle, errors and shutdown are never dropped.\nUI4ME: event callbacks caught up; 1 event(s) were dropped (651 in total)\nUI4ME: event callbacks are behind (a callback is slow or blocked); dropping queued events, pointer/scroll/animation first (first dropped: transitionend). Window lifecycle, errors and shutdown are never dropped.UI4ME: event callbacks caught up; 1 event(s) were dropped (652 in total)\n\nui4me-host info: host stopped (exit_code=0)"
+    }
+  ],
+  "result": "PASS"
+}

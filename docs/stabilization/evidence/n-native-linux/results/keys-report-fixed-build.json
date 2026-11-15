@@ -1,0 +1,808 @@
+{
+ "layouts_before": [
+  "[Argument: a(sss) {[Argument: (sss) \"us\", \"\", \"English (US)\"]}]",
+  "0"
+ ],
+ "rects": {
+  "editor": {
+   "height": 33.0,
+   "width": 408.0,
+   "x": 20.0,
+   "y": 16.0
+  },
+  "target": {
+   "height": 60.0,
+   "width": 406.0,
+   "x": 20.0,
+   "y": 65.0
+  },
+  "pbtn": {
+   "height": 79.0,
+   "width": 171.0,
+   "x": 20.0,
+   "y": 157.0
+  },
+  "pspan": {
+   "height": 27.0,
+   "width": 39.0,
+   "x": 86.0,
+   "y": 183.0
+  },
+  "other": {
+   "height": 79.0,
+   "width": 138.0,
+   "x": 231.0,
+   "y": 157.0
+  }
+ },
+ "us": [
+  {
+   "combo": "ctrl+a",
+   "events": [
+    {
+     "t": 1794726620.299,
+     "type": "keydown",
+     "element": "editor",
+     "key": "Control",
+     "code": "ControlLeft",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "hello world",
+     "selection": {
+      "direction": "none",
+      "end": 11,
+      "start": 11
+     }
+    },
+    {
+     "t": 1794726620.339,
+     "type": "keydown",
+     "element": "editor",
+     "key": "a",
+     "code": "KeyA",
+     "ctrl": true,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "hello world",
+     "selection": {
+      "direction": "none",
+      "end": 11,
+      "start": 11
+     }
+    },
+    {
+     "t": 1794726620.34,
+     "type": "select",
+     "element": "editor",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "hello world",
+     "selection": {
+      "direction": "forward",
+      "end": 11,
+      "start": 0
+     }
+    }
+   ],
+   "sel:editor": {
+    "direction": "forward",
+    "end": 11,
+    "length": 11,
+    "node": "node:1:13:1",
+    "start": 0
+   },
+   "value:editor": "hello world",
+   "sel:target": {
+    "direction": "none",
+    "end": 0,
+    "length": 0,
+    "node": "node:1:15:1",
+    "start": 0
+   },
+   "value:target": ""
+  },
+  {
+   "combo": "ctrl+c",
+   "events": [
+    {
+     "t": 1794726621.543,
+     "type": "keydown",
+     "element": "editor",
+     "key": "Control",
+     "code": "ControlLeft",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "hello world",
+     "selection": {
+      "direction": "forward",
+      "end": 11,
+      "start": 0
+     }
+    },
+    {
+     "t": 1794726621.583,
+     "type": "keydown",
+     "element": "editor",
+     "key": "c",
+     "code": "KeyC",
+     "ctrl": true,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "hello world",
+     "selection": {
+      "direction": "forward",
+      "end": 11,
+      "start": 0
+     }
+    },
+    {
+     "t": 1794726621.583,
+     "type": "copy",
+     "element": "editor",
+     "ctrl": true,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "hello world",
+     "selection": {
+      "direction": "forward",
+      "end": 11,
+      "start": 0
+     }
+    }
+   ],
+   "sel:editor": {
+    "direction": "forward",
+    "end": 11,
+    "length": 11,
+    "node": "node:1:13:1",
+    "start": 0
+   },
+   "value:editor": "hello world",
+   "sel:target": {
+    "direction": "none",
+    "end": 0,
+    "length": 0,
+    "node": "node:1:15:1",
+    "start": 0
+   },
+   "value:target": ""
+  }
+ ],
+ "us_clipboard": "hello world",
+ "layouts_ru": [
+  "[Argument: a(sss) {[Argument: (sss) \"us\", \"\", \"English (US)\"], [Argument: (sss) \"ru\", \"\", \"Russian\"]}]",
+  "1"
+ ],
+ "ru_typed_value": "фыс",
+ "ru_typed_keydowns": [
+  [
+   "ф",
+   "KeyA"
+  ],
+  [
+   "ы",
+   "KeyS"
+  ],
+  [
+   "с",
+   "KeyC"
+  ]
+ ],
+ "ru": [
+  {
+   "combo": "ctrl+a",
+   "events": [
+    {
+     "t": 1794726628.325,
+     "type": "keydown",
+     "element": "editor",
+     "key": "Control",
+     "code": "ControlLeft",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "ru copy 42",
+     "selection": {
+      "direction": "none",
+      "end": 0,
+      "start": 0
+     }
+    },
+    {
+     "t": 1794726628.366,
+     "type": "keydown",
+     "element": "editor",
+     "key": "ф",
+     "code": "KeyA",
+     "ctrl": true,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "ru copy 42",
+     "selection": {
+      "direction": "none",
+      "end": 0,
+      "start": 0
+     }
+    },
+    {
+     "t": 1794726628.366,
+     "type": "select",
+     "element": "editor",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "ru copy 42",
+     "selection": {
+      "direction": "forward",
+      "end": 10,
+      "start": 0
+     }
+    }
+   ],
+   "sel:editor": {
+    "direction": "forward",
+    "end": 10,
+    "length": 10,
+    "node": "node:1:13:1",
+    "start": 0
+   },
+   "value:editor": "ru copy 42",
+   "sel:target": {
+    "direction": "none",
+    "end": 0,
+    "length": 0,
+    "node": "node:1:15:1",
+    "start": 0
+   },
+   "value:target": ""
+  },
+  {
+   "combo": "ctrl+c",
+   "events": [
+    {
+     "t": 1794726629.67,
+     "type": "keydown",
+     "element": "editor",
+     "key": "Control",
+     "code": "ControlLeft",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "ru copy 42",
+     "selection": {
+      "direction": "forward",
+      "end": 10,
+      "start": 0
+     }
+    },
+    {
+     "t": 1794726629.71,
+     "type": "keydown",
+     "element": "editor",
+     "key": "с",
+     "code": "KeyC",
+     "ctrl": true,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "ru copy 42",
+     "selection": {
+      "direction": "forward",
+      "end": 10,
+      "start": 0
+     }
+    },
+    {
+     "t": 1794726629.71,
+     "type": "copy",
+     "element": "editor",
+     "ctrl": true,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "ru copy 42",
+     "selection": {
+      "direction": "forward",
+      "end": 10,
+      "start": 0
+     }
+    }
+   ],
+   "sel:editor": {
+    "direction": "forward",
+    "end": 10,
+    "length": 10,
+    "node": "node:1:13:1",
+    "start": 0
+   },
+   "value:editor": "ru copy 42",
+   "sel:target": {
+    "direction": "none",
+    "end": 0,
+    "length": 0,
+    "node": "node:1:15:1",
+    "start": 0
+   },
+   "value:target": ""
+  },
+  {
+   "combo": "ctrl+v",
+   "events": [
+    {
+     "t": 1794726631.831,
+     "type": "keydown",
+     "element": "target",
+     "key": "Control",
+     "code": "ControlLeft",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "",
+     "selection": {
+      "direction": "none",
+      "end": 0,
+      "start": 0
+     }
+    },
+    {
+     "t": 1794726631.871,
+     "type": "keydown",
+     "element": "target",
+     "key": "м",
+     "code": "KeyV",
+     "ctrl": true,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "",
+     "selection": {
+      "direction": "none",
+      "end": 0,
+      "start": 0
+     }
+    },
+    {
+     "t": 1794726631.875,
+     "type": "paste",
+     "element": "target",
+     "ctrl": true,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "",
+     "selection": {
+      "direction": "none",
+      "end": 0,
+      "start": 0
+     }
+    },
+    {
+     "t": 1794726631.875,
+     "type": "input",
+     "element": "target",
+     "ctrl": true,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "ru copy 42",
+     "selection": {
+      "direction": "none",
+      "end": 10,
+      "start": 10
+     }
+    }
+   ],
+   "sel:editor": {
+    "direction": "forward",
+    "end": 10,
+    "length": 10,
+    "node": "node:1:13:1",
+    "start": 0
+   },
+   "value:editor": "ru copy 42",
+   "sel:target": {
+    "direction": "none",
+    "end": 10,
+    "length": 10,
+    "node": "node:1:15:1",
+    "start": 10
+   },
+   "value:target": "ru copy 42"
+  },
+  {
+   "combo": "ctrl+z",
+   "events": [
+    {
+     "t": 1794726633.075,
+     "type": "keydown",
+     "element": "target",
+     "key": "Control",
+     "code": "ControlLeft",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "ru copy 42",
+     "selection": {
+      "direction": "none",
+      "end": 10,
+      "start": 10
+     }
+    },
+    {
+     "t": 1794726633.116,
+     "type": "keydown",
+     "element": "target",
+     "key": "я",
+     "code": "KeyZ",
+     "ctrl": true,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "ru copy 42",
+     "selection": {
+      "direction": "none",
+      "end": 10,
+      "start": 10
+     }
+    },
+    {
+     "t": 1794726633.116,
+     "type": "input",
+     "element": "target",
+     "ctrl": true,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "",
+     "selection": {
+      "direction": "none",
+      "end": 0,
+      "start": 0
+     }
+    }
+   ],
+   "sel:editor": {
+    "direction": "forward",
+    "end": 10,
+    "length": 10,
+    "node": "node:1:13:1",
+    "start": 0
+   },
+   "value:editor": "ru copy 42",
+   "sel:target": {
+    "direction": "none",
+    "end": 0,
+    "length": 0,
+    "node": "node:1:15:1",
+    "start": 0
+   },
+   "value:target": ""
+  },
+  {
+   "combo": "ctrl+s",
+   "events": [
+    {
+     "t": 1794726635.134,
+     "type": "keydown",
+     "element": "editor",
+     "key": "Control",
+     "code": "ControlLeft",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "ru copy 42",
+     "selection": {
+      "direction": "none",
+      "end": 10,
+      "start": 10
+     }
+    },
+    {
+     "t": 1794726635.174,
+     "type": "keydown",
+     "element": "editor",
+     "key": "ы",
+     "code": "KeyS",
+     "ctrl": true,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "ru copy 42",
+     "selection": {
+      "direction": "none",
+      "end": 10,
+      "start": 10
+     }
+    }
+   ],
+   "sel:editor": {
+    "direction": "none",
+    "end": 10,
+    "length": 10,
+    "node": "node:1:13:1",
+    "start": 10
+   },
+   "value:editor": "ru copy 42",
+   "sel:target": {
+    "direction": "none",
+    "end": 0,
+    "length": 0,
+    "node": "node:1:15:1",
+    "start": 0
+   },
+   "value:target": ""
+  }
+ ],
+ "ru_clipboard_after_copy": "ru copy 42",
+ "ru_prevented_select_all": [
+  {
+   "combo": "ctrl+a",
+   "events": [
+    {
+     "t": 1794726636.943,
+     "type": "keydown",
+     "element": "editor",
+     "key": "Control",
+     "code": "ControlLeft",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "ru copy 42",
+     "selection": {
+      "direction": "none",
+      "end": 0,
+      "start": 0
+     }
+    },
+    {
+     "t": 1794726636.983,
+     "type": "keydown",
+     "element": "editor",
+     "key": "ф",
+     "code": "KeyA",
+     "ctrl": true,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "ru copy 42",
+     "selection": {
+      "direction": "none",
+      "end": 0,
+      "start": 0
+     }
+    }
+   ],
+   "sel:editor": {
+    "direction": "none",
+    "end": 0,
+    "length": 10,
+    "node": "node:1:13:1",
+    "start": 0
+   },
+   "value:editor": "ru copy 42",
+   "sel:target": {
+    "direction": "none",
+    "end": 0,
+    "length": 0,
+    "node": "node:1:15:1",
+    "start": 0
+   },
+   "value:target": ""
+  }
+ ],
+ "us_prevented_select_all": [
+  {
+   "combo": "ctrl+a",
+   "events": [
+    {
+     "t": 1794726639.296,
+     "type": "keydown",
+     "element": "editor",
+     "key": "Control",
+     "code": "ControlLeft",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "ru copy 42",
+     "selection": {
+      "direction": "none",
+      "end": 0,
+      "start": 0
+     }
+    },
+    {
+     "t": 1794726639.337,
+     "type": "keydown",
+     "element": "editor",
+     "key": "a",
+     "code": "KeyA",
+     "ctrl": true,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "value": "ru copy 42",
+     "selection": {
+      "direction": "none",
+      "end": 0,
+      "start": 0
+     }
+    }
+   ],
+   "sel:editor": {
+    "direction": "none",
+    "end": 0,
+    "length": 10,
+    "node": "node:1:13:1",
+    "start": 0
+   },
+   "value:editor": "ru copy 42",
+   "sel:target": {
+    "direction": "none",
+    "end": 0,
+    "length": 0,
+    "node": "node:1:15:1",
+    "start": 0
+   },
+   "value:target": ""
+  }
+ ],
+ "press_release": [
+  {
+   "case": "span->button padding",
+   "from": [
+    346,
+    338
+   ],
+   "to": [
+    272,
+    338
+   ],
+   "events": [
+    {
+     "t": 1794726642.013,
+     "type": "pointerdown",
+     "element": "pspan",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "x": 107.0,
+     "y": 198.0,
+     "button": 0
+    },
+    {
+     "t": 1794726642.546,
+     "type": "pointerup",
+     "element": "pbtn",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "x": 33.0,
+     "y": 198.0,
+     "button": 0
+    },
+    {
+     "t": 1794726642.546,
+     "type": "click",
+     "element": "pbtn",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "x": 33.0,
+     "y": 198.0,
+     "button": 0
+    }
+   ]
+  },
+  {
+   "case": "button->other button",
+   "from": [
+    272,
+    338
+   ],
+   "to": [
+    540,
+    338
+   ],
+   "events": [
+    {
+     "t": 1794726643.338,
+     "type": "pointerdown",
+     "element": "pbtn",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "x": 33.0,
+     "y": 198.0,
+     "button": 0
+    },
+    {
+     "t": 1794726643.872,
+     "type": "pointerup",
+     "element": "other",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "x": 301.0,
+     "y": 198.0,
+     "button": 0
+    }
+   ]
+  },
+  {
+   "case": "same button",
+   "from": [
+    272,
+    338
+   ],
+   "to": [
+    280,
+    338
+   ],
+   "events": [
+    {
+     "t": 1794726644.664,
+     "type": "pointerdown",
+     "element": "pbtn",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "x": 33.0,
+     "y": 198.0,
+     "button": 0
+    },
+    {
+     "t": 1794726645.198,
+     "type": "pointerup",
+     "element": "pbtn",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "x": 41.0,
+     "y": 198.0,
+     "button": 0
+    },
+    {
+     "t": 1794726645.198,
+     "type": "click",
+     "element": "pbtn",
+     "ctrl": false,
+     "shift": false,
+     "alt": false,
+     "meta": false,
+     "x": 41.0,
+     "y": 198.0,
+     "button": 0
+    }
+   ]
+  }
+ ],
+ "layouts_after_restore": [
+  "[Argument: a(sss) {[Argument: (sss) \"us\", \"\", \"English (US)\"]}]",
+  "0"
+ ]
+}

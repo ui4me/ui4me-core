@@ -1,0 +1,438 @@
+{
+ "steps": [
+  {
+   "step": "01-pointer-focus-b1",
+   "focused": "b1",
+   "scroll_y": 0.0,
+   "atspi_focused": {
+    "name": "Top button",
+    "role": "button",
+    "extents": {
+     "window": [
+      20,
+      64,
+      141,
+      51
+     ],
+     "screen": [
+      20,
+      64,
+      141,
+      51
+     ]
+    }
+   },
+   "atspi_inside_viewport": true,
+   "content_box": [
+    240,
+    141,
+    1039,
+    641
+   ],
+   "focus_ring_screen": [
+    252,
+    197,
+    409,
+    264,
+    2544
+   ],
+   "focus_ring_in_window": [
+    12,
+    56,
+    169,
+    123
+   ]
+  },
+  {
+   "step": "02-tab-far",
+   "focused": "far",
+   "scroll_y": 1086.0,
+   "atspi_focused": {
+    "name": "Far button (y~1500)",
+    "role": "button",
+    "extents": {
+     "window": [
+      20,
+      449,
+      218,
+      51
+     ],
+     "screen": [
+      20,
+      449,
+      218,
+      51
+     ]
+    }
+   },
+   "atspi_inside_viewport": true,
+   "content_box": [
+    240,
+    141,
+    1039,
+    641
+   ],
+   "focus_ring_screen": [
+    252,
+    582,
+    486,
+    641,
+    2040
+   ],
+   "focus_ring_in_window": [
+    12,
+    441,
+    246,
+    500
+   ]
+  },
+  {
+   "step": "03-tab-farlink",
+   "focused": "farlink",
+   "scroll_y": 2553.0,
+   "atspi_focused": {
+    "name": "Far link (y~2900)",
+    "role": "link",
+    "extents": {
+     "window": [
+      20,
+      453,
+      185,
+      47
+     ],
+     "screen": [
+      20,
+      453,
+      185,
+      47
+     ]
+    }
+   },
+   "atspi_inside_viewport": true,
+   "content_box": [
+    240,
+    141,
+    1039,
+    641
+   ],
+   "focus_ring_screen": [
+    252,
+    586,
+    453,
+    641,
+    1794
+   ],
+   "focus_ring_in_window": [
+    12,
+    445,
+    213,
+    500
+   ]
+  },
+  {
+   "step": "04-tab-inner",
+   "focused": "inner",
+   "scroll_y": 4096.0,
+   "atspi_focused": {
+    "name": "Inner button (in overflow box)",
+    "role": "button",
+    "extents": {
+     "window": [
+      43,
+      449,
+      317,
+      51
+     ],
+     "screen": [
+      43,
+      449,
+      317,
+      51
+     ]
+    }
+   },
+   "atspi_inside_viewport": true,
+   "content_box": [
+    240,
+    141,
+    1039,
+    641
+   ],
+   "focus_ring_screen": [
+    275,
+    582,
+    608,
+    641,
+    2634
+   ],
+   "focus_ring_in_window": [
+    35,
+    441,
+    368,
+    500
+   ]
+  },
+  {
+   "step": "05-atspi-grabfocus",
+   "focused": "atbtn",
+   "scroll_y": 5570.0,
+   "atspi_target_after": {
+    "name": "AT-SPI target",
+    "role": "button",
+    "extents": {
+     "window": [
+      20,
+      449,
+      159,
+      51
+     ],
+     "screen": [
+      20,
+      449,
+      159,
+      51
+     ]
+    }
+   },
+   "atspi_focused": {
+    "name": "AT-SPI target",
+    "role": "button",
+    "extents": {
+     "window": [
+      20,
+      449,
+      159,
+      51
+     ],
+     "screen": [
+      20,
+      449,
+      159,
+      51
+     ]
+    }
+   },
+   "atspi_inside_viewport": true,
+   "content_box": [
+    240,
+    141,
+    1039,
+    641
+   ],
+   "focus_ring_screen": [
+    252,
+    582,
+    427,
+    641,
+    1686
+   ],
+   "focus_ring_in_window": [
+    12,
+    441,
+    187,
+    500
+   ]
+  },
+  {
+   "step": "06-backend-focus",
+   "focused": "apibtn",
+   "scroll_y": 7041.0,
+   "focus_reply_scroll_y": 7041.0,
+   "atspi_focused": {
+    "name": "Backend focus target",
+    "role": "button",
+    "extents": {
+     "window": [
+      20,
+      449,
+      237,
+      51
+     ],
+     "screen": [
+      20,
+      449,
+      237,
+      51
+     ]
+    }
+   },
+   "atspi_inside_viewport": true,
+   "content_box": [
+    240,
+    141,
+    1039,
+    641
+   ],
+   "focus_ring_screen": [
+    252,
+    582,
+    505,
+    641,
+    2154
+   ],
+   "focus_ring_in_window": [
+    12,
+    441,
+    265,
+    500
+   ]
+  }
+ ],
+ "content_origin": [
+  240,
+  141
+ ],
+ "enter_on_link_events": [
+  {
+   "t": 1794725719.772,
+   "type": "keydown",
+   "element": "farlink",
+   "key": "Enter",
+   "code": "Enter",
+   "ctrl": false,
+   "shift": false,
+   "alt": false,
+   "meta": false
+  },
+  {
+   "t": 1794725719.772,
+   "type": "click",
+   "element": "farlink",
+   "ctrl": false,
+   "shift": false,
+   "alt": false,
+   "meta": false
+  },
+  {
+   "t": 1794725719.772,
+   "type": "link_activated",
+   "element": "farlink",
+   "href": "next.html",
+   "url": "file://~/projects/ui4me-core-stab/n-probe/next.html"
+  }
+ ],
+ "space_on_link_events": [
+  {
+   "t": 1794725720.936,
+   "type": "keydown",
+   "element": "farlink",
+   "key": " ",
+   "code": "Space",
+   "ctrl": false,
+   "shift": false,
+   "alt": false,
+   "meta": false
+  }
+ ],
+ "inner_box_scroll": {
+  "rect": {
+   "height": 51.0,
+   "width": 317.0,
+   "x": 43.0,
+   "y": 449.0
+  }
+ },
+ "atspi_target_before": {
+  "name": "AT-SPI target",
+  "role": "button",
+  "extents": {
+   "window": [
+    20,
+    6019,
+    159,
+    51
+   ],
+   "screen": [
+    20,
+    6019,
+    159,
+    51
+   ]
+  }
+ },
+ "grabFocus_returned": true,
+ "events_tail": [
+  {
+   "t": 1794725714.732,
+   "type": "focus",
+   "element": "b1",
+   "ctrl": false,
+   "shift": false,
+   "alt": false,
+   "meta": false
+  },
+  {
+   "t": 1794725714.757,
+   "type": "click",
+   "element": "b1",
+   "ctrl": false,
+   "shift": false,
+   "alt": false,
+   "meta": false,
+   "x": 91.0,
+   "y": 91.0,
+   "button": 0
+  },
+  {
+   "t": 1794725716.337,
+   "type": "focus",
+   "element": "far",
+   "ctrl": false,
+   "shift": false,
+   "alt": false,
+   "meta": false
+  },
+  {
+   "t": 1794725718.053,
+   "type": "focus",
+   "element": "farlink",
+   "ctrl": false,
+   "shift": false,
+   "alt": false,
+   "meta": false
+  },
+  {
+   "t": 1794725719.772,
+   "type": "click",
+   "element": "farlink",
+   "ctrl": false,
+   "shift": false,
+   "alt": false,
+   "meta": false
+  },
+  {
+   "t": 1794725719.772,
+   "type": "link_activated",
+   "element": "farlink",
+   "href": "next.html",
+   "url": "file://~/projects/ui4me-core-stab/n-probe/next.html"
+  },
+  {
+   "t": 1794725722.1,
+   "type": "focus",
+   "element": "inner",
+   "ctrl": false,
+   "shift": false,
+   "alt": false,
+   "meta": false
+  },
+  {
+   "t": 1794725724.043,
+   "type": "focus",
+   "element": "atbtn",
+   "ctrl": false,
+   "shift": false,
+   "alt": false,
+   "meta": false
+  },
+  {
+   "t": 1794725725.985,
+   "type": "focus",
+   "element": "apibtn",
+   "ctrl": false,
+   "shift": false,
+   "alt": false,
+   "meta": false
+  }
+ ]
+}

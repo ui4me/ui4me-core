@@ -1,0 +1,335 @@
+{
+ "inputs": {
+  "finput": {
+   "get_rect": {
+    "height": 33.0,
+    "width": 288.0,
+    "x": 42.0,
+    "y": 96.0
+   },
+   "pixels_box_window": [
+    32,
+    62,
+    382,
+    139
+   ],
+   "pixels_input_white_window": [
+    44,
+    98,
+    328,
+    127
+   ],
+   "pixels_text_ink_window": [
+    48,
+    105,
+    176,
+    120
+   ],
+   "atspi_extents": [
+    42,
+    96,
+    288,
+    33
+   ],
+   "atspi_char_extents": [
+    [
+     46,
+     99,
+     12,
+     27
+    ],
+    [
+     58,
+     99,
+     12,
+     27
+    ],
+    [
+     70,
+     99,
+     12,
+     27
+    ],
+    [
+     82,
+     99,
+     12,
+     27
+    ],
+    [
+     94,
+     99,
+     12,
+     27
+    ],
+    [
+     106,
+     99,
+     12,
+     27
+    ],
+    [
+     118,
+     99,
+     12,
+     27
+    ],
+    [
+     130,
+     99,
+     12,
+     27
+    ],
+    [
+     142,
+     99,
+     12,
+     27
+    ],
+    [
+     154,
+     99,
+     12,
+     27
+    ],
+    [
+     166,
+     99,
+     12,
+     27
+    ]
+   ],
+   "atspi_text_left_right": [
+    46,
+    178
+   ],
+   "click_char5_screen": [
+    350,
+    254
+   ],
+   "caret_after_click": [
+    5,
+    5
+   ],
+   "atspi_caret_offset": 5,
+   "atspi_focused": true,
+   "scroll_after": 400.0
+  },
+  "tinput": {
+   "get_rect": {
+    "height": 33.0,
+    "width": 288.0,
+    "x": 430.0,
+    "y": 245.5
+   },
+   "pixels_box_window": [
+    420,
+    212,
+    740,
+    288
+   ],
+   "pixels_input_white_window": [
+    432,
+    248,
+    716,
+    276
+   ],
+   "pixels_text_ink_window": [
+    435,
+    255,
+    564,
+    270
+   ],
+   "atspi_extents": [
+    430,
+    245,
+    288,
+    33
+   ],
+   "atspi_char_extents": [
+    [
+     434,
+     248,
+     12,
+     27
+    ],
+    [
+     446,
+     248,
+     12,
+     27
+    ],
+    [
+     458,
+     248,
+     12,
+     27
+    ],
+    [
+     470,
+     248,
+     12,
+     27
+    ],
+    [
+     482,
+     248,
+     12,
+     27
+    ],
+    [
+     494,
+     248,
+     12,
+     27
+    ],
+    [
+     506,
+     248,
+     12,
+     27
+    ],
+    [
+     518,
+     248,
+     12,
+     27
+    ],
+    [
+     530,
+     248,
+     12,
+     27
+    ],
+    [
+     542,
+     248,
+     12,
+     27
+    ],
+    [
+     554,
+     248,
+     12,
+     27
+    ]
+   ],
+   "atspi_text_left_right": [
+    434,
+    566
+   ],
+   "click_char5_screen": [
+    737,
+    404
+   ],
+   "caret_after_click": [
+    5,
+    5
+   ],
+   "atspi_caret_offset": 5,
+   "atspi_focused": true,
+   "scroll_after": 400.0
+  },
+  "sinput": {
+   "get_rect": {
+    "height": 37.5,
+    "width": 312.0,
+    "x": 442.0,
+    "y": 339.5
+   },
+   "pixels_box_window": [
+    433,
+    293,
+    781,
+    386
+   ],
+   "pixels_input_white_window": [
+    445,
+    343,
+    751,
+    374
+   ],
+   "pixels_text_ink_window": [
+    450,
+    351,
+    519,
+    367
+   ],
+   "atspi_extents": [
+    442,
+    339,
+    312,
+    37
+   ],
+   "atspi_char_extents": [
+    [
+     448,
+     344,
+     12,
+     28
+    ],
+    [
+     460,
+     344,
+     12,
+     28
+    ],
+    [
+     472,
+     344,
+     12,
+     28
+    ],
+    [
+     484,
+     344,
+     12,
+     28
+    ],
+    [
+     496,
+     344,
+     12,
+     28
+    ],
+    [
+     508,
+     344,
+     12,
+     28
+    ]
+   ],
+   "atspi_text_left_right": [
+    448,
+    520
+   ],
+   "click_char5_screen": [
+    752,
+    500
+   ],
+   "caret_after_click": [
+    5,
+    5
+   ],
+   "atspi_caret_offset": 5,
+   "atspi_focused": true,
+   "scroll_after": 400.0
+  }
+ },
+ "content_origin": [
+  240,
+  141
+ ],
+ "scroll": {
+  "animating": false,
+  "height": 500.0,
+  "max_x": 0.0,
+  "max_y": 2500.0,
+  "min_x": 0.0,
+  "min_y": 0.0,
+  "scrollable": true,
+  "width": 800.0,
+  "x": 0.0,
+  "y": 400.0
+ }
+}

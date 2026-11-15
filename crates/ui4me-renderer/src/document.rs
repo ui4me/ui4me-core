@@ -786,15 +786,19 @@ impl Document {
         let data = &event.init.data;
         let m = event.init.modifiers;
         let d = self.pipeline.document();
+        // The letter the engine's own shortcuts use (non-Latin layouts: the physical key, F-17b),
+        // so a rule for Ctrl+"a" also stops the select-all that Ctrl+"ф" on KeyA performs.
+        let shortcut = data.key.as_deref().map(|k| {
+            crate::interaction::keyboard::shortcut_key(k, data.code.as_deref().unwrap_or(""), m)
+        });
         let hit = self.prevent.iter().any(|r| {
             let rule = &r.rule;
             rule.event == event_type
                 && d.arena().contains(r.node)
                 && path.contains(&r.node)
-                && rule
-                    .key
-                    .as_ref()
-                    .is_none_or(|k| data.key.as_ref() == Some(k))
+                && rule.key.as_ref().is_none_or(|k| {
+                    data.key.as_ref() == Some(k) || shortcut.as_deref() == Some(k.as_str())
+                })
                 && rule.shift.is_none_or(|v| v == m.shift)
                 && rule.ctrl.is_none_or(|v| v == m.ctrl)
                 && rule.alt.is_none_or(|v| v == m.alt)
