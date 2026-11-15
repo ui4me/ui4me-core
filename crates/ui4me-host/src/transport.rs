@@ -657,6 +657,56 @@ mod tests {
         assert_eq!(log.suppressed, 100);
     }
 
+    /// HOST-04: clients that connect and close at once (on Windows often before
+    /// `ConnectNamedPipe`, `ERROR_NO_DATA`) never end the listener.
+    #[test]
+    fn listener_survives_clients_that_close_immediately() {
+        let app = format!("org.ui4me.transport.churn.{}", std::process::id());
+        let lock = crate::platform::InstanceLock::acquire(&app).unwrap();
+        let mut server = Server::bind(&app, &lock.instance_key, Arc::new(|| {})).unwrap();
+        for _ in 0..300 {
+            if let Ok(stream) = NativeStream::connect(&server.endpoint, Duration::from_secs(5)) {
+                drop(stream);
+            }
+        }
+        // Drain whatever the churn produced; the listener must not have reported its end.
+        let deadline = Instant::now() + Duration::from_millis(500);
+        while Instant::now() < deadline {
+            if let Ok(TransportEvent::Disconnected(0, reason)) =
+                server.incoming.recv_timeout(Duration::from_millis(20))
+            {
+                assert!(!reason.starts_with("listener:"), "{reason}");
+            }
+        }
+        let endpoint = server.endpoint.clone();
+        let client = thread::spawn(move || {
+            request(
+                &endpoint,
+                serde_json::json!({"jsonrpc":"2.0","id":"late","method":"ping"}),
+                Duration::from_secs(5),
+            )
+        });
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut answered = false;
+        while Instant::now() < deadline && !answered {
+            if let Ok(TransportEvent::Message(id, value)) =
+                server.incoming.recv_timeout(Duration::from_millis(100))
+            {
+                assert_eq!(value["id"], "late");
+                server
+                    .reply(
+                        id,
+                        serde_json::json!({"jsonrpc":"2.0","id":"late","result":1}),
+                    )
+                    .unwrap();
+                answered = true;
+            }
+        }
+        assert!(answered, "the listener still accepts");
+        assert_eq!(client.join().unwrap().unwrap()["result"], 1);
+        server.close();
+    }
+
     #[test]
     fn local_round_trip_and_clean_disconnect() {
         let app = format!("org.ui4me.transport.{}", std::process::id());
