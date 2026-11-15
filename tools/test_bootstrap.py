@@ -34,11 +34,11 @@ except ModuleNotFoundError:  # Python 3.10 (supported): tomllib is 3.11+
 
 def built_host() -> str | None:
     name = "ui4me-host.exe" if os.name == "nt" else "ui4me-host"
-    for mode in ("release", "debug"):
-        candidate = ROOT / "target" / mode / name
-        if candidate.is_file():
-            return str(candidate)
-    return None
+    # The most recently built profile: a stale release build must not shadow a fresh
+    # debug build (tools/verify.py builds debug before the Python stage).
+    found = [ROOT / "target" / mode / name for mode in ("release", "debug")]
+    found = [candidate for candidate in found if candidate.is_file()]
+    return str(max(found, key=lambda candidate: candidate.stat().st_mtime)) if found else None
 
 
 CLEAN = {key: value for key, value in os.environ.items() if not key.startswith("UI4ME_")}
