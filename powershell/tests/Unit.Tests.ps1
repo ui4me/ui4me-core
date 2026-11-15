@@ -1,4 +1,8 @@
 ﻿# Module, codec, generator and skill-installer tests (no host required). Pester 5+.
+BeforeDiscovery {
+    # -Skip is evaluated during discovery, before BeforeAll; 5.1-safe (no $IsWindows there).
+    $script:DiscoveryIsWindows = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
+}
 BeforeAll {
     . (Join-Path $PSScriptRoot 'TestHelpers.ps1')
     Import-Module $script:ModuleManifest -Force -ErrorAction Stop
@@ -174,7 +178,7 @@ Describe 'Install-UI4MESkill' {
 
 Describe 'Get-UI4MEHostPath' {
     AfterEach { Remove-Item Env:UI4ME_HOST_BINARY -ErrorAction SilentlyContinue }
-    It 'runs a hash-verified private copy when the installed host cannot be made executable (BIND-PS-11)' -Skip:$script:TestIsWindows {
+    It 'runs a hash-verified private copy when the installed host cannot be made executable (BIND-PS-11)' -Skip:$script:DiscoveryIsWindows {
         $source = Join-Path $TestDrive 'installed-host'
         [IO.File]::WriteAllText($source, "#!/bin/sh`necho cached-host-ran`n")
         $saved = $env:XDG_CACHE_HOME

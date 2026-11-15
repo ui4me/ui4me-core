@@ -21,6 +21,9 @@ BeforeDiscovery {
         return $null
     }
     $script:SkipNative = -not (Find-TestHost)
+    # -Skip is evaluated during discovery, before BeforeAll (TestHelpers.ps1) runs.
+    # [Environment]::OSVersion works on Windows PowerShell 5.1, where $IsWindows does not exist.
+    $script:DiscoveryIsWindows = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
 }
 
 BeforeAll {
@@ -71,6 +74,17 @@ BeforeAll {
         foreach ($k in 'TMPDIR', 'TEMP', 'TMP') { $info.EnvironmentVariables[$k] = $temp }
         foreach ($k in $Environment.Keys) { $info.EnvironmentVariables[$k] = $Environment[$k] }
         return [pscustomobject]@{ Info = $info; Temp = $temp }
+    }
+
+    function Stop-TestProcessTree($Process) {
+        # The launcher, its host and the backend: none may outlive a test (they keep TestDrive open).
+        if ($null -eq $Process) { return }
+        if (-not $Process.HasExited) {
+            if ($script:TestIsWindows) { & taskkill.exe /T /F /PID $Process.Id 2>&1 | Out-Null }
+            else { & /bin/kill -KILL $Process.Id 2>$null }   # the host follows by its parent-death signal
+            [void]$Process.WaitForExit(15000)
+        }
+        $Process.Dispose()
     }
 
     function Invoke-DirectScript {
@@ -251,7 +265,7 @@ Close-UI4ME -Application $app
         $r.Out | Should -Match 'STILL x'
     }
 
-    It 'exits with status 130 when interrupted with SIGINT (BIND-PS-07)' -Skip:$script:TestIsWindows {
+    It 'exits with status 130 when interrupted with SIGINT (BIND-PS-07)' -Skip:$script:DiscoveryIsWindows {
         $body = @'
 $ErrorActionPreference = 'Stop'
 Import-Module '__MODULE__'
@@ -274,12 +288,12 @@ Wait-UI4ME -Application $app -UntilShutdown
                 $ready = $line.Result -eq 'READY'
             }
             $ready | Should -BeTrue -Because 'the backend must start'
-            & kill -INT $process.Id
+            & /bin/kill -INT $process.Id
             $process.WaitForExit(30000) | Should -BeTrue
             $process.ExitCode | Should -Be 130 -Because $stderr.Result
             @(Get-ChildItem -LiteralPath $start.Temp -Force | Where-Object Name -like 'ui4me-start-*').Count | Should -Be 0
         } finally {
-            if (-not $process.HasExited) { $process.Kill() }
+            Stop-TestProcessTree $process
         }
     }
 }

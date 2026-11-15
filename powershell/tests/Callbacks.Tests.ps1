@@ -94,12 +94,18 @@ Describe 'Reserved member names and dialog waits' {
     }
 
     It 'waits for a -NoWait dialog without the 15 second default deadline (BIND-PS-05)' {
+        $echo = Start-UI4MERpc -Application $script:app -Method 'mock.echo'
+        $echo.DefaultTimeoutMilliseconds | Should -Be 15000
+        $null = Wait-UI4MERpc -Request $echo
+        # The mock answers the dialog after 16 s and reads nothing meanwhile. Send no other
+        # request in that time: the Windows mock pipe is unbuffered, so a write would block
+        # until then and the wait below would start after the answer had already arrived.
         $request = Show-UI4MEFileDialog -Window $script:win -Title '16000' -NoWait
         $request.DefaultTimeoutMilliseconds | Should -Be -1
-        (Start-UI4MERpc -Application $script:app -Method 'mock.echo').DefaultTimeoutMilliseconds | Should -Be 15000
-        $clock = [Diagnostics.Stopwatch]::StartNew()
+        $started = [DateTime]::UtcNow
         $result = Wait-UI4MERpc -Request $request
-        $clock.ElapsedMilliseconds | Should -BeGreaterThan 15500
+        $elapsed = ([DateTime]::UtcNow - $started).TotalMilliseconds
+        $elapsed | Should -BeGreaterThan 15500
         @($result.paths) | Should -Be @('/tmp/picked.txt')
         @((Invoke-UI4MERpc -Application $script:app -Method 'mock.stats').cancels) | Should -Not -Contain $request.Id
     }

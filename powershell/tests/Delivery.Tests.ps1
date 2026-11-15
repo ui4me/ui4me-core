@@ -90,7 +90,32 @@ Describe 'Control notifications under event bursts (T16)' {
         Wait-Until { $script:closedSeen } $script:app | Should -BeTrue
         $script:closedDuringClick | Should -BeTrue   # bookkeeping did not wait for the click handler
         $script:win.Closed | Should -BeTrue
-        $script:app.DroppedNotifications | Should -BeGreaterThan 0   # transitionrun beyond the cap
+        # 300 events exceeded a bound: the transport's when the runspace pumps slowly (Windows
+        # PowerShell 5.1), else the deferral cap. The cap itself is tested deterministically below.
+        ($script:app.DroppedNotifications + $script:app.Transport.DroppedNotifications) | Should -BeGreaterThan 0
+    }
+
+    It 'keeps control notifications at the deferral cap and evicts coalescible events first (BIND-PS-03)' {
+        $module = Get-Module UI4ME.Core
+        $cap = & $module { $script:MaximumDeferred }
+        $app = $script:app
+        $app.Deferred.Clear()
+        $before = $app.DroppedNotifications
+        $event = { param($Class, $Tag) [pscustomobject]@{ Class = $Class; Kind = 'notification'; Method = 'document.event'; Tag = $Tag } }
+        & $module { param($a, $m) Add-UI4MEDeferred $a $m } $app (& $event 'coalescible' 'oldest-move')
+        for ($i = 1; $i -lt $cap; $i++) { & $module { param($a, $m) Add-UI4MEDeferred $a $m } $app (& $event 'discrete' "d$i") }
+        $app.Deferred.Count | Should -Be $cap
+        & $module { param($a, $m) Add-UI4MEDeferred $a $m } $app (& $event 'control' 'closed')        # beyond the cap, kept
+        $app.Deferred.Count | Should -Be ($cap + 1)
+        & $module { param($a, $m) Add-UI4MEDeferred $a $m } $app (& $event 'discrete' 'click')       # evicts the move
+        & $module { param($a, $m) Add-UI4MEDeferred $a $m } $app (& $event 'discrete' 'dropped')     # nothing to evict
+        $tags = @($app.Deferred | ForEach-Object { $_.Tag })
+        $tags | Should -Not -Contain 'oldest-move'
+        $tags | Should -Not -Contain 'dropped'
+        $tags | Should -Contain 'closed'
+        $tags[-1] | Should -Be 'click'
+        ($app.DroppedNotifications - $before) | Should -Be 2
+        $app.Deferred.Clear()
     }
 
     It 'delivers deferred final events before Wait-UI4ME -UntilShutdown returns (BIND-PS-04)' {
