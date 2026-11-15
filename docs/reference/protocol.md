@@ -131,13 +131,13 @@ When the user closes a window (`reason: "native_close"`) or the backend calls `w
 1. sends `window.event` with `type: "close_requested"`, `data: {"reason":…}`;
 2. sends the **request** `window.before_close` with `{"window_id":"w1","reason":"native_close"}` and an ID such as `"host:decision:7"`.
 
-The backend answers `{"allow": true}` or `{"allow": false}`. Anything else, including an error response, counts as **deny**. On allow the window is destroyed (`window.event` `type: "closed"`) — unless it is the last open window, in which case the host starts an application quit with `reason: "last_window"`. A window closed before `app.ready` cancels startup and shuts down.
+The backend answers `{"allow": true}` or `{"allow": false}`; `{"allow": false}` is the only **veto**. Any other answer is **no decision**, which never closes or quits anything (so a failing policy cannot lose unsaved data): an error `-32005` (busy, for example a full callback queue) is asked again under a new decision ID after 100, 200, 400, 800 and 1600 ms; after that, and for any other error or a result without a boolean `allow`, the window stays open (or the application keeps running), the host logs a warning, and the user can close or quit again or force the quit. Answers to a superseded decision ID are ignored. On allow the window is destroyed (`window.event` `type: "closed"`) — unless it is the last open window, in which case the host starts an application quit with `reason: "last_window"`. A window closed before `app.ready` cancels startup and shuts down.
 
 ### Quitting the application
 
 `app.request_quit` (`{}` → `{"requested":true}`) or a last-window close sends the **request** `app.before_quit` with `{"reason":"backend_request"|"last_window"}`. While it is pending, `window.create` returns `-32005`. Pending window-close decisions are superseded and reported with the notification `request.cancelled` `{"id":"host:decision:N","reason":"application_quit"}`; late answers to them are ignored.
 
-* **Deny** (`{"allow":false}`): the application keeps running.
+* **Deny** (`{"allow":false}`): the application keeps running. **No decision** (an error answer or a result without a boolean `allow`, after the busy retries described above): the application keeps running as well, and the quit can be requested again.
 * **Allow:** the host cancels native jobs and sends the **notification** `app.shutdown` `{"deadline_ms": <shutdown_timeout_ms>}`. The backend should clean up and exit. If it has not exited when the deadline passes, the host kills it and exits with status 1. A backend that exits non-zero during shutdown also gives exit status 1.
 
 A termination request from outside the application (a signal, a console control event or the end of the desktop session; see [host CLI](host-cli.md#run)) skips the decision too: it cancels pending decisions and sends `app.shutdown` with a deadline of at most 3000 ms.

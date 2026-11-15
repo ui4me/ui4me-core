@@ -192,5 +192,22 @@ class RelaunchTests(unittest.TestCase):
         self.assertTrue(second.report()["ok"])
 
 
+
+@unittest.skipUnless(built_host(), "build the host first: cargo build -p ui4me-host")
+class PolicyAnswerTests(unittest.TestCase):
+    def test_t15_busy_close_answer_is_asked_again_not_a_veto(self):
+        """HOST-15: "Callback queue is full" (-32005) no longer silently vetoes the close."""
+        host = WaitingHost(self, "close-soon", "busy-close", app_id="org.ui4me.test.BusyClose")
+        self.assertEqual(host.wait(30), 0, host.host_log())
+        report = host.report()
+        self.assertTrue(report.get("ok"), (report, host.host_log()))
+        requests = report["policy_requests"]
+        closes = [params for method, params in requests if method == "window.before_close"]
+        # Two busy answers, then the allow on the third request; the last window then quits.
+        self.assertEqual(len(closes), 3, requests)
+        self.assertEqual(requests[-1][0], "app.before_quit", requests)
+        self.assertIn("asking the close/quit decision again", host.host_log())
+
+
 if __name__ == "__main__":
     unittest.main()

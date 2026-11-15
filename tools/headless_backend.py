@@ -183,7 +183,8 @@ def scenario_soak(peer, report, count="10000"):
 
 def scenario_wait(peer, report, *options):
     """Ready with one window, announce it (`REPORT.ready`), then serve the host until it sends
-    `app.shutdown`. Options: `quit-soon` requests the quit 0.5 s after ready, `linger` waits 1.5 s
+    `app.shutdown`. Options: `quit-soon` requests the quit 0.5 s after ready, `close-soon` requests
+    closing the window right after ready, `linger` waits 1.5 s
     after `app.shutdown`, `decline-quit` answers app.before_quit with allow=false,
     `busy-close`/`error-close` answer window.before_close with -32005/-32603 the first N=2
     times."""
@@ -210,7 +211,10 @@ def scenario_wait(peer, report, *options):
     if "quit-soon" in options:
         time.sleep(0.5)
         peer.call("app.request_quit")
-    shutdown = peer.wait_for(lambda m: m.get("method") == "app.shutdown", timeout=120)
+    if "close-soon" in options:
+        peer.call("window.request_close", {"window_id": window["window_id"]})
+    timeout = 15 if "close-soon" in options else 120
+    shutdown = peer.wait_for(lambda m: m.get("method") == "app.shutdown", timeout=timeout)
     report["shutdown"] = shutdown["params"]
     if "linger" in options:
         time.sleep(1.5)     # a backend that takes a while to save and exit

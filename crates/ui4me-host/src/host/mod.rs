@@ -224,7 +224,15 @@ pub struct Host {
     /// them this host has handled.
     termination: Option<Arc<crate::termination::Termination>>,
     termination_seen: usize,
+    /// HOST-15: the policy requests sent for pending decisions (for a retry after "busy"), and
+    /// the retries waiting for their backoff.
+    decision_requests: HashMap<String, (&'static str, Value)>,
+    decision_retries: Vec<(Instant, String)>,
 }
+
+/// HOST-15: how often a decision answered with "busy" is asked again (100 ms … 1.6 s backoff,
+/// about 3 s in total) before it counts as no decision.
+const MAX_DECISION_RETRIES: u32 = 5;
 
 /// Launch a manifest, forwarding secondary launches to the existing instance.
 pub fn run(config: AppConfig, headless: bool) -> Result<i32> {
@@ -524,6 +532,8 @@ impl Host {
             virtual_time_ms: None,
             termination: None,
             termination_seen: 0,
+            decision_requests: HashMap::new(),
+            decision_retries: Vec::new(),
             #[cfg(test)]
             observed_notifications: Vec::new(),
         })
@@ -742,6 +752,7 @@ impl Host {
                 self.begin_shutdown();
             }
         }
+        self.send_due_decision_retries();
         let requests = self
             .termination
             .as_ref()
@@ -815,14 +826,41 @@ impl Host {
         if value.get("method").is_none() && self.client == Some(connection) {
             match protocol::parse_response(value) {
                 Ok(response) => {
-                    let allowed = response
+                    // HOST-15: only an explicit boolean is a decision; `{"allow": false}` is
+                    // the only veto. An error answer is no decision: "busy" is asked again
+                    // after a backoff, anything else leaves the window open / the app running
+                    // (never an implicit allow) and is reported.
+                    let (allowed, problem) = match &response.outcome {
+                        Ok(result) => match result.get("allow").and_then(Value::as_bool) {
+                            Some(allowed) => (Some(allowed), None),
+                            None => (None, Some("answer without a boolean allow".to_owned())),
+                        },
+                        Err(error) => (None, Some(format!("{} ({})", error.message, error.code))),
+                    };
+                    let busy = response
                         .outcome
                         .as_ref()
-                        .ok()
-                        .and_then(|v| v.get("allow"))
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false);
+                        .err()
+                        .is_some_and(|e| e.code == protocol::code::BUSY);
+                    if busy
+                        && self
+                            .decisions
+                            .get(&response.id)
+                            .is_some_and(|d| d.retries < MAX_DECISION_RETRIES)
+                    {
+                        self.retry_decision(&response.id);
+                        return;
+                    }
+                    let Some(allowed) = allowed else {
+                        if let Ok(resolved) = self.decisions.resolve(&response.id, false) {
+                            self.no_decision(resolved.decision, problem.unwrap_or_default());
+                        } else {
+                            tracing::debug!("ignored stale decision response");
+                        }
+                        return;
+                    };
                     if let Ok(resolved) = self.decisions.resolve(&response.id, allowed) {
+                        self.decision_requests.remove(&response.id);
                         match resolved.decision.kind {
                             DecisionKind::CloseWindow { window_id } if resolved.allowed => {
                                 // A window awaiting cancellation of its native
@@ -960,6 +998,86 @@ impl Host {
         }
     }
 
+    /// HOST-15: the backend answered "busy" (for example a full callback queue): ask the same
+    /// decision again under a new ID after an exponential backoff.
+    fn retry_decision(&mut self, id: &str) {
+        let Some(request) = self.decision_requests.remove(id) else {
+            return;
+        };
+        let Ok(decision) = self.decisions.reissue(id) else {
+            return;
+        };
+        let delay = Duration::from_millis(100 << decision.retries.min(5).saturating_sub(1));
+        tracing::info!(
+            retry = decision.retries,
+            delay_ms = delay.as_millis() as u64,
+            "backend was busy; asking the close/quit decision again"
+        );
+        self.decision_retries
+            .push((Instant::now() + delay, decision.id.clone()));
+        self.decision_requests.insert(decision.id, request);
+    }
+
+    /// Send a host -> backend policy request and remember it for a possible retry.
+    fn send_decision_request(&mut self, id: &str, method: &'static str, params: Value) {
+        let decisions = &self.decisions;
+        self.decision_requests
+            .retain(|pending, _| decisions.get(pending).is_some());
+        self.decision_requests
+            .insert(id.to_owned(), (method, params.clone()));
+        if let Some(client) = self.client {
+            self.send(
+                client,
+                json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}),
+            );
+        }
+    }
+
+    fn send_due_decision_retries(&mut self) {
+        if self.decision_retries.is_empty() {
+            return;
+        }
+        let now = Instant::now();
+        let (due, later): (Vec<_>, Vec<_>) = std::mem::take(&mut self.decision_retries)
+            .into_iter()
+            .partition(|(at, _)| *at <= now);
+        self.decision_retries = later;
+        for (_, id) in due {
+            // A decision cancelled meanwhile (window closed, quit superseded) is not re-sent.
+            if self.decisions.get(&id).is_none() {
+                continue;
+            }
+            if let Some((method, params)) = self.decision_requests.get(&id).cloned() {
+                self.send_decision_request(&id, method, params);
+            }
+        }
+    }
+
+    /// HOST-15: the backend gave no decision. Nothing is closed or quit (data-loss protection);
+    /// the user can request it again or force the quit.
+    fn no_decision(&mut self, decision: crate::lifecycle::Decision, problem: String) {
+        self.decision_requests.remove(&decision.id);
+        tracing::warn!(
+            decision = decision.id,
+            problem,
+            "backend gave no close/quit decision; nothing was closed"
+        );
+        match decision.kind {
+            DecisionKind::QuitApplication => {
+                let _ = self.lifecycle.cancel_quit();
+                self.status_all(
+                    "The application gave no quit decision. It keeps running; quit again to retry, or press Ctrl+Shift+Q to force.",
+                );
+            }
+            DecisionKind::CloseWindow { window_id } => {
+                if let Some(window) = self.windows.get_mut(&window_id) {
+                    window.probe.status = "The application gave no close decision. The window stays open; close it again to retry.".into();
+                }
+                self.refresh(&window_id);
+            }
+        }
+    }
+
     fn hello(&mut self, connection: u64, params: &Value) -> Result<Value, RpcError> {
         if self.client.is_some() {
             return Err(RpcError::busy("Backend is already connected"));
@@ -1091,13 +1209,11 @@ impl Host {
             }
             self.refresh(window_id);
             self.window_event_message(window_id, "close_requested", json!({"reason":reason}));
-            if let Some(client) = self.client {
-                self.send(
-                    client,
-                    json!({"jsonrpc":"2.0","id":decision.decision.id,"method":"window.before_close",
-                    "params":{"window_id":window_id,"reason":reason}}),
-                );
-            }
+            self.send_decision_request(
+                &decision.decision.id,
+                "window.before_close",
+                json!({"window_id":window_id,"reason":reason}),
+            );
         }
         Ok(())
     }
@@ -1136,9 +1252,11 @@ impl Host {
                 json!({"id":stale,"reason":"application_quit"}),
             );
         }
-        if let Some(client) = self.client {
-            self.send(client, json!({"jsonrpc":"2.0","id":start.decision.id,"method":"app.before_quit","params":{"reason":reason}}));
-        }
+        self.send_decision_request(
+            &start.decision.id,
+            "app.before_quit",
+            json!({"reason":reason}),
+        );
         self.status_all("Waiting for application quit decision. Ctrl+Shift+Q forces shutdown.");
         Ok(())
     }
@@ -1465,6 +1583,8 @@ mod tests {
             virtual_time_ms: None,
             termination: None,
             termination_seen: 0,
+            decision_requests: HashMap::new(),
+            decision_retries: Vec::new(),
             #[cfg(test)]
             observed_notifications: Vec::new(),
         }
@@ -1632,6 +1752,94 @@ mod tests {
         let request = termination.take_new(&mut host.termination_seen).remove(0);
         host.terminate(request);
         assert!(host.force_quit, "second request forces the quit");
+    }
+
+    /// HOST-15 (T15): an error answer to a policy request is no decision, never a veto and
+    /// never an implicit allow. "Busy" is asked again after a backoff; other errors leave the
+    /// window open / the application running; only `{"allow": false}` vetoes.
+    #[test]
+    fn error_answers_to_policy_requests_are_no_decision() {
+        let mut host = controller(true);
+        add_window(&mut host, "one");
+        add_window(&mut host, "two");
+        let pending = |host: &Host| host.decision_requests.keys().next().cloned().unwrap();
+        host.request_close("one", "native_close").unwrap();
+        let first = pending(&host);
+        host.message(
+            7,
+            protocol::error(Some(&first), &RpcError::busy("Callback queue is full")),
+            None,
+        );
+        assert!(host.windows.contains_key("one"), "busy is not an allow");
+        assert_eq!(
+            host.decisions.pending_count(),
+            1,
+            "busy is not a veto either"
+        );
+        assert_eq!(host.decision_retries.len(), 1);
+        let retried = pending(&host);
+        assert_ne!(retried, first, "asked again under a new ID");
+        // The late answer to the old ID is stale.
+        host.message(7, protocol::success(&first, json!({"allow":true})), None);
+        assert!(host.windows.contains_key("one"));
+        // Backoff elapsed: the retry is sent (no transport in this fixture) and stays pending.
+        host.decision_retries[0].0 = Instant::now();
+        host.pump(None);
+        assert!(host.decision_retries.is_empty());
+        assert_eq!(host.decisions.pending_count(), 1);
+        // A failing policy callback: no decision, the window stays open, nothing pending.
+        host.message(
+            7,
+            protocol::error(
+                Some(&retried),
+                &RpcError::new(protocol::code::INTERNAL_ERROR, "Callback failed"),
+            ),
+            None,
+        );
+        assert!(host.windows.contains_key("one"));
+        assert_eq!(host.decisions.pending_count(), 0);
+        assert!(host.windows["one"]
+            .probe
+            .status
+            .contains("no close decision"));
+        // Asking again works, and an explicit allow closes.
+        host.request_close("one", "native_close").unwrap();
+        let again = pending(&host);
+        host.message(7, protocol::success(&again, json!({"allow":true})), None);
+        assert!(!host.windows.contains_key("one"));
+
+        // Busy beyond the retry budget is no decision as well.
+        host.request_close("two", "native_close").unwrap();
+        for _ in 0..=MAX_DECISION_RETRIES {
+            let id = pending(&host);
+            host.message(7, protocol::error(Some(&id), &RpcError::busy("full")), None);
+        }
+        assert!(host.windows.contains_key("two"));
+        assert_eq!(host.decisions.pending_count(), 0);
+
+        // Quit: an error answer keeps the application running (no veto status, no shutdown).
+        host.request_quit("backend_request").unwrap();
+        assert_eq!(host.lifecycle.phase(), Phase::QuitPending);
+        let quit = pending(&host);
+        host.message(
+            7,
+            protocol::error(
+                Some(&quit),
+                &RpcError::new(protocol::code::INTERNAL_ERROR, "x"),
+            ),
+            None,
+        );
+        assert_eq!(host.lifecycle.phase(), Phase::Running);
+        // A malformed answer is no decision too; an explicit false still vetoes.
+        host.request_quit("backend_request").unwrap();
+        let quit = pending(&host);
+        host.message(7, protocol::success(&quit, json!({"allow":"yes"})), None);
+        assert_eq!(host.lifecycle.phase(), Phase::Running);
+        host.request_quit("backend_request").unwrap();
+        let quit = pending(&host);
+        host.message(7, protocol::success(&quit, json!({"allow":false})), None);
+        assert_eq!(host.lifecycle.phase(), Phase::Running);
+        assert!(host.windows["two"].probe.status.contains("Quit cancelled"));
     }
 
     #[test]

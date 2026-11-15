@@ -40,3 +40,18 @@ exit after `app.shutdown`; a second launch of the same app starts 0.8 s after re
 | --- | --- |
 | baseline | second launch exits 1 at once: `Primary instance is shutting down (RPC -32004)` |
 | this branch | second launch logs `primary instance is shutting down; waiting to take over`, acquires the lock when the primary exits (primary exit 0), starts its own backend on the same endpoint, later exits 143 on SIGTERM |
+
+## HOST-15 error answers to policy requests (`PolicyAnswerTests`)
+
+Backend asks to close its only window and answers `window.before_close` with `-32005 Callback
+queue is full` twice, then `{"allow": true}`.
+
+| Host | Observed |
+| --- | --- |
+| baseline | first busy answer = veto; window stays, no `app.before_quit`; the test times out (30 s) |
+| this branch | asked again after 100 ms and 200 ms under new IDs; third answer allows; last window -> `app.before_quit` -> `app.shutdown`, exit 0 |
+
+Unit: `host::tests::error_answers_to_policy_requests_are_no_decision` (busy retry, stale old
+ID, -32603 = no decision with window kept, retry budget, quit error/malformed answer keep the
+app running, explicit false still vetoes), `lifecycle::tests::a_reissued_decision_keeps_its_place_and_stales_the_old_id`.
+Data-loss protection kept: no path turns an error, a timeout or a malformed answer into an allow.
