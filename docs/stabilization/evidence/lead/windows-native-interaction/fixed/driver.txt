@@ -1,0 +1,22 @@
+WINDOW 190,213 640x420
+INPUT 202,280 179x23
+CLIP_US [Привет мир]
+FOCUS_AFTER_TAB1 [Help link] ControlType.Hyperlink
+MARK before_enter
+MARK after_enter
+FAR_BEFORE 202,2,711 76x23 offscreen=False
+FOCUS_AFTER_TAB2 [Far button]
+FAR_AFTER 202,610 76x23 offscreen=False
+FAR_VISIBLE True
+LAYOUT 0x419
+INPUT2 202,213 179x23
+MARK before_ru
+CLIP_RU [Привет мир]
+MARK after_ru
+MARK after_plain_ru
+PR1 202,218 76x23 PR2 290,218 89x23 WIN 190,213 640x420
+MARK before_split
+MARK after_split
+MARK after_same
+IB 393,213 144x31
+exit=0

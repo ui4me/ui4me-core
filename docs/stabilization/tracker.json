@@ -322,7 +322,7 @@
    ],
    "verification": {
     "linux": "Linux headless: cargo test renderer/host + verify.py (ws D); integration Python suite",
-    "windows": "pending",
+    "windows": "Native Windows (SendInput scan codes + UIA, interactive session): fails on 1.0.1, passes on integration (evidence/lead/windows-native-interaction.md)",
     "required": "both"
    },
    "status": "IN_PROGRESS",
@@ -332,7 +332,7 @@
    ],
    "remaining_risk": "",
    "owner_decision": false,
-   "notes": "Code fixed; native Windows/Orca/NVDA check pending.",
+   "notes": "Linux native (KDE Wayland/AT-SPI) check by ws N pending.",
    "tests": [
     "document::interact_tests (focus reveal)"
    ]
@@ -534,15 +534,21 @@
     "T9"
    ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending",
+    "linux": "Linux: verify.py all stages PASS at 29f9f8d (verify-integ6); Pester 72/72 real host on pwsh 7.7; Python suites on 3.10/3.13/3.14/3.14t",
+    "windows": "Python suites incl. CallbackRobustnessTests pass on 3.10 and 3.13 (evidence/lead/windows-bindings-29f9f8d.md)",
     "required": "both"
    },
-   "status": "IN_PROGRESS",
-   "commits": [],
-   "remaining_risk": "",
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "0922dcf"
+   ],
+   "remaining_risk": "Policy fail-safe: exception or None return keeps the window open (warned).",
    "owner_decision": false,
-   "notes": ""
+   "notes": "",
+   "tests": [
+    "tools/test_binding_robustness.py CallbackRobustnessTests (T9)",
+    "real-host sys.exit() in close policy test"
+   ]
   },
   {
    "id": "F-14",
@@ -749,7 +755,7 @@
    ],
    "verification": {
     "linux": "Linux headless: cargo test renderer/host + verify.py (ws D); integration Python suite",
-    "windows": "pending",
+    "windows": "Native Windows (SendInput scan codes + UIA, interactive session): fails on 1.0.1, passes on integration (evidence/lead/windows-native-interaction.md)",
     "required": "both"
    },
    "status": "IN_PROGRESS",
@@ -758,7 +764,7 @@
    ],
    "remaining_risk": "",
    "owner_decision": false,
-   "notes": "Native check pending.",
+   "notes": "Linux native (KDE Wayland/AT-SPI) check by ws N pending.",
    "tests": [
     "document::interact_tests (link Enter, T10 matrix)"
    ]
@@ -790,7 +796,7 @@
    ],
    "verification": {
     "linux": "Linux headless: cargo test renderer/host + verify.py (ws D); integration Python suite",
-    "windows": "pending",
+    "windows": "Native Windows (SendInput scan codes + UIA, interactive session): fails on 1.0.1, passes on integration (evidence/lead/windows-native-interaction.md)",
     "required": "both"
    },
    "status": "IN_PROGRESS",
@@ -800,7 +806,7 @@
    ],
    "remaining_risk": "",
    "owner_decision": false,
-   "notes": "Russian layout native check pending.",
+   "notes": "Linux native (KDE Wayland/AT-SPI) check by ws N pending.",
    "tests": [
     "keyboard::shortcut_key tests",
     "click common-ancestor tests"
@@ -873,15 +879,21 @@
     "T12"
    ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending",
-    "required": "both"
+    "linux": "Docker mcr.microsoft.com/powershell: AllUsers install as root, run as unprivileged user: baseline throws, fixed runs headless app (evidence/e-bindings/ps-f19-allusers-container.md)",
+    "windows": "Not applicable on Windows (no execute bit); verified the chmod/cache path is unreachable on Windows (Get-UI4MEHostPath guard) and the test is excluded there",
+    "required": "linux"
    },
-   "status": "IN_PROGRESS",
-   "commits": [],
-   "remaining_risk": "",
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "9827c3d"
+   ],
+   "remaining_risk": "Cache under XDG_CACHE_HOME grows one copy per version/hash.",
    "owner_decision": false,
-   "notes": ""
+   "notes": "",
+   "tests": [
+    "Unit.Tests.ps1 BIND-PS-11 (PosixOnly)",
+    "evidence/e-bindings/ps-f19-allusers-container.sh"
+   ]
   },
   {
    "id": "F-20",
@@ -1112,20 +1124,22 @@
     "T15"
    ],
    "verification": {
-    "linux": "all T15 tests pass; each fails on baseline",
-    "windows": "host lib tests + PolicyAnswerTests pass; Ctrl+Break delivers app.shutdown (baseline not) but launcher dies 0xC000013A (evidence/lead/windows-lifecycle-81b8c85.md)",
+    "linux": "all T15 tests pass; each fails on baseline; launcher SIGINT/SIGTERM exit 130/143 with on_shutdown",
+    "windows": "host lifecycle tests pass; Ctrl+Break direct start: Python exit 130 + on_shutdown; PowerShell 5.1/7 exit 130, UntilShutdown returns, no debugger prompt (evidence/lead/windows-bindings-29f9f8d.md)",
     "required": "both"
    },
-   "status": "IN_PROGRESS",
+   "status": "FIXED_VERIFIED",
    "commits": [
     "7813ef8",
     "92977d2",
     "1d2753a",
     "2c1233a",
     "0adab8c",
-    "f5b3fb7"
+    "f5b3fb7",
+    "92a7ea1",
+    "334ede8"
    ],
-   "remaining_risk": "",
+   "remaining_risk": "WM_ENDSESSION (logoff/shutdown) not exercised natively; KillMode=mixed and HOST-12 SID check deferred (G). Ctrl+C typed in a real console not exercised (CTRL_BREAK via API only).",
    "owner_decision": false,
    "notes": "Remaining: direct-start launcher dies on console Ctrl+Break (handed to ws E, BIND-10); WM_ENDSESSION unverified natively; HOST-12 SID check deferred; KillMode=mixed deferred.",
    "tests": [
@@ -1164,15 +1178,23 @@
     "T9"
    ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending",
+    "linux": "Linux: verify.py all stages PASS at 29f9f8d (verify-integ6); Pester 72/72 real host on pwsh 7.7; Python suites on 3.10/3.13/3.14/3.14t",
+    "windows": "BIND-04 on Windows: real host True, pip shims False; bootstrap/launcher tests pass on 3.10 and 3.13 (evidence/lead/windows-bindings-29f9f8d.md)",
     "required": "both"
    },
-   "status": "IN_PROGRESS",
-   "commits": [],
-   "remaining_risk": "",
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "c3e1cca",
+    "0922dcf"
+   ],
+   "remaining_risk": "BIND-05 (lossy print relay through the 512-line log ring) DEFERRED: needs a host option (stdio=inherit) or a lossless relay.",
    "owner_decision": false,
-   "notes": ""
+   "notes": "BIND-05 deferred; BIND-07 partial (second-launch arguments not forwarded).",
+   "tests": [
+    "tools/test_bootstrap.py",
+    "tools/test_launcher.py",
+    "tools/test_application.py"
+   ]
   },
   {
    "id": "F-27",
@@ -1242,15 +1264,24 @@
     "T16"
    ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending",
+    "linux": "Linux: verify.py all stages PASS at 29f9f8d (verify-integ6); Pester 72/72 real host on pwsh 7.7; Python suites on 3.10/3.13/3.14/3.14t",
+    "windows": "Pester real host 70/70 on 5.1 and 7.4.6 (evidence/lead/windows-bindings-29f9f8d.md)",
     "required": "both"
    },
-   "status": "IN_PROGRESS",
-   "commits": [],
-   "remaining_risk": "",
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "916b1d7",
+    "df14e52",
+    "334ede8"
+   ],
+   "remaining_risk": "PS-09 strict [bool] policy is a documented behaviour change from 1.0.1. Launcher ends with [Environment]::Exit (skips PowerShell exit handlers such as transcripts).",
    "owner_decision": false,
-   "notes": ""
+   "notes": "",
+   "tests": [
+    "powershell/tests/Callbacks.Tests.ps1",
+    "Unit.Tests.ps1",
+    "DirectStart.Tests.ps1"
+   ]
   },
   {
    "id": "F-29",
@@ -1272,23 +1303,31 @@
    ],
    "evidence": "BIND headless and mock peer",
    "reproduction": "docs/audit/evidence/scripts/bind/",
-   "root_cause": "Indiscriminate bounded queues; first-come admission",
-   "correction": "Control notifications bypass queues, eager bookkeeping, coalescible dropped first, counters",
+   "root_cause": "One 128-slot FIFO per binding dropped the newest message regardless of type, including closed/document.error/app.shutdown; bookkeeping waited for the event worker",
+   "correction": "Delivery classes (control/coalescible/discrete): control always admitted, oldest coalescible evicted first, discrete refused only when nothing can be evicted, every drop counted and logged once per burst; bookkeeping on the reader thread; unsubscribed events filtered on arrival",
    "dependencies": "F-02",
    "overlap": "",
    "tests_required": [
     "T16"
    ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending",
+    "linux": "Linux: verify.py all stages PASS at 29f9f8d (verify-integ6); Pester 72/72 real host on pwsh 7.7; Python suites on 3.10/3.13/3.14/3.14t; e6 overflow probe: 191 dropped + closed lost -> 0 control dropped, window retired (evidence/e-bindings/py-e6-overflow.md)",
+    "windows": "PS 5.1 and 7 windowed burst N=100 x 6 rounds: PROBE_PASS, droppedControl=0, droppedDiscrete=0; Delivery.Tests pass on both; Python suites pass (evidence/lead/windows-bindings-29f9f8d.md)",
     "required": "both"
    },
-   "status": "IN_PROGRESS",
-   "commits": [],
-   "remaining_risk": "",
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "0922dcf",
+    "b6b2d86",
+    "df14e52"
+   ],
+   "remaining_risk": "Control messages unbounded by design (thousands of document.error possible). Interest filtering drops events that arrive before their handler is registered; replacing the document.event handler via rpc.on_notification disables the filter. PowerShell delivers only ~8-20% of a 10,800-event transition burst to callbacks (coalescible, counted).",
    "owner_decision": false,
-   "notes": ""
+   "notes": "",
+   "tests": [
+    "tools/test_binding_robustness.py ControlNotificationTests (T16)",
+    "powershell/tests/Delivery.Tests.ps1"
+   ]
   }
  ],
  "specialist": [
@@ -2458,12 +2497,16 @@
    "reproduction": "1. `e2_sysexit.py`: a focus callback calls `sys.exit(0)`. Output: `seen after two focus events: ['a']`, and the thread list no longer contains `ui4me-application-events`. Later events are never delivered, and `run()` then waits out the full 2 s drain (`run returned after 2.21 s`). Same result on 3.1",
    "root_cause": "User code runs inside a `BaseException`-unsafe loop, and response encoding is treated as infallible.",
    "correction": "- In `_dispatch`, wrap the callback in `except BaseException`. For `SystemExit` or `KeyboardInterrupt` raised in a callback:",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "0922dcf"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -2482,12 +2525,16 @@
    "reproduction": "`e6_overflow.py`. Window 1's focus callback sleeps 3 s. 80 focus commands produce about 320 events, then window 2 is closed by `request_close()` with the default allow policy. Observed:",
    "root_cause": "A single bounded FIFO with a drop-newest policy that does not look at message type.",
    "correction": "1. Never drop control notifications (`window.event`, `document.error`, `app.activated`, `desktop.preferences_changed`, `request.cancelled`). Replace `queue.Queue` with a small custom deque that has a lock and condition. When the queue is full and a control message arrives, evict the **oldest droppable** DOM event instead. Prefer high-frequency types such as `pointermove`, `pointerover`/`out`, `mou",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "0922dcf"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -2506,12 +2553,16 @@
    "reproduction": "`e3_exceptions.py`. Stdout contained only `Notification handler failed: KeyError: 'missing_key'`. The second handler's message `second handler for same event ran` was never printed. A policy raising `ValueError` and a policy with no `return` both silently kept the window open (`window closed? False`",
    "root_cause": "Minimal error reporting, plus `Document._dispatch` not isolating handlers.",
    "correction": "- Print through `traceback.print_exc()` to stderr for notification, request and per-handler failures.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "0922dcf"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -2530,12 +2581,16 @@
    "reproduction": "- `fakevenv/bin/ui4me-host` is a wrapper with the same shape as pip's, plus an invocation counter. `env -u UI4ME_HOST_BINARY PATH=fakevenv/bin:… PYTHONPATH=<repo>/python timeout 5 ui4me-host --version` gave exit 124 with **65 re-executions in 5 s** and no output.",
    "root_cause": "The PATH fallback does not exclude the package's own wrapper, and there is no recursion guard.",
    "correction": "In `host_binary()`:",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "c3e1cca"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -2554,7 +2609,7 @@
    "reproduction": "`e11_print.py` with the debug host. The backend prints 20,000 lines; **155 reached the launcher's stdout**. stderr showed `3243 backend log records discarded because the bounded log ring was full` and `ui4me-host warn: backend log batch exceeded the GUI formatting budget (source=backend, omitted_rec",
    "root_cause": "The relay meant for the diagnostics window doubles as the developer console.",
    "correction": "- Add a manifest option such as `[backend] stdio = \"inherit\"`, which `_bootstrap.write_manifest` sets.",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -2562,7 +2617,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Needs a host change: [backend] stdio = \"inherit\" or a lossless backpressured relay instead of the 512-line ring. Post-1.0.2."
   },
   {
    "id": "BIND-06",
@@ -2578,12 +2633,16 @@
    "reproduction": "- `e14_fallback.py`: the first `open_html(\"<p onclick=…>\")` raises `-32602` as expected. Then `open_html(\"<p>fallback</p>\")` fails with `RpcError -32008: Application is shutting down or failed`, and `run()` fails the same way. A thread calling `request_quit` gets a third traceback.",
    "root_cause": "",
    "correction": "- In `open_*`, when `not self._ready`, keep the empty window on load failure and re-raise. Document that the caller may call `window.load_html(...)` on `exc.window` or reuse it.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "0922dcf"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -2600,15 +2659,17 @@
    "reproduction": "`e17_single.py`.",
    "root_cause": "",
    "correction": "1. Have the host include the secondary's `[backend].args` and `cwd` in `app.activated` (for example `backend_args`). This is an additive field.",
-   "status": "OPEN",
-   "commits": [],
+   "status": "DEFERRED",
+   "commits": [
+    "0922dcf"
+   ],
    "tests": [],
    "verification": {
     "linux": "pending",
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Partial: Application.on_activated added; forwarding a second launch's script arguments needs host/protocol work. Post-1.0.2."
   },
   {
    "id": "BIND-08",
@@ -2622,7 +2683,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "- For the `__main__` spec (zipapp or directory), use `script:` with `abspath(sys.argv[0])`, and take the label from its stem.",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -2630,7 +2691,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Default identity collisions (zipapps/__main__, scaffold app ids): DX; post-1.0.2 backlog."
   },
   {
    "id": "BIND-09",
@@ -2646,12 +2707,16 @@
    "reproduction": "`e10_twice.py`.",
    "root_cause": "",
    "correction": "Set a process-local flag in `_bootstrap` when `start()` connects or launches. A second call raises `StartupError(\"Application.start() was already called in this process\")`. Optionally return the existing `Application` instead.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "c3e1cca"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -2668,12 +2733,17 @@
    "reproduction": "`e7_signals.sh`.",
    "root_cause": "",
    "correction": "- Map `rc < 0` to `128 + (-rc)` and print `ui4me-host terminated by signal SIGSEGV (this is a UI4ME bug; …)`.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "c3e1cca",
+    "92a7ea1"
+   ],
+   "tests": [
+    "tools/test_binding_robustness.py / test_bootstrap.py / Pester (see evidence/lead/windows-bindings-29f9f8d.md)"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "Linux: verify.py all stages PASS at 29f9f8d (verify-integ6); Pester 72/72 real host on pwsh 7.7; Python suites on 3.10/3.13/3.14/3.14t",
+    "windows": "evidence/lead/windows-bindings-29f9f8d.md"
    },
    "remaining_risk": "",
    "notes": ""
@@ -2690,12 +2760,16 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "Map `-32004` from `document.*`, `window.*` and `bitmap.*` calls on a facade to a new `StaleDocumentError` subclass that also derives from `RpcError` (for example `class HostStaleError(StaleDocumentError, RpcError)`), and mark the facade retired at that point.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "0922dcf"
+   ],
+   "tests": [
+    "tools/test_binding_robustness.py / test_bootstrap.py / Pester (see evidence/lead/windows-bindings-29f9f8d.md)"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "Linux: verify.py all stages PASS at 29f9f8d (verify-integ6); Pester 72/72 real host on pwsh 7.7; Python suites on 3.10/3.13/3.14/3.14t",
+    "windows": "evidence/lead/windows-bindings-29f9f8d.md"
    },
    "remaining_risk": "",
    "notes": ""
@@ -2714,12 +2788,17 @@
    "reproduction": "- `e16_timeout.py` on 3.10 prints `NOT a TimeoutError: concurrent.futures._base.TimeoutError`; on 3.13 it is caught.",
    "root_cause": "",
    "correction": "- Raise the builtin: `except concurrent.futures.TimeoutError as e: future.cancel(); raise TimeoutError(...) from e`.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "c3e1cca",
+    "0922dcf"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -2736,12 +2815,16 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "Add an empty `python/ui4me_core/py.typed` and list it in package-data. Add a `verify_package.py` check that the wheel contains it.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "abd85f8"
+   ],
+   "tests": [
+    "tools/test_binding_robustness.py / test_bootstrap.py / Pester (see evidence/lead/windows-bindings-29f9f8d.md)"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "Linux: verify.py all stages PASS at 29f9f8d (verify-integ6); Pester 72/72 real host on pwsh 7.7; Python suites on 3.10/3.13/3.14/3.14t",
+    "windows": "evidence/lead/windows-bindings-29f9f8d.md"
    },
    "remaining_risk": "",
    "notes": ""
@@ -2758,7 +2841,7 @@
    "reproduction": "- No user bus prints `Failed to connect to user scope bus via local transport: No such file or directory`, exit 1. That is systemd's text with no UI4ME context. The troubleshooting page says starting \"fails with a message about systemd user supervision\", which only happens when `systemd-run` is miss",
    "root_cause": "",
    "correction": "- Before calling `systemd-run`, probe the user manager (`$XDG_RUNTIME_DIR/systemd/private`, or `systemctl --user is-system-running`). Print a UI4ME message naming `UI4ME_ALLOW_UNSUPERVISED=1` and `UI4ME_TEST_MODE=1`.",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -2766,7 +2849,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Linux startup DX messages; post-1.0.2 backlog."
   },
   {
    "id": "BIND-15",
@@ -2802,7 +2885,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "- Add `resizable` and `open_file(asset_root=)`.",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -2810,7 +2893,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Python API surface gaps; post-1.0.2 backlog (no defect)."
   },
   {
    "id": "BIND-17",
@@ -2826,15 +2909,19 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "The fix must be host-side (not PR #3 as written; see HOST-02): an allowlisted drop/coalesce of non-semantic high-frequency types, and better per-document subscription filtering. On the client side, keep the non-blocking reader (do not change it), and add the typed drop policy (BIND-02). Optionally parse on the reader only enough to classify and defer the full `json.loads` work. That has low value.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "see F-02"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Host side fixed by ws A (F-02); binding side by ws E (F-29)."
   },
   {
    "id": "BIND-18",
@@ -2848,7 +2935,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "- At the top of `run()`, check `platform.machine()` and `shutil.which(\"cargo\")` and fail fast with a single clear message.",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -2856,7 +2943,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "sdist fallback on unsupported platforms; post-1.0.2 backlog."
   },
   {
    "id": "BIND-19",
@@ -2872,15 +2959,19 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "1. Never disconnect on notification overflow. Drop or coalesce notifications (an allowlisted drop of non-semantic high-frequency types only, as in HOST-02's quick-patch note; not PR #3 as written), keep responses and lifecycle requests, and emit one `document.error` or diagnostic counter.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "see F-02"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Host side fixed by ws A (F-02); binding side by ws E (F-29)."
   },
   {
    "id": "BIND-PS-01",
@@ -2896,12 +2987,16 @@
    "reproduction": "`reserved_host.ps1 -Attr psbase` loads `<div id='x' psbase='1'>` and calls `get_attributes`. Result:",
    "root_cause": "PSObject note properties cannot use ETS-reserved names. The existing fallback to an ordinal Hashtable (`:137-143`) covers only case collisions.",
    "correction": "- In `ReadObject`, before building the PSObject, check each name: empty, or (case-insensitive) one of `psobject`, `psbase`, `psadapted`, `psextended`, `pstypenames`. In that case use the existing ordinal `Hashtable` path, which means extending the `caseCollision` flag into a `needsDictionary` flag.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "916b1d7"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -2921,12 +3016,16 @@
    "reproduction": "`python3 mockpeer.py burst_client.ps1 -N 300 -Mode toplevel` sends a 300-event `transitionrun` burst, then a `click`, then `window.event closed`. Result:",
    "root_cause": "- The host sends events nobody subscribed to.",
    "correction": "1. Do client-side interest filtering on the reader thread.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "b6b2d86"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -2945,12 +3044,17 @@
    "reproduction": "`mockpeer.py burst_client.ps1 -N 300 -Mode inrpc`. A click handler issues RPCs while 300 events plus `closed` arrive. Result: `closedCallback=False window.Closed=False deferredDropped=4`. The window handle stays \"open\" and stays in `$app.Windows`, and the `window.event` callback never sees `closed`.",
    "root_cause": "Two independent bounds with inconsistent lifecycle rules.",
    "correction": "- In the `default` branch, if `$message.Method -eq 'window.event'` and its type is `closed`, always enqueue, bypassing the cap. The count is bounded by the number of windows.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "b6b2d86",
+    "df14e52"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -2969,12 +3073,16 @@
    "reproduction": "`mockpeer.py shutdown_client.ps1`. A click handler is doing RPCs while the host sends `window.event closed` and `app.shutdown`. Result: `closed-callback-ran=False window.Closed=False deferred-left=2`.",
    "root_cause": "",
    "correction": "- After the `-UntilShutdown` loop (and when `-not $Application.Dispatching`), drain `Deferred`, then `Transport.Receive(0)` until empty or about 2 s have passed, dispatching notifications and answering requests. This mirrors Python.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "b6b2d86"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -2993,12 +3101,17 @@
    "reproduction": "`mockpeer.py dialog_client.ps1`. Result:",
    "root_cause": "",
    "correction": "- Store `DefaultTimeout` on the `UI4ME.Request` object in `Start-UI4MERpc`: -1 for `dialog.*`, else 15000.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "916b1d7",
+    "df14e52"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -3017,12 +3130,16 @@
    "reproduction": "`dotsrc/app.ps1` dot-sources `helper.ps1`, which defines `function Start-MyApp { Start-UI4MEScript ... }`. Result: `ui4me-host error: application failed (reason=Backend exited with exit status: 0)`, exit 1, with no hint about the cause. A user module (`.psm1`) is worse: the backend would be `-File X",
    "root_cause": "",
    "correction": "- Default to the entry script. In -File mode, take the script path that follows `-File`/`-f` (or the first positional argument) from `[Environment]::GetCommandLineArgs()`. Otherwise use the outermost frame of `Get-PSCallStack` that has a `ScriptName` ending in `.ps1`.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "916b1d7"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -3041,12 +3158,18 @@
    "reproduction": "`forever.ps1` with job control. `kill -INT <launcher>` gave exit 0. `kill -INT -<pgid>` (a true Ctrl+C) also gave exit 0. The Python launcher (`py_forever.py`) gave exit 130. `kill -TERM` gave 143, and the host and backend were gone in all cases.",
    "root_cause": "",
    "correction": "- Track `$finished = $true` after the wait loop. In `finally`, if not finished, stop the host and call `[Environment]::Exit(130)`. Alternatively, register a `Console.CancelKeyPress` handler in `HostProcess` that sets `e.Cancel = true`, terminates the host and records 130.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "916b1d7",
+    "92a7ea1",
+    "334ede8"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -3065,12 +3188,16 @@
    "reproduction": "- `flow_client.ps1 -Case break`: an `if (...) { break }` in the first click handler silently skipped the second handler for that event (`h1-1-break h1-2 h2-2`, where `h2-1` is missing). `continue` happened to behave like `return`.",
    "root_cause": "",
    "correction": "- Invoke callbacks inside a sentinel loop so that `break`/`continue` terminate there: `foreach ($__ in 1) { $out = @(& $Callback @Arguments) }`. Then log a warning (\"use return, not break\") when the loop exited early without output. A labelled loop is another option.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "916b1d7"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -3089,12 +3216,16 @@
    "reproduction": "- `policy_client.ps1 -Case stringfalse`: `'false'` gave `{\"allow\": true}`.",
    "root_cause": "",
    "correction": "- Accept only `[bool]` (or `[System.Management.Automation.SwitchParameter]`) as the last output. Otherwise log `UI4ME: before-close policy returned <type> '<value>'; treated as veto` and veto (fail-safe).",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "916b1d7"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -3113,7 +3244,7 @@
    "reproduction": "`mockpeer.py stall_client.ps1`. The peer stops reading for 6 s, and the client sends a 1.5 MB request with `-TimeoutMilliseconds 1000`. Result: `call 0 returned after 6008 ms (timeout was 1000)`. Ctrl+C cannot interrupt a blocked .NET write promptly.",
    "root_cause": "",
    "correction": "- A C# writer thread with a bounded outgoing queue. `Send` enqueues, or throws `RpcException(-32005)` when the queue is full.",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3121,7 +3252,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Writes synchronous on the runspace thread, not covered by RPC timeouts; low risk (8 MiB bounded host queue); post-1.0.2."
   },
   {
    "id": "BIND-PS-11",
@@ -3137,12 +3268,16 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "- When the file is not executable and the current user cannot chmod it, copy the host to a per-user cache (for example `$XDG_CACHE_HOME/ui4me/<version>/ui4me-host`), `chmod 0755` the copy, verify its hash, and use it.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "9827c3d"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -3159,7 +3294,7 @@
    "reproduction": "- `@{ v = $SwitchParam }` fails with `Cannot send a System.Management.Automation.SwitchParameter`.",
    "root_cause": "",
    "correction": "- Serialize `SwitchParameter` as `IsPresent`.",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3167,7 +3302,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "JSON serializer edge cases; post-1.0.2 backlog."
   },
   {
    "id": "BIND-PS-13",
@@ -3181,7 +3316,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "- Emit list items normally (`$items` without the comma), or keep the current behaviour and document \"returns an array as one object\".",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3189,7 +3324,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Idiomatic pipeline/error records; API design, post-1.0.2."
   },
   {
    "id": "BIND-PS-14",
@@ -3203,7 +3338,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "- Add aliases or new consistent names (for example `Get-UI4MEDocumentValue`) without removing the old ones.",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3211,7 +3346,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Naming consistency; API design, post-1.0.2."
   },
   {
    "id": "BIND-PS-15",
@@ -3225,7 +3360,7 @@
    "reproduction": "`thread_client.ps1`. A `Start-ThreadJob` using `$using:doc` and the main thread each did 300 `Set-UI4MEDocumentText`. The job saw 2 failures: `Exception calling \"Register\" ... \"Duplicate request ID\"`. Callbacks can also run on the job's runspace when it pumps.",
    "root_cause": "",
    "correction": "- Record `[Runspace]::DefaultRunspace.InstanceId` (or `[Threading.Thread]::CurrentThread.ManagedThreadId`) in `Connect-UI4ME`.",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3233,7 +3368,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Runspace/thread-affinity guard; post-1.0.2."
   },
   {
    "id": "BIND-PS-16",
@@ -3247,7 +3382,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "- Add `public const string HelperVersion = \"1.0.1\"` in C# and compare it with the module version in `Initialize-UI4MEHelper`.",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3255,7 +3390,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Add-Type cost; post-1.0.2."
   },
   {
    "id": "BIND-PS-17",
@@ -3269,7 +3404,7 @@
    "reproduction": "`scope_client.ps1`. The same top-level handler printed `status=function-local` when the event was pumped inside a function's RPC wait, and `status=script-level` when pumped at script level. `$counter++` without `$script:` updated a local copy, as documented. The `.GetNewClosure()` and `$script:` beh",
    "root_cause": "",
    "correction": "Docs (`powershell-api.md` \"Scriptblocks and variables\"): state that unqualified reads in callbacks can see the locals of whichever function is waiting, and recommend `$script:name` for shared reads too, or a state hashtable. No code change is needed.",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3277,7 +3412,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Callback variable scoping; documented behaviour, post-1.0.2."
   },
   {
    "id": "BIND-PS-18",
@@ -3291,7 +3426,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "Verify on winDEV with `Write-Output 'Grüße 😀'` from the backend. If it is broken, write to the console with `WriteConsoleW` when stdout is a console, or set `Console.OutputEncoding` to UTF-8 for the duration of the launcher wait (and restore it).",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3299,7 +3434,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Non-ASCII launcher output on Windows unverified; post-1.0.2."
   },
   {
    "id": "BIND-PS-19",
@@ -3313,7 +3448,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "Reuse `UI4ME.HostProcess` in `Start-UI4MEHost` (with the same Ctrl+C and exit-code handling as BIND-PS-07).",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3321,7 +3456,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Start-UI4MEHost wait mode prints raw JSON records; post-1.0.2."
   },
   {
    "id": "INPUTSEC-01",
@@ -4384,10 +4519,10 @@
   {
    "id": "T9",
    "kind": "test",
-   "status": "OPEN",
-   "location": "",
-   "ci": "",
-   "notes": ""
+   "status": "FIXED_VERIFIED",
+   "location": "tools/test_binding_robustness.py CallbackRobustnessTests; Callbacks.Tests.ps1",
+   "ci": "python stage; Pester",
+   "notes": "Fails on baseline; Windows 3.10/3.13 and 5.1/7 pass"
   },
   {
    "id": "T10",
@@ -4432,18 +4567,18 @@
   {
    "id": "T15",
    "kind": "test",
-   "status": "IN_PROGRESS",
+   "status": "FIXED_VERIFIED",
    "location": "tools/test_host_lifecycle.py, host unit tests",
    "ci": "python stage",
-   "notes": "Linux full; Windows subset"
+   "notes": "Linux full; Windows: host lifecycle subset + Ctrl+Break direct start (Python, PS 5.1, PS 7)"
   },
   {
    "id": "T16",
    "kind": "test",
-   "status": "OPEN",
-   "location": "",
-   "ci": "",
-   "notes": ""
+   "status": "FIXED_VERIFIED",
+   "location": "tools/test_binding_robustness.py ControlNotificationTests; powershell/tests/Delivery.Tests.ps1",
+   "ci": "python stage; Pester",
+   "notes": "Fails on baseline; Windows pass incl. windowed N=100 burst probe"
   }
  ]
 }

@@ -1,0 +1,32 @@
+== ps51
+ROUND_OK 0 callbacks=251 droppedCoalescible=1549 droppedDiscrete=0 droppedControl=0 filtered=8
+ROUND_OK 1 callbacks=561 droppedCoalescible=3039 droppedDiscrete=0 droppedControl=0 filtered=8
+ROUND_OK 2 callbacks=940 droppedCoalescible=4460 droppedDiscrete=0 droppedControl=0 filtered=8
+ROUND_OK 3 callbacks=1292 droppedCoalescible=5908 droppedDiscrete=0 droppedControl=0 filtered=8
+ROUND_OK 4 callbacks=1591 droppedCoalescible=7409 droppedDiscrete=0 droppedControl=0 filtered=8
+ROUND_OK 5 callbacks=1893 droppedCoalescible=8907 droppedDiscrete=0 droppedControl=0 filtered=8
+PROBE_PASS
+== pwsh7
+ROUND_OK 0 callbacks=341 droppedCoalescible=1459 droppedDiscrete=0 droppedControl=0 filtered=8
+ROUND_OK 1 callbacks=765 droppedCoalescible=2835 droppedDiscrete=0 droppedControl=0 filtered=8
+ROUND_OK 2 callbacks=1149 droppedCoalescible=4251 droppedDiscrete=0 droppedControl=0 filtered=8
+ROUND_OK 3 callbacks=1557 droppedCoalescible=5643 droppedDiscrete=0 droppedControl=0 filtered=8
+ROUND_OK 4 callbacks=1939 droppedCoalescible=7061 droppedDiscrete=0 droppedControl=0 filtered=8
+ROUND_OK 5 callbacks=2362 droppedCoalescible=8438 droppedDiscrete=0 droppedControl=0 filtered=8
+PROBE_PASS
+== ps51-slow
+ROUND_OK 0 callbacks=131 droppedCoalescible=1669 droppedDiscrete=0 droppedControl=0 filtered=2
+ROUND_OK 1 callbacks=268 droppedCoalescible=3332 droppedDiscrete=0 droppedControl=0 filtered=2
+ROUND_OK 2 callbacks=402 droppedCoalescible=4998 droppedDiscrete=0 droppedControl=0 filtered=2
+ROUND_OK 3 callbacks=538 droppedCoalescible=6662 droppedDiscrete=0 droppedControl=0 filtered=2
+ROUND_OK 4 callbacks=672 droppedCoalescible=8328 droppedDiscrete=0 droppedControl=0 filtered=2
+ROUND_OK 5 callbacks=809 droppedCoalescible=9991 droppedDiscrete=0 droppedControl=0 filtered=2
+PROBE_PASS
+== pwsh7-slow
+ROUND_OK 0 callbacks=137 droppedCoalescible=1663 droppedDiscrete=0 droppedControl=0 filtered=2
+ROUND_OK 1 callbacks=275 droppedCoalescible=3325 droppedDiscrete=0 droppedControl=0 filtered=2
+ROUND_OK 2 callbacks=412 droppedCoalescible=4988 droppedDiscrete=0 droppedControl=0 filtered=2
+ROUND_OK 3 callbacks=548 droppedCoalescible=6652 droppedDiscrete=0 droppedControl=0 filtered=2
+ROUND_OK 4 callbacks=684 droppedCoalescible=8316 droppedDiscrete=0 droppedControl=0 filtered=2
+ROUND_OK 5 callbacks=822 droppedCoalescible=9978 droppedDiscrete=0 droppedControl=0 filtered=2
+PROBE_PASS

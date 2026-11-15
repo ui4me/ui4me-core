@@ -1,0 +1,36 @@
+{"t": "ready"}
+{"t": "focusin", "el": "name", "key": null, "code": null, "ctrl": null, "href": null}
+{"t": "click", "el": "name", "key": null, "code": null, "ctrl": null, "href": null}
+{"t": "keydown", "el": "name", "key": "Control", "code": "ControlLeft", "ctrl": null, "href": null}
+{"t": "keydown", "el": "name", "key": "a", "code": "KeyA", "ctrl": null, "href": null}
+{"t": "keydown", "el": "name", "key": "Control", "code": "ControlLeft", "ctrl": null, "href": null}
+{"t": "keydown", "el": "name", "key": "c", "code": "KeyC", "ctrl": null, "href": null}
+{"t": "keydown", "el": "name", "key": "Tab", "code": "Tab", "ctrl": null, "href": null}
+{"t": "focusin", "el": "lnk", "key": null, "code": null, "ctrl": null, "href": null}
+{"t": "keydown", "el": "lnk", "key": "Enter", "code": "Enter", "ctrl": null, "href": null}
+{"t": "click", "el": "lnk", "key": null, "code": null, "ctrl": null, "href": null}
+{"t": "link_activated", "el": "lnk", "key": null, "code": null, "ctrl": null, "href": "https://example.invalid/x"}
+{"t": "keydown", "el": "lnk", "key": "Tab", "code": "Tab", "ctrl": null, "href": null}
+{"t": "focusin", "el": "far", "key": null, "code": null, "ctrl": null, "href": null}
+{"t": "focusin", "el": "name", "key": null, "code": null, "ctrl": null, "href": null}
+{"t": "click", "el": "name", "key": null, "code": null, "ctrl": null, "href": null}
+{"t": "keydown", "el": "name", "key": "Control", "code": "ControlLeft", "ctrl": null, "href": null}
+{"t": "keydown", "el": "name", "key": "ф", "code": "KeyA", "ctrl": null, "href": null}
+{"t": "keydown", "el": "name", "key": "Control", "code": "ControlLeft", "ctrl": null, "href": null}
+{"t": "keydown", "el": "name", "key": "с", "code": "KeyC", "ctrl": null, "href": null}
+{"t": "keydown", "el": "name", "key": "ф", "code": "KeyA", "ctrl": null, "href": null}
+{"t": "keydown", "el": "name", "key": "Shift", "code": "ShiftLeft", "ctrl": null, "href": null}
+{"t": "keydown", "el": "name", "key": "Tab", "code": "Tab", "ctrl": null, "href": null}
+{"t": "focusin", "el": "ib", "key": null, "code": null, "ctrl": null, "href": null}
+{"t": "keydown", "el": "ib", "key": "Tab", "code": "Tab", "ctrl": null, "href": null}
+{"t": "focusin", "el": "pr2", "key": null, "code": null, "ctrl": null, "href": null}
+{"t": "mark_split"}
+{"t": "focusin", "el": "pr1", "key": null, "code": null, "ctrl": null, "href": null}
+{"t": "mark_same"}
+{"t": "focusin", "el": "pr2", "key": null, "code": null, "ctrl": null, "href": null}
+{"t": "click", "el": "pr2", "key": null, "code": null, "ctrl": null, "href": null}
+{"t": "mark_icon"}
+{"t": "focusin", "el": "ib", "key": null, "code": null, "ctrl": null, "href": null}
+{"t": "click", "el": "ib", "key": null, "code": null, "ctrl": null, "href": null}
+{"t": "mark_end"}
+{"t": "exit"}
