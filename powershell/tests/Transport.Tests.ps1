@@ -155,6 +155,19 @@ Describe 'UI4ME.Core transport against a local peer' {
         Register-UI4MENotification -Application $script:app -Method 'test.tick' -Callback $null
     }
 
+    It 'matches a notification callback method case-insensitively, as 1.0.1 did (binding review #8)' {
+        $script:ticks = 0
+        $filtered = $script:app.Transport.FilteredNotifications
+        Register-UI4MENotification -Application $script:app -Method 'TEST.Tick' -Callback { $script:ticks++ }
+        $request = Start-UI4MERpc -Application $script:app -Method 'mock.flood_notifications' -Parameters @{ count = 5 }
+        $null = Wait-UI4MERpc -Request $request
+        $end = [DateTime]::UtcNow.AddSeconds(5)
+        while ($script:ticks -lt 5 -and [DateTime]::UtcNow -lt $end) { $null = Wait-UI4ME -Application $script:app -TimeoutMilliseconds 50 }
+        Register-UI4MENotification -Application $script:app -Method 'TEST.Tick' -Callback $null
+        $script:ticks | Should -Be 5
+        $script:app.Transport.FilteredNotifications | Should -Be $filtered
+    }
+
     It 'discards notifications nobody subscribed to on arrival, without dropping or queueing them' {
         $dropped = $script:app.Transport.DroppedNotifications
         $filtered = $script:app.Transport.FilteredNotifications
