@@ -279,6 +279,23 @@ class RelayTests(unittest.TestCase):
         self.assertEqual(self.relay(b"\xff not utf-8\n"), ("", "\ufffd not utf-8\n"))
 
 
+class GoneTerminal:
+    """A console that went away (SIGHUP, closed window): every write fails.
+    A legacy code page also rejects non-ASCII text before that."""
+    encoding = "ascii"
+
+    def __init__(self):
+        self.attempts = 0
+
+    def write(self, text):
+        self.attempts += 1
+        text.encode("ascii")  # UnicodeEncodeError for non-ASCII, as a cp437 console does
+        raise OSError(5, "Input/output error")
+
+    def flush(self):
+        raise OSError(5, "Input/output error")
+
+
 @unittest.skipUnless(os.name == "posix", "POSIX shell fixtures")
 class RelayDrainTests(unittest.TestCase):
     """The relay keeps the host's stderr drained and never bounds exit on it."""
@@ -294,6 +311,22 @@ class RelayDrainTests(unittest.TestCase):
         thread.start()
         thread.join(timeout)
         return result, time.monotonic() - started
+
+    def test_host_output_is_still_drained_after_the_terminal_is_gone(self):
+        """binding review #9: a failed relay write must not stop the reading,
+        or the host blocks once the ~64 KiB pipe buffer is full."""
+        host = textwrap.dedent('''\
+            import signal, sys
+            signal.alarm(20)  # never outlive a failed test
+            for n in range(4000):
+                sys.stderr.write("backend says P\u0159\u00edli\u0161 %d " % n + "x" * 60 + "\\n")
+            sys.stderr.flush()
+            ''')
+        terminal = GoneTerminal()
+        with mock.patch("sys.stderr", terminal), mock.patch("sys.stdout", terminal):
+            result, elapsed = self.run_host_in_thread([sys.executable, "-c", host], timeout=15)
+        self.assertEqual(result.get("status"), 0, f"host blocked on a full stderr pipe ({elapsed:.1f} s)")
+        self.assertGreater(terminal.attempts, 0)
 
     def test_a_descendant_holding_the_pipe_does_not_delay_exit(self):
         """binding review #5: closing the relayed pipe blocked on the relay

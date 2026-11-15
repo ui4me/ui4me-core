@@ -208,11 +208,12 @@ def _write(stream: IO[str] | None, text: str) -> None:
     if stream is None:
         return
     try:
-        stream.write(text + "\n")
-    except UnicodeEncodeError:
-        encoding = getattr(stream, "encoding", None) or "ascii"
-        stream.write(text.encode(encoding, "backslashreplace").decode(encoding) + "\n")
-    except (OSError, ValueError):
+        try:
+            stream.write(text + "\n")
+        except UnicodeEncodeError:
+            encoding = getattr(stream, "encoding", None) or "ascii"
+            stream.write(text.encode(encoding, "backslashreplace").decode(encoding) + "\n")
+    except (OSError, ValueError, LookupError):
         return
     try:
         stream.flush()
@@ -352,7 +353,13 @@ def run_host(command: list[str], *, env: dict[str, str], shutdown_timeout_ms: in
         assert process.stderr is not None
         try:
             for line in process.stderr:
-                relay_line(line, verbose=verbose, stdout=sys.stdout, stderr=sys.stderr)
+                try:
+                    relay_line(line, verbose=verbose, stdout=sys.stdout, stderr=sys.stderr)
+                except Exception:
+                    # The terminal is gone (or rejects the text): discard the
+                    # line but keep reading, since an undrained pipe blocks the
+                    # host once its buffer (~64 KiB) is full (binding review #9).
+                    pass
         except (OSError, ValueError):
             pass
 
