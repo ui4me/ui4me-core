@@ -213,6 +213,25 @@ impl NativeListener {
     }
 }
 
+/// HOST-04: accept errors after which the listener stays usable (descriptor or memory
+/// exhaustion, a connection aborted before it was accepted). The accept loop retries them;
+/// anything else ends the listener.
+pub fn accept_error_is_transient(error: &io::Error) -> bool {
+    matches!(
+        error.raw_os_error(),
+        Some(
+            libc::EMFILE
+                | libc::ENFILE
+                | libc::ENOBUFS
+                | libc::ENOMEM
+                | libc::ECONNABORTED
+                | libc::EPROTO
+                | libc::EINTR
+                | libc::EAGAIN
+        )
+    )
+}
+
 impl Drop for NativeListener {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.path);

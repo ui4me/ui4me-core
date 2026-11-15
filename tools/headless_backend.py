@@ -181,21 +181,57 @@ def scenario_soak(peer, report, count="10000"):
     return window
 
 
-SCENARIOS = {"burst": scenario_burst, "soak": scenario_soak}
+def scenario_wait(peer, report, *options):
+    """Ready with one window, announce it (`REPORT.ready`), then serve the host until it sends
+    `app.shutdown`. Options: `decline-quit` answers app.before_quit with allow=false,
+    `busy-close`/`error-close` answer window.before_close with -32005/-32603 the first N=2
+    times."""
+    answers = {"before_close": 0}
+
+    def policy(method, params):
+        if method == "app.before_quit" and "decline-quit" in options:
+            return {"allow": False}
+        if method == "window.before_close":
+            answers["before_close"] += 1
+            if answers["before_close"] <= 2 and "busy-close" in options:
+                return {"error": {"code": -32005, "message": "Callback queue is full"}}
+            if "error-close" in options:
+                return {"error": {"code": -32603, "message": "Callback failed: ValueError"}}
+        return {"allow": True}
+
+    peer.policy = policy
+    window = peer.call("window.create", {"title": "wait", "width": 320, "height": 200})
+    peer.call("app.ready")
+    diagnostics = peer.call("host.diagnostics")
+    ready = Path(str(report["_path"]) + ".ready")
+    ready.write_text(json.dumps({"endpoint": os.environ["UI4ME_ENDPOINT"], "pid": diagnostics["pid"],
+                                 "window_id": window["window_id"]}), encoding="utf-8")
+    shutdown = peer.wait_for(lambda m: m.get("method") == "app.shutdown", timeout=120)
+    report["shutdown"] = shutdown["params"]
+    report["log"] = [m.get("method") or m for m in peer.log]
+    report["policy_requests"] = [[m["method"], m.get("params")] for m in peer.log
+                                 if m.get("method") in ("window.before_close", "app.before_quit")]
+    report["activated"] = [m["params"] for m in peer.log if m.get("method") == "app.activated"]
+    report["ok"] = True
+    return None
+
+
+SCENARIOS = {"burst": scenario_burst, "soak": scenario_soak, "wait": scenario_wait}
 
 
 def main():
     report_path = Path(sys.argv[1])
     name, args = sys.argv[2], sys.argv[3:]
-    report = {"scenario": name, "ok": False}
+    report = {"scenario": name, "ok": False, "_path": str(report_path)}
     try:
         peer = connect()
-        SCENARIOS[name](peer, report, *args)
-        peer.call("app.request_quit")
-        peer.wait_for(lambda m: m.get("method") == "app.shutdown")
-        report["ok"] = True
+        if SCENARIOS[name](peer, report, *args) is not None:
+            peer.call("app.request_quit")
+            peer.wait_for(lambda m: m.get("method") == "app.shutdown")
+            report["ok"] = True
     except Exception as error:  # the report carries the failure to the test
         report["error"] = f"{type(error).__name__}: {error}"
+    report.pop("_path")
     report_path.write_text(json.dumps(report), encoding="utf-8")
     return 0 if report["ok"] else 1
 

@@ -298,6 +298,15 @@ impl NativeListener {
                         return Err(error);
                     }
                 }
+                ERROR_NO_DATA => {
+                    // HOST-04: a client connected and closed before this call. The instance
+                    // is reusable after a disconnect; report the transient error.
+                    unsafe {
+                        DisconnectNamedPipe(handle.0);
+                    }
+                    self.pending = Some(handle);
+                    return Err(io::Error::from_raw_os_error(ERROR_NO_DATA as i32));
+                }
                 error => return Err(io::Error::from_raw_os_error(error as i32)),
             }
         }
@@ -309,6 +318,26 @@ impl NativeListener {
         }
         Ok(Some(NativeStream::new(handle)))
     }
+}
+
+/// HOST-04: accept errors after which the listener stays usable: a client that disconnected
+/// before `ConnectNamedPipe` (`ERROR_NO_DATA`, `ERROR_BROKEN_PIPE`), all instances in use
+/// (`ERROR_PIPE_BUSY` from `CreateNamedPipeW`), or exhausted resources. The accept loop retries
+/// them; anything else ends the listener.
+pub fn accept_error_is_transient(error: &io::Error) -> bool {
+    matches!(
+        error.raw_os_error().map(|code| code as u32),
+        Some(
+            ERROR_NO_DATA
+                | ERROR_PIPE_BUSY
+                | ERROR_BROKEN_PIPE
+                | ERROR_PIPE_NOT_CONNECTED
+                | ERROR_NO_SYSTEM_RESOURCES
+                | ERROR_NOT_ENOUGH_MEMORY
+                | ERROR_OUTOFMEMORY
+                | ERROR_OPERATION_ABORTED
+        )
+    )
 }
 
 /// One end of a connected pipe shared by reader, writer and control clones.

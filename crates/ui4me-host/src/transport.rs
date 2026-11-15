@@ -176,6 +176,7 @@ impl Server {
         let accept_result = thread::Builder::new()
             .name("ui4me-ipc-accept".into())
             .spawn(move || {
+                let mut retry = AcceptRetryLog::default();
                 while !state.stop.load(Ordering::Acquire) {
                     match listener.accept(&state.stop) {
                         Ok(Some(stream)) => {
@@ -198,6 +199,17 @@ impl Server {
                             }
                         }
                         Ok(None) => break,
+                        Err(error)
+                            if crate::platform::accept_error_is_transient(&error)
+                                && !state.stop.load(Ordering::Acquire) =>
+                        {
+                            // HOST-04: the listener stays usable; back off and keep accepting.
+                            retry.note(&error);
+                            let until = Instant::now() + ACCEPT_RETRY;
+                            while Instant::now() < until && !state.stop.load(Ordering::Acquire) {
+                                thread::sleep(Duration::from_millis(10));
+                            }
+                        }
                         Err(error) => {
                             if !state.stop.load(Ordering::Acquire) {
                                 emit(
@@ -299,6 +311,40 @@ impl Server {
 impl Drop for Server {
     fn drop(&mut self) {
         self.close();
+    }
+}
+
+/// HOST-04: how long the accept loop waits after a transient accept error (for example
+/// `EMFILE`, which leaves the pending connection in the backlog, so retrying at once would spin).
+const ACCEPT_RETRY: Duration = Duration::from_millis(100);
+
+/// Rate-limited logging of transient accept errors: the first one, then at most one summary per
+/// [`AcceptRetryLog::INTERVAL`] with the number of retries since.
+#[derive(Default)]
+struct AcceptRetryLog {
+    logged_at: Option<Instant>,
+    suppressed: u64,
+}
+
+impl AcceptRetryLog {
+    const INTERVAL: Duration = Duration::from_secs(10);
+    /// Returns whether this error was logged.
+    fn note(&mut self, error: &io::Error) -> bool {
+        if self
+            .logged_at
+            .is_some_and(|at| at.elapsed() < Self::INTERVAL)
+        {
+            self.suppressed += 1;
+            return false;
+        }
+        tracing::warn!(
+            %error,
+            retries_since_last_report = self.suppressed,
+            "transient IPC accept error; the listener keeps accepting"
+        );
+        self.logged_at = Some(Instant::now());
+        self.suppressed = 0;
+        true
     }
 }
 
@@ -571,6 +617,46 @@ pub fn request(endpoint: &str, message: Value, timeout: Duration) -> Result<Valu
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// HOST-04: resource exhaustion and aborted connections are retried; other errors end the
+    /// listener. Repeated transient errors are logged once per interval, not per retry.
+    #[test]
+    fn transient_accept_errors_are_retried_and_logged_at_a_bounded_rate() {
+        #[cfg(target_os = "linux")]
+        let (transient, fatal) = (
+            [
+                libc::EMFILE,
+                libc::ENFILE,
+                libc::ECONNABORTED,
+                libc::ENOBUFS,
+            ],
+            [libc::EBADF, libc::EINVAL, libc::ENOTSOCK],
+        );
+        #[cfg(windows)]
+        let (transient, fatal) = (
+            [232, 231, 109, 1450], // ERROR_NO_DATA, _PIPE_BUSY, _BROKEN_PIPE, _NO_SYSTEM_RESOURCES
+            [5, 6, 123],           // ERROR_ACCESS_DENIED, _INVALID_HANDLE, _INVALID_NAME
+        );
+        for code in transient {
+            let error = io::Error::from_raw_os_error(code);
+            assert!(
+                crate::platform::accept_error_is_transient(&error),
+                "{error}"
+            );
+        }
+        for code in fatal {
+            let error = io::Error::from_raw_os_error(code);
+            assert!(
+                !crate::platform::accept_error_is_transient(&error),
+                "{error}"
+            );
+        }
+        let mut log = AcceptRetryLog::default();
+        let error = io::Error::from_raw_os_error(transient[0]);
+        assert!(log.note(&error));
+        assert!((0..100).all(|_| !log.note(&error)));
+        assert_eq!(log.suppressed, 100);
+    }
+
     #[test]
     fn local_round_trip_and_clean_disconnect() {
         let app = format!("org.ui4me.transport.{}", std::process::id());

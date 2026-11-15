@@ -555,6 +555,19 @@ impl Host {
                     self.connected.insert(id, Instant::now());
                 }
                 TransportEvent::Message(id, value) => self.message(id, value, event_loop),
+                TransportEvent::Disconnected(0, reason) => {
+                    // HOST-04: connection 0 is the listener itself (or a connection that could
+                    // not be attached). Transient accept errors are retried by the transport;
+                    // what reaches this point is visible instead of silently ignored.
+                    if reason.starts_with("listener:") {
+                        tracing::error!(
+                            reason,
+                            "IPC listener stopped; this instance can no longer be reached"
+                        );
+                    } else {
+                        tracing::warn!(reason, "incoming IPC connection could not be attached");
+                    }
+                }
                 TransportEvent::Disconnected(id, reason) => {
                     self.connection_closed(id);
                     if self.client == Some(id) {
