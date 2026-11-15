@@ -7,6 +7,8 @@ Used by CI and the PowerShell publish workflow (RELEASE-08 / F-22). The four
 DirectStart tests need a real native host and are skipped without one, which
 used to happen in every CI run unnoticed. This runner fails when more than
 -MaxSkipped tests were skipped, so "real host" is enforced, not assumed.
+Tests tagged PosixOnly (signals, chmod) are excluded on Windows instead of
+being counted as skips.
 
 -HostBinary sets UI4ME_HOST_BINARY (a source build); -TestModule sets
 UI4ME_TEST_MODULE (a staged or installed module whose bundled host is used).
@@ -38,6 +40,9 @@ $config = New-PesterConfiguration
 $config.Run.Path = Join-Path $root 'powershell/tests'
 $config.Run.PassThru = $true
 $config.Output.Verbosity = 'Detailed'
+if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+    $config.Filter.ExcludeTag = @('PosixOnly')
+}
 $result = Invoke-Pester -Configuration $config
 Write-Output ("Pester {0}: passed {1}, failed {2}, skipped {3}, not run {4}" -f $PesterVersion,
     $result.PassedCount, $result.FailedCount, $result.SkippedCount, $result.NotRunCount)

@@ -265,7 +265,7 @@ Close-UI4ME -Application $app
         $r.Out | Should -Match 'STILL x'
     }
 
-    It 'exits with status 130 when interrupted with SIGINT (BIND-PS-07)' -Skip:$script:DiscoveryIsWindows {
+    It 'exits with status 130 when interrupted with SIGINT (BIND-PS-07)' -Tag 'PosixOnly' -Skip:$script:DiscoveryIsWindows {
         $body = @'
 $ErrorActionPreference = 'Stop'
 Import-Module '__MODULE__'

@@ -196,7 +196,7 @@ Describe 'Launcher console interrupt guard' {
 
 Describe 'Get-UI4MEHostPath' {
     AfterEach { Remove-Item Env:UI4ME_HOST_BINARY -ErrorAction SilentlyContinue }
-    It 'runs a hash-verified private copy when the installed host cannot be made executable (BIND-PS-11)' -Skip:$script:DiscoveryIsWindows {
+    It 'runs a hash-verified private copy when the installed host cannot be made executable (BIND-PS-11)' -Tag 'PosixOnly' -Skip:$script:DiscoveryIsWindows {
         $source = Join-Path $TestDrive 'installed-host'
         [IO.File]::WriteAllText($source, "#!/bin/sh`necho cached-host-ran`n")
         $saved = $env:XDG_CACHE_HOME
