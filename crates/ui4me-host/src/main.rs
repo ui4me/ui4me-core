@@ -145,8 +145,9 @@ fn execute(command: Command) -> Result<i32> {
 /// * Console and environment: `detach_owned_console` and every `set_var` stay on the main thread,
 ///   before any other thread is started. Signal and console-control handlers (HOST-07) are
 ///   process-wide; `host::run` installs them from this thread, after `bootstrap_supervised`, so
-///   the supervising launcher keeps the default disposition. They only record the request and
-///   wake this thread (`termination.rs`); the shutdown itself runs here.
+///   the supervising launcher keeps the default disposition. They record the request and wake
+///   this thread (`termination.rs`); the shutdown itself runs here. Only the escalation for a
+///   hung engine (the termination watchdog) ends the process from another thread.
 /// * Linux supervision: `bootstrap_supervised` waits on `systemd-run` from this thread; the
 ///   backend child's `PR_SET_PDEATHSIG` follows the thread that forked it, which is this thread,
 ///   and that thread lives exactly as long as the host (the process exits when it ends).

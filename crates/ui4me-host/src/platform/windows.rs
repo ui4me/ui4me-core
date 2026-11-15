@@ -644,6 +644,16 @@ fn termination_target() -> &'static OnceLock<Arc<crate::termination::Termination
 /// for the orderly shutdown (Windows allows about 5 s before it terminates the process).
 const SESSION_END_WAIT: Duration = Duration::from_millis(4_500);
 
+/// The termination watchdog's exit. `TerminateProcess` rather than `ExitProcess`: the latter
+/// runs DLL detach and CRT exit handlers on this thread, which can block on loader or runtime
+/// locks held by the hung engine thread. The backend is ended by the kill-on-close job object.
+fn exit_now(code: i32) {
+    // SAFETY: terminates the current process (pseudo-handle); does not return on success.
+    unsafe {
+        TerminateProcess(GetCurrentProcess(), code as u32);
+    }
+}
+
 unsafe extern "system" fn on_console_control(kind: u32) -> windows_sys::core::BOOL {
     use windows_sys::Win32::System::Console::{
         CTRL_BREAK_EVENT, CTRL_CLOSE_EVENT, CTRL_C_EVENT, CTRL_LOGOFF_EVENT, CTRL_SHUTDOWN_EVENT,
@@ -767,13 +777,19 @@ fn watch_session_end() -> Result<()> {
 
 /// HOST-07: console control events (Ctrl+C, Ctrl+Break, console close, logoff, shutdown) and
 /// the session end (`WM_QUERYENDSESSION`/`WM_ENDSESSION`) start an orderly shutdown instead of
-/// ending the process at once. Installed once per process.
+/// ending the process at once. Installed once per process, together with the termination
+/// watchdog ([`crate::termination::Termination::watch`]), which ends the process when the engine
+/// thread does not finish the shutdown.
 pub fn install_termination_handlers(
     termination: Arc<crate::termination::Termination>,
 ) -> Result<()> {
-    if termination_target().set(termination).is_err() {
+    if termination_target().set(termination.clone()).is_err() {
         return Ok(());
     }
+    // F-25 review #3: escalation must not depend on the engine thread, which may be hung.
+    termination
+        .spawn_watchdog(exit_now)
+        .context("start termination watchdog")?;
     // SAFETY: registers a handler function with static lifetime.
     if unsafe {
         windows_sys::Win32::System::Console::SetConsoleCtrlHandler(Some(on_console_control), 1)

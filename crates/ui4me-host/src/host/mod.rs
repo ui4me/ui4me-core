@@ -1372,6 +1372,7 @@ impl Host {
     /// Receive this process's termination requests (signals, console control, session end).
     fn watch_termination(&mut self, termination: Arc<crate::termination::Termination>) {
         termination.set_wake(self.wake.clone());
+        termination.set_exit_status(self.exit_code.clone());
         if let Err(error) = platform::install_termination_handlers(termination.clone()) {
             tracing::warn!(
                 error = format!("{error:#}"),
@@ -1386,6 +1387,17 @@ impl Host {
     /// deadline short enough for process managers and session ends. A second termination
     /// request while already shutting down forces the quit.
     fn terminate(&mut self, request: crate::termination::Request) {
+        // Test hook (headless test mode only): an engine thread that hangs while handling the
+        // request, so the termination watchdog can be qualified against a real process.
+        if self.headless
+            && std::env::var_os("UI4ME_TEST_MODE").is_some()
+            && std::env::var_os("UI4ME_TEST_HANG_ENGINE_ON_TERMINATION").is_some()
+        {
+            tracing::warn!("test hook: the engine thread hangs on the termination request");
+            loop {
+                std::thread::sleep(Duration::from_secs(3600));
+            }
+        }
         let first = self.termination_started;
         if first.is_none() {
             self.termination_started = Some(Instant::now());
