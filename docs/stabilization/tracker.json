@@ -93,15 +93,29 @@
     "T14"
    ],
    "verification": {
-    "linux": "pending",
+    "linux": "Linux windowed (nested kwin): burst2 N=20 3/3, N=100 3/3 pass (baseline 1/3, 0/3); T2 passes, fails on baseline",
     "windows": "pending",
     "required": "both"
    },
    "status": "IN_PROGRESS",
-   "commits": [],
-   "remaining_risk": "",
+   "commits": [
+    "c90062f",
+    "78df633",
+    "8c8cab3",
+    "eae0ad9",
+    "a664fb8"
+   ],
+   "remaining_risk": "Reader >8 MiB behind is still disconnected by design; Windows pipe quota unchanged.",
    "owner_decision": false,
-   "notes": ""
+   "notes": "Lead found a second silent drop: renderer per-turn event queue capped at 1,024 (backend saw exactly 1,024 events per switch at N=100). Fixed in a664fb8 (16,384 + counted refusals + host warning). Windows run pending.",
+   "tests": [
+    "transport::t2_burst_to_a_slow_reading_peer_is_delivered_in_order_without_disconnect",
+    "peer_that_stops_reading_is_refused_at_the_byte_cap",
+    "peer_that_stops_reading_is_disconnected_by_the_write_deadline",
+    "each_frame_is_written_with_a_single_write_call",
+    "host::tests::refused_output_disconnects_once_and_counts_the_rest",
+    "document::event_queue_tests"
+   ]
   },
   {
    "id": "F-03",
@@ -1205,8 +1219,13 @@
    "reproduction": "`python3 adv_run.py fast_reader_single_command_burst ADV_N=250 ADV_READ_DELAY=0.002`; `python3 adv_run.py flood_no_read`; coordinator `exp/main/burst2.py`.",
    "root_cause": "(1) unconditional emission of every DOM event; (2) depth-based (not stall-based) disconnect policy; (3) no separation between droppable/coalescable events and reliable traffic; (4) small effective kernel buffering.",
    "correction": "1. Reliable lane vs event lane in `transport.rs`. Replace the single `SyncSender<Vec<u8>>` per connection with a `Mutex<Outbound>{ reliable: VecDeque, events: VecDeque/IndexMap, bytes }` + `Condvar`. Reliable = responses, host→backend requests (`window.before_close`, `app.before_quit`), and lifecycle notifications (`app.shutdown`, `window.event` `closed`/`close_requested`/`focused`, `request.cance",
-   "status": "OPEN",
-   "commits": [],
+   "status": "IN_PROGRESS",
+   "commits": [
+    "c90062f",
+    "78df633",
+    "8c8cab3",
+    "eae0ad9"
+   ],
    "tests": [],
    "verification": {
     "linux": "pending",
@@ -1227,15 +1246,20 @@
    "reproduction": "not reproduced (code reasoning). A test: saturate with 200 notifications, then `respond()` → observe disconnect on PR branch.",
    "root_cause": "drop policy is type-blind and responses have no reserved capacity.",
    "correction": "Do not merge as is. If a quick patch is needed: restrict `offer` to an allowlist of non-semantic high-frequency event types (pointermove, mousemove, mouseover/out/enter/leave, wheel, scroll, transition*, animation*), route everything else through a reliable path with headroom (separate small queue or reserved slots), send a `document.events_lost` marker, and rate-limit the WARN. Then implement HOS",
-   "status": "IN_PROGRESS",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "c90062f"
+   ],
+   "tests": [
+    "transport::t2_burst_to_a_slow_reading_peer_is_delivered_in_order_without_disconnect"
+   ],
    "verification": {
-    "linux": "pending",
+    "linux": "T2 + windowed burst2",
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": "Advisory about draft PR #3: resolved by not merging PR #3 and fixing F-02 without dropping (see F-02)."
+   "notes": "PR #3 not merged; F-02 fixed without dropping. Advisory closed.",
+   "evidence_only": false
   },
   {
    "id": "HOST-03",
@@ -1369,8 +1393,13 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "in `send`, on first failure set `self.client_dead = true` (or check `server.is_connected`) and skip further sends silently; log once per connection with a counter. Give force quit its own log message and document its exit status (currently 1).",
-   "status": "OPEN",
-   "commits": [],
+   "status": "IN_PROGRESS",
+   "commits": [
+    "c90062f",
+    "78df633",
+    "8c8cab3",
+    "eae0ad9"
+   ],
    "tests": [],
    "verification": {
     "linux": "pending",
@@ -1393,8 +1422,13 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "build `[len|body]` in one `Vec` (the body is already serialized in `reply`; reserve 4 bytes up front) or batch all queued frames up to ~64 KiB per write. Test: count writes with a mock stream.",
-   "status": "OPEN",
-   "commits": [],
+   "status": "IN_PROGRESS",
+   "commits": [
+    "c90062f",
+    "78df633",
+    "8c8cab3",
+    "eae0ad9"
+   ],
    "tests": [],
    "verification": {
     "linux": "pending",
@@ -4084,10 +4118,10 @@
   {
    "id": "T2",
    "kind": "test",
-   "status": "OPEN",
-   "location": "",
-   "ci": "",
-   "notes": ""
+   "status": "FIXED_VERIFIED",
+   "location": "crates/ui4me-host/src/transport.rs tests",
+   "ci": "cargo test (default)",
+   "notes": "Fails on baseline (message 236 refused)."
   },
   {
    "id": "T3",

@@ -7,7 +7,7 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | ID | Sev. | Kind | WS | Status | Tests | Linux | Windows | Commits | Remaining risk |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | F-01 | Critical | runtime | B | IN_PROGRESS | T1, T6 | pending | pending |  |  |
-| F-02 | Critical | runtime | A | IN_PROGRESS | T2, T3, T14 | pending | pending |  |  |
+| F-02 | Critical | runtime | A | IN_PROGRESS | transport::t2_burst_to_a_slow_reading_peer_is_delivered_in_order_without_disconnect, peer_that_stops_reading_is_refused_at_the_byte_cap, peer_that_stops_reading_is_disconnected_by_the_write_deadline, each_frame_is_written_with_a_single_write_call, host::tests::refused_output_disconnects_once_and_counts_the_rest, document::event_queue_tests | Linux windowed (nested kwin): burst2 N=20 3/3, N=100 3/3 pass (baseline 1/3, 0/3); T2 passes, fails on baseline | pending | c90062f 78df633 8c8cab3 eae0ad9 a664fb8 | Reader >8 MiB behind is still disconnected by design; Windows pipe quota unchanged. |
 | F-03 | High | runtime | B | IN_PROGRESS | T1, T6 | pending | pending |  |  |
 | F-04 | High | runtime | C | IN_PROGRESS | T4 | pending | pending |  |  |
 | F-06 | Medium | runtime | B | IN_PROGRESS | T1, T6 | pending | pending |  |  |
@@ -41,15 +41,15 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 
 | ID | Sev. | Consolidated | WS | Status | Commits | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| HOST-01 | High→Critical (F-02) | F-02 | A | OPEN |  |  |
-| HOST-02 | High→advisory (§2.3) |  | G | IN_PROGRESS |  | Advisory about draft PR #3: resolved by not merging PR #3 and fixing F-02 without dropping (see F-02). |
+| HOST-01 | High→Critical (F-02) | F-02 | A | IN_PROGRESS | c90062f 78df633 8c8cab3 eae0ad9 |  |
+| HOST-02 | High→advisory (§2.3) |  | G | FIXED_VERIFIED | c90062f | PR #3 not merged; F-02 fixed without dropping. Advisory closed. |
 | HOST-03 | Medium | F-18 | G | OPEN |  |  |
 | HOST-04 | Low-Med | F-25 | G | OPEN |  |  |
 | HOST-05 | Low-Med |  | G | OPEN |  |  |
 | HOST-06 | Low | F-14 | H | OPEN |  |  |
 | HOST-07 | Low-Med | F-25 | G | OPEN |  |  |
-| HOST-08 | Low | F-25 | G | OPEN |  |  |
-| HOST-09 | Low | F-02 | A | OPEN |  |  |
+| HOST-08 | Low | F-25 | G | IN_PROGRESS | c90062f 78df633 8c8cab3 eae0ad9 |  |
+| HOST-09 | Low | F-02 | A | IN_PROGRESS | c90062f 78df633 8c8cab3 eae0ad9 |  |
 | HOST-10 | Low | F-25 | G | OPEN |  |  |
 | HOST-11 | Low |  | G | OPEN |  |  |
 | HOST-12 | Low |  | G | OPEN |  |  |
@@ -160,7 +160,7 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | ID | Status | Location | CI | Notes |
 | --- | --- | --- | --- | --- |
 | T1 | OPEN |  |  |  |
-| T2 | OPEN |  |  |  |
+| T2 | FIXED_VERIFIED | crates/ui4me-host/src/transport.rs tests | cargo test (default) | Fails on baseline (message 236 refused). |
 | T3 | OPEN |  |  |  |
 | T4 | OPEN |  |  |  |
 | T5 | IN_PROGRESS | renderer document::geometry_tests |  |  |
