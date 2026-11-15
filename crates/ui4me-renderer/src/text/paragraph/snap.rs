@@ -25,11 +25,11 @@
 //! A glyph of a face at variation coordinates takes the instance's own nominal advance
 //! (skrifa: `hmtx` with `HVAR`, or the `gvar` phantom points) in place of the `hmtx` one (015 TXT-2).
 
+use crate::text::fonts::environment::LayoutFonts;
 use parley::{Layout, PositionedLayoutItem};
 use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::Arc;
-use ui4me_assets::fonts::FontBlob;
 
 use super::source::{
     InlineItem, InlineItemKind, SourceSpan, SpanBrush, SpanCollapse, TabSpec, WrapOverflow,
@@ -167,7 +167,7 @@ impl AdvancePolicy {
     /// Load the tables of every face the layout uses.
     pub(crate) fn for_layout(
         layout: &Layout<SpanBrush>,
-        blobs: &[FontBlob],
+        blobs: &LayoutFonts,
         subpixel: bool,
     ) -> AdvancePolicy {
         let mut p = AdvancePolicy {
@@ -181,7 +181,7 @@ impl AdvancePolicy {
                 };
                 let font = gr.run().font();
                 let key = (font.data.id(), font.index);
-                let published = crate::text::fonts::environment::published_blob_id(key.0);
+                let published = blobs.published(key.0);
                 p.faces.entry(key).or_insert_with(|| {
                     blobs
                         .iter()
@@ -229,7 +229,7 @@ impl AdvancePolicy {
     }
 
     /// Load the vertical metrics of every face the layout uses (`vertical.rs`).
-    pub(crate) fn load_vertical(&mut self, layout: &Layout<SpanBrush>, blobs: &[FontBlob]) {
+    pub(crate) fn load_vertical(&mut self, layout: &Layout<SpanBrush>, blobs: &LayoutFonts) {
         for line in layout.lines() {
             for item in line.items() {
                 let PositionedLayoutItem::GlyphRun(gr) = item else {
@@ -240,7 +240,7 @@ impl AdvancePolicy {
                 if self.vertical.contains_key(&key) {
                     continue;
                 }
-                let published = crate::text::fonts::environment::published_blob_id(key.0);
+                let published = blobs.published(key.0);
                 let m = blobs
                     .iter()
                     .find(|b| b.id.0 == published)

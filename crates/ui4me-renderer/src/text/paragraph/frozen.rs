@@ -274,7 +274,7 @@ pub struct FrozenParagraph {
     source: Arc<ParagraphSource>,
     lines: Vec<FrozenLine>,
     missing: Vec<MissingGlyph>,
-    blobs: Vec<FontBlob>,
+    blobs: crate::text::fonts::environment::LayoutFonts,
     policy: Arc<AdvancePolicy>,
     extras: FreezeExtras,
     snap: Arc<SnapTable>,
@@ -1108,23 +1108,17 @@ impl FrozenParagraph {
                 ascent: metrics.ascent.round(),
                 descent: metrics.descent.round(),
                 glyphs,
-                font: self
-                    .blobs
-                    .iter()
-                    .find(|b| {
-                        b.id.0 == crate::text::fonts::environment::published_blob_id(font.data.id())
-                    })
-                    .map(|blob| FontRef {
-                        blob: blob.clone(),
-                        index: font.index,
-                        coords: run
-                            .normalized_coords()
-                            .iter()
-                            .map(|c| c.to_bits())
-                            .collect(),
-                        embolden: synthesis.embolden() && !no_synth_weight,
-                        oblique_angle_deg: synthesis.skew().filter(|_| !no_synth_style),
-                    }),
+                font: self.blobs.for_parley(font.data.id()).map(|blob| FontRef {
+                    blob: blob.clone(),
+                    index: font.index,
+                    coords: run
+                        .normalized_coords()
+                        .iter()
+                        .map(|c| c.to_bits())
+                        .collect(),
+                    embolden: synthesis.embolden() && !no_synth_weight,
+                    oblique_angle_deg: synthesis.skew().filter(|_| !no_synth_style),
+                }),
                 size_px: run.font_size(),
                 bidi_level: u8::from(run.is_rtl()),
                 hyphen: false,
@@ -2228,26 +2222,17 @@ impl FrozenParagraph {
                         ascent: metrics.ascent.round(),
                         descent: metrics.descent.round(),
                         glyphs,
-                        font: self
-                            .blobs
-                            .iter()
-                            .find(|b| {
-                                b.id.0
-                                    == crate::text::fonts::environment::published_blob_id(
-                                        font.data.id(),
-                                    )
-                            })
-                            .map(|blob| FontRef {
-                                blob: blob.clone(),
-                                index: font.index,
-                                coords: run
-                                    .normalized_coords()
-                                    .iter()
-                                    .map(|c| c.to_bits())
-                                    .collect(),
-                                embolden: synthesis.embolden() && !no_synth_weight,
-                                oblique_angle_deg: synthesis.skew().filter(|_| !no_synth_style),
-                            }),
+                        font: self.blobs.for_parley(font.data.id()).map(|blob| FontRef {
+                            blob: blob.clone(),
+                            index: font.index,
+                            coords: run
+                                .normalized_coords()
+                                .iter()
+                                .map(|c| c.to_bits())
+                                .collect(),
+                            embolden: synthesis.embolden() && !no_synth_weight,
+                            oblique_angle_deg: synthesis.skew().filter(|_| !no_synth_style),
+                        }),
                         size_px: run.font_size(),
                         bidi_level: u8::from(r.rtl),
                         hyphen: false,

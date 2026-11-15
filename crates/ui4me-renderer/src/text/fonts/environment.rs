@@ -26,25 +26,123 @@ use crate::text::paragraph::source::SpanBrush;
 
 /// Parley blob ids of 007's registered blobs carry this tag. Fontique numbers the blobs it loads
 /// itself (system fonts) from a process-wide counter that starts at 0, which would collide with
-/// 007's small ids; the tag keeps the two apart (see [`published_blob_id`]).
+/// 007's small ids; the tag keeps the two apart (see [`LayoutFonts::published`]).
 const REGISTERED_TAG: u64 = 1 << 63;
-/// Published identity of a system-font blob: the Parley id under this tag (007 ids stay small).
+/// Published identity of a system-font file: an engine-owned number under this tag (007 ids stay
+/// small). It is assigned per file content ([`system_font_identity`]), never taken from Parley's
+/// per-load blob id: Parley prunes its source cache every 128 builder calls and a reloaded file
+/// gets a fresh blob id (issue #2, F-04).
 const SYSTEM_TAG: u64 = 1 << 62;
+/// The id a glyph run of an unknown system blob is published under: matches no blob (a layout's
+/// fonts are always resolved through [`FontEnvironment::blobs_for_layout`] first).
+const UNKNOWN_SYSTEM: u64 = u64::MAX;
+/// Layout passes an unused system-font entry stays in [`FontEnvironment`]'s table. An entry dropped
+/// earlier is made again on demand under the same published identity, so this only trades the
+/// retained copy of a file nobody shapes with against copying it again when it comes back.
+pub(crate) const SYSTEM_FONT_RETAIN_PASSES: u64 = 1024;
 
 /// The Parley blob id a registered 007 blob is given.
 pub(crate) fn parley_blob_id(id: FontBlobId) -> u64 {
     REGISTERED_TAG | id.0
 }
 
-/// The identity published for a font blob (`FontRef.blob.id`, the display-list `FontRef`): a
-/// registered blob keeps its 007 id; a system-font blob is `SYSTEM_TAG | its Parley id`, unique in
-/// the process.
-pub(crate) fn published_blob_id(parley_id: u64) -> u64 {
-    if parley_id & REGISTERED_TAG != 0 {
-        parley_id & !REGISTERED_TAG
-    } else {
-        SYSTEM_TAG | parley_id
+/// The published identity of the system-font file whose bytes are `bytes`: one engine-owned
+/// number per file content for the life of the process, whichever Parley load (blob id) or font
+/// environment the bytes come from. Display lists, glyph caches and side tables key by it.
+fn system_font_identity(bytes: &[u8]) -> u64 {
+    use std::sync::{Mutex, OnceLock};
+    /// Engine identity by content fingerprint; one small entry per distinct file the process loads.
+    type Interner = std::collections::HashMap<Fingerprint, u64>;
+    static IDS: OnceLock<Mutex<Interner>> = OnceLock::new();
+    let key = fingerprint(bytes);
+    let mut ids = IDS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    let next = ids.len() as u64;
+    SYSTEM_TAG | *ids.entry(key).or_insert(next)
+}
+
+/// Length and two independent 64-bit hashes of a font file's bytes.
+type Fingerprint = (usize, u64, u64);
+
+/// Length and two independent 64-bit hashes of `bytes` (identity of a font file's content; one pass,
+/// a few GB/s, run once per file load).
+fn fingerprint(bytes: &[u8]) -> Fingerprint {
+    const K1: u64 = 0x9E37_79B9_7F4A_7C15;
+    const K2: u64 = 0xC2B2_AE3D_27D4_EB4F;
+    let (mut a, mut b) = (K2 ^ bytes.len() as u64, K1 ^ bytes.len() as u64);
+    let (words, rest) = bytes.as_chunks::<8>();
+    for c in words {
+        let w = u64::from_le_bytes(*c);
+        a = (a ^ w).wrapping_mul(K1).rotate_left(29);
+        b = (b.rotate_left(17) ^ w).wrapping_mul(K2) ^ (b >> 31);
     }
+    for (i, &x) in rest.iter().enumerate() {
+        a = (a ^ (u64::from(x) << (i * 8))).wrapping_mul(K1);
+        b = (b ^ u64::from(x)).wrapping_mul(K2).rotate_left(23);
+    }
+    let fin = |mut h: u64| {
+        h ^= h >> 33;
+        h = h.wrapping_mul(0xFF51_AFD7_ED55_8CCD);
+        h ^= h >> 33;
+        h
+    };
+    (bytes.len(), fin(a), fin(b))
+}
+
+/// The font files a layout's glyph runs use (`FontEnvironment::blobs_for_layout`): 007's registered
+/// blobs, the system-font files, and the published identity of each Parley blob id among them.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct LayoutFonts {
+    blobs: Vec<FontBlob>,
+    /// `(Parley blob id, published id)` of the system-font files.
+    system: Vec<(u64, u64)>,
+}
+
+impl LayoutFonts {
+    /// The published identity (`FontRef.blob.id`, the display-list `FontRef`) of Parley blob
+    /// `parley_id`: a registered blob keeps its 007 id; a system file its engine identity.
+    pub(crate) fn published(&self, parley_id: u64) -> u64 {
+        if parley_id & REGISTERED_TAG != 0 {
+            return parley_id & !REGISTERED_TAG;
+        }
+        self.system
+            .iter()
+            .find(|(p, _)| *p == parley_id)
+            .map_or(UNKNOWN_SYSTEM, |(_, id)| *id)
+    }
+
+    /// The blob a glyph run of Parley blob `parley_id` was shaped with.
+    pub(crate) fn for_parley(&self, parley_id: u64) -> Option<&FontBlob> {
+        self.by_published(self.published(parley_id))
+    }
+
+    /// The blob published as `id`.
+    pub(crate) fn by_published(&self, id: u64) -> Option<&FontBlob> {
+        self.blobs.iter().find(|b| b.id.0 == id)
+    }
+}
+
+impl std::ops::Deref for LayoutFonts {
+    type Target = [FontBlob];
+    fn deref(&self) -> &[FontBlob] {
+        &self.blobs
+    }
+}
+
+/// A system-font file a layout used, under its engine identity.
+#[derive(Clone)]
+struct SystemFont {
+    /// The bytes as 007's blob type (copied once from the mapped file).
+    blob: FontBlob,
+    /// The Fontique blob: held so that the shared source cache serves this same load (and Parley
+    /// blob id) again after Parley prunes its own cache, instead of mapping the file anew.
+    _source: Blob<u8>,
+    /// The Parley blob ids glyph runs of this file came with (one while the entry lives, unless a
+    /// layout of an earlier load is still cached).
+    parley_ids: Vec<u64>,
+    last_used: u64,
 }
 
 /// The runtime's font collection plus 007's pinned generic and fallback configuration.
@@ -56,8 +154,16 @@ pub struct FontEnvironment {
     system: bool,
     /// Per generic family, the families the platform collection maps it to (empty without system fonts).
     system_generics: Vec<(GenericFamily, Vec<String>)>,
-    /// Bytes of the system-font files glyph runs have used, by published id (copied once per file).
-    system_blobs: std::collections::HashMap<u64, FontBlob>,
+    /// The system-font files glyph runs have used, by published (engine) identity; entries unused for
+    /// [`SYSTEM_FONT_RETAIN_PASSES`] layout passes are dropped (`next_pass`).
+    system_blobs: std::collections::HashMap<u64, SystemFont>,
+    /// Engine identity of each Parley blob id in `system_blobs`.
+    system_ids: std::collections::HashMap<u64, u64>,
+    /// Layout passes begun (`next_pass`), the clock of `system_blobs`.
+    pass: u64,
+    /// `resolve_families` results by computed family list (RENDER-06); emptied when the face table
+    /// changes (`set_faces`), the only input of the resolution that changes after construction.
+    family_memo: FamilyMemo,
     /// Registered family names, registration order, de-duplicated.
     families: Vec<String>,
     blobs: Vec<FontBlob>,
@@ -81,6 +187,22 @@ pub struct FontEnvironment {
     /// System mode was requested but the platform collection could not be loaded (for example
     /// `libfontconfig` is missing): only registered fonts and the last-resort font are used.
     system_unavailable: bool,
+}
+
+/// Resolved family lists by computed `font-family` list. Shaping asks for the same few lists for every
+/// span of every paragraph; in system mode a generic expands to the platform's whole fallback order
+/// (165 families with fontconfig here), so resolving it each time dominated cold shaping (RENDER-06).
+/// A clone of the environment starts with an empty memo.
+#[derive(Default)]
+struct FamilyMemo(std::sync::Mutex<std::collections::HashMap<Vec<FamilyName>, Arc<[String]>>>);
+
+/// Distinct family lists memoised at most (a document uses a handful; the memo is emptied past it).
+const FAMILY_MEMO_LIMIT: usize = 512;
+
+impl Clone for FamilyMemo {
+    fn clone(&self) -> Self {
+        FamilyMemo::default()
+    }
 }
 
 /// Internal family name under which the last-resort bytes are registered, so that they never
@@ -125,7 +247,7 @@ impl FontEnvironment {
                     shared: false,
                     system_fonts: true,
                 });
-                let generics = system_generics(&mut c);
+                let generics = system_generics(&mut c, SYSTEM_GENERIC_LIMIT);
                 (c, generics)
             });
             match loaded {
@@ -266,12 +388,18 @@ impl FontEnvironment {
         Ok(FontEnvironment {
             fcx: FontContext {
                 collection,
-                source_cache: SourceCache::default(),
+                // Shared: a file Parley's per-context cache pruned is served again from the
+                // shared weak entry while anything (this environment's `system_blobs`, a cached
+                // layout) still holds it, with the same blob id (F-04).
+                source_cache: SourceCache::new_shared(),
             },
             epoch: sources.font_epoch.0,
             system: sources.system_fonts && !system_unavailable,
             system_generics,
             system_blobs: Default::default(),
+            system_ids: Default::default(),
+            pass: 0,
+            family_memo: FamilyMemo::default(),
             families,
             blobs,
             generic_map: sources.generic_map.clone(),
@@ -297,12 +425,16 @@ impl FontEnvironment {
     }
 
     /// The font blobs a layout's glyph runs use, as 007-shaped [`FontBlob`]s: the registered blobs
-    /// (all of them) plus every system-font file a run uses (bytes copied once per file and cached).
+    /// (all of them) plus every system-font file a run uses, under its engine identity (bytes copied
+    /// once per file while the file stays in use, see `system_blobs`).
     pub(crate) fn blobs_for_layout<B: parley::Brush>(
         &mut self,
         layout: &parley::Layout<B>,
-    ) -> Vec<FontBlob> {
-        let mut out = self.blobs.clone();
+    ) -> LayoutFonts {
+        let mut out = LayoutFonts {
+            blobs: self.blobs.clone(),
+            system: Vec::new(),
+        };
         if !self.system {
             return out;
         }
@@ -312,27 +444,65 @@ impl FontEnvironment {
                     continue;
                 };
                 let data = &gr.run().font().data;
-                if data.id() & REGISTERED_TAG != 0 {
+                let parley_id = data.id();
+                if parley_id & REGISTERED_TAG != 0
+                    || out.system.iter().any(|(p, _)| *p == parley_id)
+                {
                     continue;
                 }
-                let id = published_blob_id(data.id());
-                if out.iter().any(|b| b.id.0 == id) {
-                    continue;
-                }
-                let blob = self
-                    .system_blobs
-                    .entry(id)
-                    .or_insert_with(|| FontBlob {
+                let id = match self.system_ids.get(&parley_id) {
+                    Some(id) => *id,
+                    None => {
+                        let id = system_font_identity(data.as_ref());
+                        self.system_ids.insert(parley_id, id);
+                        id
+                    }
+                };
+                let pass = self.pass;
+                let entry = self.system_blobs.entry(id).or_insert_with(|| SystemFont {
+                    blob: FontBlob {
                         id: FontBlobId(id),
                         name: "<system font>".to_string(),
                         bytes: Arc::from(data.as_ref()),
                         family_override: None,
-                    })
-                    .clone();
-                out.push(blob);
+                    },
+                    _source: data.clone(),
+                    parley_ids: Vec::new(),
+                    last_used: pass,
+                });
+                entry.last_used = pass;
+                if !entry.parley_ids.contains(&parley_id) {
+                    entry.parley_ids.push(parley_id);
+                }
+                out.system.push((parley_id, id));
+                if !out.blobs.iter().any(|b| b.id.0 == id) {
+                    out.blobs.push(entry.blob.clone());
+                }
             }
         }
         out
+    }
+
+    /// A layout pass begins: drop the system-font entries no layout used for
+    /// [`SYSTEM_FONT_RETAIN_PASSES`] passes (they are made again, same identity, on demand).
+    pub(crate) fn next_pass(&mut self) {
+        self.pass += 1;
+        let keep_from = self.pass.saturating_sub(SYSTEM_FONT_RETAIN_PASSES);
+        let ids = &mut self.system_ids;
+        self.system_blobs.retain(|_, e| {
+            let keep = e.last_used >= keep_from;
+            if !keep {
+                for p in &e.parley_ids {
+                    ids.remove(p);
+                }
+            }
+            keep
+        });
+    }
+
+    /// System-font files held (`system_blobs`) and Parley blob ids mapped to them.
+    pub(crate) fn system_font_entries(&self) -> (usize, usize) {
+        (self.system_blobs.len(), self.system_ids.len())
     }
 
     pub fn font_epoch(&self) -> u64 {
@@ -409,7 +579,27 @@ impl FontEnvironment {
     /// in order), named families as given, then the pinned fallback list (default: registered
     /// families). Duplicates are removed, first occurrence wins. Unknown names stay in the list
     /// and are skipped by matching (not an error).
-    pub fn resolve_families(&self, families: &[FamilyName]) -> Vec<String> {
+    /// Memoised per family list (see `FamilyMemo`); the result is shared.
+    pub fn resolve_families(&self, families: &[FamilyName]) -> Arc<[String]> {
+        let mut memo = self.family_memo.0.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(hit) = memo.get(families) {
+            return hit.clone();
+        }
+        let resolved: Arc<[String]> = self.resolve_families_uncached(families).into();
+        if memo.len() >= FAMILY_MEMO_LIMIT {
+            memo.clear();
+        }
+        memo.insert(families.to_vec(), resolved.clone());
+        resolved
+    }
+
+    /// Replace the document's declared-face table (the memoised family lists depend on it).
+    pub(crate) fn set_faces(&mut self, faces: FaceTable) {
+        self.faces = Arc::new(faces);
+        self.family_memo = FamilyMemo::default();
+    }
+
+    fn resolve_families_uncached(&self, families: &[FamilyName]) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         let mut seen = BTreeSet::new();
         // A name the document declares with `@font-face` stands for the collection families of its
@@ -616,10 +806,21 @@ pub fn system_family_exists(name: &str) -> bool {
     guard.as_mut().is_some_and(|c| c.family_id(name).is_some())
 }
 
+/// Families of the platform's expansion of a generic that `resolve_families` keeps (RENDER-06).
+/// fontconfig maps `sans-serif` to its whole fallback order (~160 families here: the preferred faces,
+/// then one family per script); resolving and handing Parley that list for every span dominated cold
+/// shaping. The head holds the preferred families and the symbol fonts (`system-ui` puts 14 per-script
+/// UI faces first and Symbola at 21); text none of the kept families covers falls to Fontique's
+/// per-script fallback, which asks the platform for that script's font. On the reference machine 32
+/// select the same font as the full list for every generic and script probed
+/// (`truncated_generic_expansion_selects_the_same_fonts`); 16 did not for emoji in `system-ui`, 4 not
+/// for emoji and symbols in any generic.
+const SYSTEM_GENERIC_LIMIT: usize = 32;
+
 /// The platform collection's mapping of each CSS generic family to family names (fontconfig's
 /// default `serif` / `sans-serif` / `monospace`, DirectWrite's equivalents), loaded eagerly so
 /// `resolve_families` stays a read-only query.
-fn system_generics(collection: &mut Collection) -> Vec<(GenericFamily, Vec<String>)> {
+fn system_generics(collection: &mut Collection, limit: usize) -> Vec<(GenericFamily, Vec<String>)> {
     GenericFamily::ALL
         .iter()
         .map(|g| {
@@ -628,6 +829,7 @@ fn system_generics(collection: &mut Collection) -> Vec<(GenericFamily, Vec<Strin
                     let ids: Vec<_> = collection.generic_families(fq).collect();
                     ids.into_iter()
                         .filter_map(|id| collection.family_name(id).map(str::to_string))
+                        .take(limit)
                         .collect()
                 }
                 None => Vec::new(),
@@ -664,6 +866,8 @@ pub struct TextServices {
     pub(crate) content_cache: crate::text::paragraph::shaped::ContentCache,
     /// Count of diagnostics `shape_uncached` raised (a result produced while it moved is not cached).
     pub(crate) shape_diag_events: u64,
+    /// Work counter (T13): paragraphs actually shaped (cache misses), since creation.
+    pub(crate) paragraphs_shaped: u64,
     /// Subpixel glyph positioning: Windows at every scale, Linux above device scale 1.
     /// Set by layout from the viewport scale (`paragraph/snap.rs`).
     pub(crate) subpixel: bool,
@@ -715,6 +919,7 @@ impl TextServices {
             shaped_cache: Default::default(),
             content_cache: Default::default(),
             shape_diag_events: 0,
+            paragraphs_shaped: 0,
             subpixel: cfg!(target_os = "windows"),
             epochs: Default::default(),
             deco_font_cache: Default::default(),
@@ -731,8 +936,9 @@ impl TextServices {
             self.shaped_cache = Default::default();
             self.content_cache.clear();
         }
-        // Called once per layout pass: age the content cache.
+        // Called once per layout pass: age the content cache and the system-font table.
         self.content_cache.next_pass(self.env.font_epoch());
+        self.env.next_pass();
     }
 
     /// `WRONG_THREAD` unless called on the thread that created the facade (text-services.md
@@ -771,7 +977,7 @@ impl TextServices {
     /// still shadow installed families and the faces to load are known. Drops the shaped-paragraph
     /// cache and the metrics memo, whose entries were made under the old table.
     pub fn set_declared_faces(&mut self, faces: &[ui4me_assets::fonts::FaceView]) {
-        self.env.faces = Arc::new(FaceTable::build(faces));
+        self.env.set_faces(FaceTable::build(faces));
         self.shaped_cache = Default::default();
         self.content_cache.clear();
         self.deco_font_cache.clear();
@@ -790,6 +996,12 @@ impl TextServices {
                 .collect(),
             Err(_) => Vec::new(),
         }
+    }
+
+    /// Paragraphs shaped since creation (cache misses: each is a full Parley shaping run). A work
+    /// counter for tests and profiling (T13).
+    pub fn paragraphs_shaped(&self) -> u64 {
+        self.paragraphs_shaped
     }
 
     pub fn environment(&self) -> &FontEnvironment {
@@ -869,5 +1081,268 @@ impl TextServices {
                 status,
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod font_identity_tests {
+    //! T4 (F-04, RENDER-01): the identity of a system-font file survives Parley's source-cache prune,
+    //! and the table of system-font files stays bounded across prune/reload cycles.
+    use super::*;
+    use crate::text::paragraph::source::{LineHeightSpec, ParagraphSource, TextStyle};
+    use ui4me_assets::fonts::{FontMode, FontRegistry};
+    use ui4me_engine_types::ids::{DocumentId, Slots};
+    use ui4me_engine_types::text_metrics::FontSpec;
+
+    fn system_services() -> Option<TextServices> {
+        let reg = FontRegistry::new(FontMode::System);
+        let ts = TextServices::new(&reg.font_sources()).ok()?;
+        ts.env.system_fonts().then_some(ts)
+    }
+
+    fn paragraph(doc: DocumentId, text: &str, weight: f32) -> ParagraphSource {
+        let style = TextStyle {
+            font: FontSpec {
+                families: vec![FamilyName::Generic(GenericFamily::SansSerif)].into(),
+                weight,
+                ..FontSpec::default()
+            },
+            font_size: 14.0,
+            line_height: LineHeightSpec::Normal,
+        };
+        let mut src = ParagraphSource::new(doc, style.clone());
+        src.push(text, &style, 1);
+        src
+    }
+
+    /// Published ids of the system-font files a shaped paragraph uses.
+    fn system_ids(ts: &mut TextServices, src: &ParagraphSource) -> Vec<u64> {
+        let shaped = ts.shape_uncached(src);
+        let mut ids: Vec<u64> = shaped
+            .blobs
+            .iter()
+            .map(|b| b.id.0)
+            .filter(|id| id & SYSTEM_TAG != 0)
+            .collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    #[test]
+    fn system_font_identity_is_stable_across_source_cache_prunes() {
+        let Some(mut ts) = system_services() else {
+            eprintln!("skipped: no platform font collection");
+            return;
+        };
+        let doc = DocumentId::from_raw(Slots::new().alloc());
+        let bold = paragraph(doc, "Bold badge b0 b1 b2", 600.0);
+        let regular = paragraph(doc, "regular ticker 0", 400.0);
+        let bold_ids = system_ids(&mut ts, &bold);
+        let regular_ids = system_ids(&mut ts, &regular);
+        if bold_ids.is_empty() || bold_ids == regular_ids {
+            eprintln!("skipped: the platform has no separate system face for weight 600");
+            return;
+        }
+        let mut sizes = Vec::new();
+        for cycle in 0..6 {
+            // Parley prunes its source cache on every builder call, dropping files not used for 128
+            // calls: shape only the regular face long enough for the bold file to be pruned.
+            for i in 0..300usize {
+                let ids = system_ids(
+                    &mut ts,
+                    &paragraph(doc, &format!("tick {cycle} {i}"), 400.0),
+                );
+                assert_eq!(ids, regular_ids, "regular face identity, cycle {cycle}");
+                if i.is_multiple_of(10) {
+                    ts.set_device_scale(1.0);
+                }
+            }
+            assert_eq!(
+                system_ids(&mut ts, &bold),
+                bold_ids,
+                "the bold file was published under a new identity after a prune (cycle {cycle})"
+            );
+            sizes.push(ts.env.system_font_entries());
+        }
+        // One entry per file in use, one Parley id per entry, no growth from cycle to cycle.
+        let (files, ids) = sizes[0];
+        assert!(files <= bold_ids.len() + regular_ids.len(), "{sizes:?}");
+        assert_eq!(files, ids, "{sizes:?}");
+        assert!(
+            sizes.iter().all(|s| *s == sizes[0]),
+            "system-font table grew: {sizes:?}"
+        );
+    }
+
+    #[test]
+    fn unused_system_font_entries_are_dropped_and_come_back_under_the_same_identity() {
+        let Some(mut ts) = system_services() else {
+            eprintln!("skipped: no platform font collection");
+            return;
+        };
+        let doc = DocumentId::from_raw(Slots::new().alloc());
+        let bold = paragraph(doc, "Bold heading", 700.0);
+        let ids = system_ids(&mut ts, &bold);
+        if ids.is_empty() {
+            eprintln!("skipped: no system face used");
+            return;
+        }
+        assert!(ts.env.system_font_entries().0 >= 1);
+        for _ in 0..=SYSTEM_FONT_RETAIN_PASSES {
+            ts.set_device_scale(1.0);
+        }
+        assert_eq!(
+            ts.env.system_font_entries(),
+            (0, 0),
+            "unused entries were kept"
+        );
+        assert_eq!(
+            system_ids(&mut ts, &bold),
+            ids,
+            "identity changed after eviction"
+        );
+    }
+
+    #[test]
+    fn fingerprint_distinguishes_content_and_length() {
+        let a = fingerprint(b"abcdefghij");
+        assert_eq!(a, fingerprint(b"abcdefghij"));
+        assert_ne!(a, fingerprint(b"abcdefghik"));
+        assert_ne!(a, fingerprint(b"abcdefghij\0"));
+        assert_ne!(fingerprint(&[0u8; 16]), fingerprint(&[0u8; 17]));
+        let x = system_font_identity(b"font one");
+        assert_eq!(x, system_font_identity(b"font one"));
+        assert_ne!(x, system_font_identity(b"font two"));
+        assert_ne!(x & SYSTEM_TAG, 0);
+    }
+}
+
+#[cfg(test)]
+mod family_resolution_tests {
+    //! RENDER-06: memoised family resolution and the truncated system generic expansion.
+    use super::*;
+    use crate::text::paragraph::source::{LineHeightSpec, ParagraphSource, TextStyle};
+    use ui4me_assets::fonts::{FontMode, FontRegistry};
+    use ui4me_engine_types::ids::{DocumentId, Slots};
+    use ui4me_engine_types::text_metrics::FontSpec;
+
+    fn services() -> TextServices {
+        TextServices::new(&FontRegistry::new(FontMode::System).font_sources()).unwrap()
+    }
+
+    #[test]
+    fn resolve_families_is_memoised_per_list_and_reset_with_the_face_table() {
+        let mut ts = services();
+        let list = [
+            FamilyName::Named("Nope".into()),
+            FamilyName::Generic(GenericFamily::SansSerif),
+        ];
+        let a = ts.env.resolve_families(&list);
+        let b = ts.env.resolve_families(&list);
+        assert!(
+            Arc::ptr_eq(&a, &b),
+            "the second resolution was not memoised"
+        );
+        assert_eq!(*a, *ts.env.resolve_families_uncached(&list));
+        let other = ts.env.resolve_families(&list[1..]);
+        assert!(!Arc::ptr_eq(&a, &other));
+        ts.set_declared_faces(&[]);
+        let c = ts.env.resolve_families(&list);
+        assert!(
+            !Arc::ptr_eq(&a, &c),
+            "the memo survived a face-table change"
+        );
+        assert_eq!(*a, *c);
+    }
+
+    /// Text in many scripts, shaped with each generic, selects the same fonts with the truncated
+    /// platform expansion as with the full one (whatever the platform's fonts are).
+    #[test]
+    fn truncated_generic_expansion_selects_the_same_fonts() {
+        let mut truncated = services();
+        if !truncated.env.system_fonts() {
+            eprintln!("skipped: no platform font collection");
+            return;
+        }
+        let mut full = services();
+        full.env.system_generics = system_generics(&mut full.env.fcx.collection, usize::MAX);
+        full.env.family_memo = FamilyMemo::default();
+        let doc = DocumentId::from_raw(Slots::new().alloc());
+        let samples = [
+            "Latin Hello",
+            "Ελληνικά",
+            "Кириллица",
+            "שלום עולם",
+            "مرحبا بالعالم",
+            "नमस्ते दुनिया",
+            "สวัสดีชาวโลก",
+            "日本語のテキスト",
+            "中文文本",
+            "한국어 텍스트",
+            "😀🎉",
+            "∑∫√≈ ★☆ ♠♣",
+            "ქართული",
+            "Հայերեն",
+            "தமிழ்",
+            "বাংলা",
+            "ગુજરાતી",
+            "ລາວ",
+            "ⴰⵣⵓⵍ",
+            "€ ₹ ₿ № ℃",
+            "→ ⇒ ↔ ⌘ ⌥",
+            "ሰላም",
+            "ខ្មែរ",
+            "မြန်မာ",
+            "සිංහල",
+            "తెలుగు",
+            "ಕನ್ನಡ",
+            "മലയാളം",
+        ];
+        let fonts = |ts: &mut TextServices, src: &ParagraphSource| -> Vec<(Vec<u8>, u32)> {
+            let shaped = ts.shape_uncached(src);
+            let mut layout = shaped.layout.clone();
+            layout.break_all_lines(None);
+            let mut out = Vec::new();
+            for line in layout.lines() {
+                for item in line.items() {
+                    let parley::PositionedLayoutItem::GlyphRun(gr) = item else {
+                        continue;
+                    };
+                    let f = gr.run().font();
+                    let bytes = shaped
+                        .blobs
+                        .for_parley(f.data.id())
+                        .map(|b| b.bytes[..b.bytes.len().min(4096)].to_vec())
+                        .unwrap_or_default();
+                    out.push((bytes, f.index));
+                }
+            }
+            out
+        };
+        let mut differ = Vec::new();
+        for generic in GenericFamily::ALL {
+            for weight in [400.0, 700.0] {
+                for text in samples {
+                    let style = TextStyle {
+                        font: FontSpec {
+                            families: vec![FamilyName::Generic(*generic)].into(),
+                            weight,
+                            ..FontSpec::default()
+                        },
+                        font_size: 14.0,
+                        line_height: LineHeightSpec::Normal,
+                    };
+                    let mut src = ParagraphSource::new(doc, style.clone());
+                    src.push(text, &style, 1);
+                    if fonts(&mut truncated, &src) != fonts(&mut full, &src) {
+                        differ.push(format!("{generic:?} {weight} {text:?}"));
+                    }
+                }
+            }
+        }
+        assert!(
+            differ.is_empty(),
+            "the truncated expansion selected other fonts for: {differ:?}"
+        );
     }
 }

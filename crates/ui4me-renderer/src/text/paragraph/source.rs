@@ -695,7 +695,7 @@ pub struct ShapedParagraph {
     pub(crate) layout: Layout<SpanBrush>,
     pub(crate) source: Arc<ParagraphSource>,
     pub(crate) missing: Vec<MissingGlyph>,
-    pub(crate) blobs: Vec<ui4me_assets::fonts::FontBlob>,
+    pub(crate) blobs: crate::text::fonts::environment::LayoutFonts,
     /// Features a span asks for that the font it was shaped with lacks and the reference browser
     /// synthesizes (small capitals, sub- and superscript): `(span index, tag)`; reported, not applied.
     pub(crate) synthesis_missing: Vec<(u32, crate::text::fonts::features::FontTag)>,
@@ -951,6 +951,7 @@ impl TextServices {
         source: &ParagraphSource,
         face_styles: Option<&[FaceRangeStyle]>,
     ) -> Arc<ShapedParagraph> {
+        self.paragraphs_shaped += 1;
         // Limits are checked before any Parley call (FR-092, FR-096): Parley asserts on more than
         // u16::MAX styles.
         let limited = super::limits::apply_limits(source);

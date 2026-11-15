@@ -1,4 +1,5 @@
 //! Focused donor regressions retained behind the document engine seam.
+mod append_cliff;
 mod dom_query;
 #[cfg(feature = "fault-injection")]
 mod fault;

@@ -1,0 +1,46 @@
+<!doctype html><html><head><meta charset="utf-8"><title>ops capture</title><style>/* Non-negotiable UI mechanics. Styling these selectors is possible in custom CSS.
+   Visual tokens and component skins deliberately live in theme.css. */
+[hidden] { display: none !important; }
+.u4-region, .u4-item { display: contents; }
+.u4-app { display: flex; flex-direction: column; min-height: 100%; box-sizing: border-box; }
+.u4-main { flex: 1 1 auto; box-sizing: border-box; min-width: 0; }
+.u4-app *, .u4-app *::before, .u4-app *::after { box-sizing: border-box; }
+.u4-row { display:flex; flex-direction:row; min-width:0; }
+.u4-column { display:flex; flex-direction:column; min-width:0; }
+.u4-wrap { flex-wrap:wrap; }
+.u4-grow { flex:1 1 0; min-width:0; }
+.u4-spacer { flex:1 1 auto; }
+.u4-grid { display:grid; grid-template-columns:repeat(var(--u4-cols,2),minmax(0,1fr)); }
+.u4-grid-auto { display:grid; grid-template-columns:repeat(auto-fill,minmax(var(--u4-min,220px),1fr)); }
+.u4-scroll { overflow:auto; min-height:0; }
+.u4-stack { display:flex; min-width:0; }
+.u4-dir-row { flex-direction:row; } .u4-dir-column { flex-direction:column; }
+.u4-center { display:flex; justify-content:center; align-items:center; }
+.u4-overlay { position:fixed; inset:0; z-index:1000; }
+.u4-sr-only { position:absolute!important; width:1px; height:1px; padding:0; margin:-1px;
+ overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+@media(min-width:600px) { .u4-sm-dir-row {flex-direction:row} .u4-sm-dir-column{flex-direction:column} .u4-sm-hide{display:none!important} }
+@media(min-width:900px) { .u4-md-dir-row {flex-direction:row} .u4-md-dir-column{flex-direction:column} .u4-md-hide{display:none!important} }
+@media(min-width:1200px) { .u4-lg-dir-row {flex-direction:row} .u4-lg-dir-column{flex-direction:column} .u4-lg-hide{display:none!important} }
+@media(max-width:599px) { .u4-base-only-hide {display:none!important} }
+
+/* Functional invariants for 2.1 components; always loaded with custom themes. */
+.u4-fieldset { min-width: 0; }
+.u4-fieldset-content { min-width: 0; }
+.u4-multiselect-options { display: flex; flex-wrap: wrap; gap: var(--u4-space-sm, 8px); }
+.u4-adjustable { display: flex; flex-direction: column; gap: var(--u4-space-sm, 8px); min-width: 0; }
+.u4-adjustable-controls { display: flex; align-items: center; }
+.u4-adjustable-controls input { margin-left: 12px; }
+.u4-resizable-panes { display: grid; grid-template-columns: var(--u4-split, 35%) minmax(0, 1fr); gap: 12px; min-width: 0; }
+.u4-resizable-side, .u4-resizable-main { min-width: 0; }
+.u4-metric { display: flex; flex-direction: column; gap: 4px; }
+.u4-metric-value { font-size: 1.7em; }
+.u4-tooltip-root { position: relative; display: inline-block; }
+.u4-tooltip-text { visibility: hidden; opacity: 0; position: absolute; z-index: 100; left: 0; bottom: 100%; padding: 6px 10px; border-radius: 6px; pointer-events: none; background: var(--u4-surface, #333); color: var(--u4-text, white); }
+.u4-tooltip-root:hover .u4-tooltip-text, .u4-tooltip-root:focus-within .u4-tooltip-text { visibility: visible; opacity: 1; }
+@media (max-width: 640px) { .u4-resizable-panes { grid-template-columns: minmax(0, 1fr); } }
+/* UI4ME Core 1.x sends every DOM event, including transitionrun/start/end, to the
+   application. A theme switch must not start transitions on every control at once:
+   UI4ME sets this class on the app root while it changes the colour scheme or theme. */
+.u4-theme-switching, .u4-theme-switching * { transition: none !important; }
+</style></head><body class="u4-body"><div id="u4-1" class="u4-app u4-theme-switching"><main id="u4-2" class="u4-main u4-column u4-gap-md"><section id="u4-4" class="u4-metric" aria-label="Ticks"><span id="u4-5" class="u4-metric-label">Ticks</span><strong id="u4-6" class="u4-metric-value">0</strong><small id="u4-7" class="u4-metric-detail"></small></section><div id="u4-8" class="u4-region"></div></main><div id="u4-3" class="u4-toasts" aria-live="polite"></div></div></body></html>

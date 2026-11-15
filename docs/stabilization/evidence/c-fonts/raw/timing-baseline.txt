@@ -1,0 +1,12 @@
+rows=2000 1280x800 updates=7: parse=30.5ms first_render=910.6ms (shaped 2001) set_text+render median=30.81ms max=33.10ms (shaped 7) append+render=60.3ms (shaped 1) scroll+render median=9.11ms
+rows=2000 1280x800 updates=20: parse=26.9ms first_render=853.4ms (shaped 2001) set_text+render median=30.14ms max=32.97ms (shaped 20) append+render=718.0ms (shaped 2001) scroll+render median=10.19ms
+rows=2000 3840x2160 updates=7: parse=27.3ms first_render=878.9ms (shaped 2001) set_text+render median=38.11ms max=39.20ms (shaped 7) append+render=75.6ms (shaped 1) scroll+render median=20.18ms
+rows=2000 3840x2160 updates=20: parse=27.2ms first_render=868.5ms (shaped 2001) set_text+render median=41.17ms max=45.19ms (shaped 20) append+render=676.7ms (shaped 2001) scroll+render median=20.66ms
+rows=2000 1280x800 updates=7: parse=43.1ms first_render=930.4ms (shaped 2001) set_text+render median=29.55ms max=33.15ms (shaped 7) append+render=57.8ms (shaped 1) scroll+render median=8.43ms
+rows=2000 1280x800 updates=20: parse=26.0ms first_render=827.8ms (shaped 2001) set_text+render median=27.66ms max=30.05ms (shaped 20) append+render=691.2ms (shaped 2001) scroll+render median=8.87ms
+rows=2000 3840x2160 updates=7: parse=25.7ms first_render=852.4ms (shaped 2001) set_text+render median=36.51ms max=38.34ms (shaped 7) append+render=74.6ms (shaped 1) scroll+render median=20.53ms
+rows=2000 3840x2160 updates=20: parse=26.4ms first_render=855.2ms (shaped 2001) set_text+render median=38.66ms max=41.29ms (shaped 20) append+render=705.1ms (shaped 2001) scroll+render median=20.29ms
+rows=2000 1280x800 updates=7: parse=30.1ms first_render=888.2ms (shaped 2001) set_text+render median=29.47ms max=33.93ms (shaped 7) append+render=60.0ms (shaped 1) scroll+render median=9.84ms
+rows=2000 1280x800 updates=20: parse=28.4ms first_render=873.5ms (shaped 2001) set_text+render median=29.72ms max=33.54ms (shaped 20) append+render=749.6ms (shaped 2001) scroll+render median=10.01ms
+rows=2000 3840x2160 updates=7: parse=27.6ms first_render=873.3ms (shaped 2001) set_text+render median=39.72ms max=56.19ms (shaped 7) append+render=70.3ms (shaped 1) scroll+render median=22.15ms
+rows=2000 3840x2160 updates=20: parse=26.1ms first_render=869.4ms (shaped 2001) set_text+render median=38.28ms max=41.18ms (shaped 20) append+render=660.8ms (shaped 2001) scroll+render median=19.56ms
