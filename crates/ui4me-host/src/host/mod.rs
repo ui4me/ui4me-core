@@ -332,11 +332,21 @@ fn event_loop() -> Result<EventLoop, winit::error::EventLoopError> {
 /// primary, instead of failing the user's relaunch. If another launch became the primary in the
 /// meantime, this one is forwarded to it.
 fn primary_or_forward(config: &AppConfig) -> Result<Option<InstanceLock>> {
+    primary_or_forward_within(config, FORWARD_ATTEMPT)
+}
+
+/// How long the first delivery attempt to a running primary may take.
+const FORWARD_ATTEMPT: Duration = Duration::from_secs(5);
+
+fn primary_or_forward_within(
+    config: &AppConfig,
+    first_attempt: Duration,
+) -> Result<Option<InstanceLock>> {
     let lock = InstanceLock::acquire(&config.app.id)?;
     if lock.primary {
         return Ok(Some(lock));
     }
-    let error = match forward_activation(&lock.endpoint, config, None) {
+    let error = match forward_activation(&lock.endpoint, config, Some(first_attempt)) {
         Ok(()) => return Ok(None),
         Err(error) if primary_is_ending(&error) => error,
         Err(error) => return Err(error),
@@ -365,13 +375,32 @@ fn primary_or_forward(config: &AppConfig) -> Result<Option<InstanceLock>> {
     }
 }
 
-/// The primary answered "shutting down", or could not be reached or answer at all: it closes
-/// its endpoint, and then its connections, before it exits and releases the lock. Any other
-/// answer from a live primary (for example invalid parameters) is final.
+/// The primary answered "shutting down" (`-32004`), its endpoint cannot be connected to (it was
+/// removed, refuses connections, or stays busy for the whole attempt), or it closed the
+/// connection before answering: it closes its endpoint, and then its connections, before it
+/// exits and releases the lock. Any other outcome from a live primary is final — an error
+/// answer (for example invalid parameters), and also a request that was sent but not answered
+/// in time: the primary has queued it and may still deliver it, so retrying would turn one
+/// launch into many `app.activated` notifications (F-25 review #2).
 fn primary_is_ending(error: &anyhow::Error) -> bool {
-    error
-        .downcast_ref::<RpcError>()
-        .is_none_or(|rpc| rpc.code == protocol::code::CLOSED)
+    use crate::transport::EndpointLost;
+    use std::io::ErrorKind;
+    if let Some(rpc) = error.downcast_ref::<RpcError>() {
+        return rpc.code == protocol::code::CLOSED;
+    }
+    match error.downcast_ref::<EndpointLost>() {
+        Some(EndpointLost::Disconnected(_)) => true,
+        // `NativeStream::connect` retries a missing or refusing endpoint (Linux) and a missing or
+        // busy pipe (Windows ERROR_FILE_NOT_FOUND / ERROR_PIPE_BUSY) until its timeout.
+        Some(EndpointLost::Connect(error)) => matches!(
+            error.kind(),
+            ErrorKind::NotFound
+                | ErrorKind::ConnectionRefused
+                | ErrorKind::TimedOut
+                | ErrorKind::WouldBlock
+        ),
+        None => false,
+    }
 }
 
 /// Deliver this launch to the primary instance. A primary that is still
@@ -1905,6 +1934,72 @@ mod tests {
         assert!(!host.force_quit, "an immediate repeat is the same request");
         assert_eq!(host.quit_deadline.unwrap(), deadline);
         assert_eq!(host.exit_code.load(Ordering::Relaxed), 143);
+    }
+
+    /// F-25 review #2: a primary that accepts the connection but does not answer in time (its
+    /// GUI thread stalls) is not "ending". Retrying would queue one `app.activate` per attempt
+    /// in the primary, so the backend would get a burst of `app.activated` for one launch. The
+    /// launch fails instead, and the primary has received exactly one request.
+    #[test]
+    fn an_unanswering_primary_receives_one_activation_per_launch() {
+        let app = format!("org.ui4me.forward.stalled.{}", std::process::id());
+        let lock = crate::platform::InstanceLock::acquire(&app).unwrap();
+        assert!(lock.primary);
+        let server = Server::bind(&app, &lock.instance_key, Arc::new(|| {})).unwrap();
+        let mut config = controller(true).config.clone();
+        config.app.id = app;
+        config.host.instance = InstancePolicy::Single;
+        config.host.startup_timeout_ms = 1_000;
+        config.host.shutdown_timeout_ms = 1_000;
+        let result = primary_or_forward_within(&config, Duration::from_millis(300));
+        assert!(result.is_err(), "an unanswered launch fails");
+        let mut activations = 0;
+        while let Ok(event) = server.incoming.recv_timeout(Duration::from_millis(300)) {
+            if let TransportEvent::Message(_, value) = event {
+                if value["method"] == "app.activate" {
+                    activations += 1;
+                }
+            }
+        }
+        assert_eq!(activations, 1, "one launch, one activation request");
+        drop(server);
+        drop(lock);
+    }
+
+    /// F-25 review #2: what counts as "the primary is ending" (HOST-10): its `-32004` answer,
+    /// an endpoint that cannot be connected to, or a connection it closed before answering.
+    #[test]
+    fn only_closed_answers_and_lost_endpoints_mean_the_primary_is_ending() {
+        use crate::transport::EndpointLost;
+        use std::io::{Error, ErrorKind};
+        let ending = |e: anyhow::Error| primary_is_ending(&e);
+        assert!(ending(
+            RpcError::new(protocol::code::CLOSED, "closing").into()
+        ));
+        assert!(!ending(RpcError::invalid_params("bad").into()));
+        for kind in [
+            ErrorKind::NotFound,
+            ErrorKind::ConnectionRefused,
+            ErrorKind::TimedOut,
+        ] {
+            let lost = EndpointLost::Connect(Error::from(kind));
+            assert!(
+                ending(anyhow::Error::new(lost).context("connect")),
+                "{kind:?}"
+            );
+        }
+        let denied = EndpointLost::Connect(Error::from(ErrorKind::PermissionDenied));
+        assert!(!ending(anyhow::Error::new(denied)));
+        assert!(ending(anyhow::Error::new(EndpointLost::Disconnected(
+            "reset".into()
+        ))));
+        // A response timeout on an established connection.
+        assert!(!ending(anyhow::Error::new(Error::from(
+            ErrorKind::WouldBlock
+        ))));
+        assert!(!ending(anyhow::anyhow!(
+            "existing instance response timed out"
+        )));
     }
 
     /// HOST-15 (T15): an error answer to a policy request is no decision, never a veto and

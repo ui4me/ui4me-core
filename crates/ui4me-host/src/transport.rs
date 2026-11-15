@@ -27,7 +27,7 @@
 //!   it. The 128-pending-request limit is a protocol rule (`protocol.rs`), not
 //!   a transport queue.
 use crate::platform::{NativeListener, NativeStream};
-use crate::protocol::{read_frame, write_frame, MAX_FRAME_BYTES};
+use crate::protocol::{read_frame, write_frame, FrameError, MAX_FRAME_BYTES};
 use anyhow::{bail, Context, Result};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -590,21 +590,81 @@ fn end_connection(shared: &Shared, id: u64, reason: &str) {
     }
 }
 
+/// [`request`] could not reach a listening peer, as opposed to a peer that was reached but did
+/// not answer in time (HOST-10, F-25 review #2).
+#[derive(Debug)]
+pub enum EndpointLost {
+    /// The endpoint could not be connected to; the error is the connection attempt's.
+    Connect(io::Error),
+    /// The peer closed (or reset) the connection before it answered.
+    Disconnected(String),
+}
+
+impl std::fmt::Display for EndpointLost {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Connect(error) => write!(f, "{error}"),
+            Self::Disconnected(reason) => {
+                write!(
+                    f,
+                    "existing instance disconnected before replying: {reason}"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for EndpointLost {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Connect(error) => Some(error),
+            Self::Disconnected(_) => None,
+        }
+    }
+}
+
+/// The peer ended the connection: EOF inside a frame, a reset, or a closed pipe. A read
+/// timeout is not one of these.
+fn closed_by_peer(error: &FrameError) -> bool {
+    match error {
+        FrameError::TruncatedHeader | FrameError::TruncatedBody => true,
+        FrameError::Io(error) => matches!(
+            error.kind(),
+            io::ErrorKind::ConnectionReset
+                | io::ErrorKind::ConnectionAborted
+                | io::ErrorKind::BrokenPipe
+                | io::ErrorKind::NotConnected
+                | io::ErrorKind::UnexpectedEof
+        ),
+        _ => false,
+    }
+}
+
+fn peer_frame_error(error: FrameError) -> anyhow::Error {
+    if closed_by_peer(&error) {
+        EndpointLost::Disconnected(error.to_string()).into()
+    } else {
+        error.into()
+    }
+}
+
 /// A short-lived secondary-launch client. No TCP or protocol-specific stdout.
 pub fn request(endpoint: &str, message: Value, timeout: Duration) -> Result<Value> {
     let start = Instant::now();
-    let mut stream =
-        NativeStream::connect(endpoint, timeout).context("connect to existing instance")?;
+    let mut stream = NativeStream::connect(endpoint, timeout)
+        .map_err(|error| anyhow::Error::new(EndpointLost::Connect(error)))
+        .context("connect to existing instance")?;
     stream.set_timeout(Some(
         timeout
             .saturating_sub(start.elapsed())
             .max(Duration::from_millis(1)),
     ))?;
-    write_frame(&mut stream, &message)?;
+    write_frame(&mut stream, &message).map_err(peer_frame_error)?;
     let expected = message.get("id").cloned();
     loop {
-        let value =
-            read_frame(&mut stream)?.context("existing instance disconnected before replying")?;
+        let Some(value) = read_frame(&mut stream).map_err(peer_frame_error)? else {
+            return Err(EndpointLost::Disconnected("end of stream".into()).into());
+        };
         if expected.is_none() || value.get("id") == expected.as_ref() {
             return Ok(value);
         }
