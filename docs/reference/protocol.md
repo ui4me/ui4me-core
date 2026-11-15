@@ -57,7 +57,7 @@ Rules enforced by the host:
 * `jsonrpc` must be exactly `"2.0"`; unknown top-level members are rejected.
 * `id` must be a **string** of 1–128 bytes without control characters. Numeric and `null` IDs are rejected.
 * `method` is 1–128 bytes of ASCII letters, digits, `.`, `_` or `-`, and must not start with `rpc.`.
-* `params` must be an object (named parameters) or omitted (treated as `{}`). Positional arrays are rejected. Every params object is decoded strictly: unknown keys are an `invalid params` error.
+* `params` must be an object (named parameters) or omitted (treated as `{}`). Positional arrays are rejected. Every params object is decoded strictly: unknown keys are an `invalid params` error, also for methods without parameters (they take `{}` or no `params`). The one exception is `host.hello`, which ignores keys it does not know, so that a newer binding can offer optional features to an older host.
 * At most 128 requests may be pending. Reusing the ID of a request that is still pending (a native dialog, external open or clipboard read) is a protocol violation: the host disconnects and fails the application.
 * A result that would not fit in a 2 MiB frame is replaced by an `unavailable` error. A notification that would not fit is dropped (a `document.event` that is too large is reported as `document.error` instead).
 
@@ -142,7 +142,7 @@ The backend answers `{"allow": true}` or `{"allow": false}`; `{"allow": false}` 
 
 A termination request from outside the application (a signal, a console control event or the end of the desktop session; see [host CLI](host-cli.md#run)) skips the decision too: it cancels pending decisions and sends `app.shutdown` with a deadline of at most 3000 ms.
 
-`app.force_quit` (`{}` → `{"requested":true}`) skips the decision, kills the backend and stops. The user can do the same with **Ctrl+Shift+Q** in a window.
+`app.force_quit` (`{}` → `{"requested":true}`) skips the decision, kills the backend and stops; the host then exits with status 1. The user can do the same with **Ctrl+Shift+Q** in a window.
 
 ### Second launches: `app.activated`
 
