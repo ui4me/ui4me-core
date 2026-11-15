@@ -553,3 +553,111 @@ fn pathological_svg_filters_render_in_bounded_time() {
         }
     }
 }
+
+// ---- F-15 (INPUTSEC-04): paint budgets degrade the offending item, not the frame.
+
+/// Render `body` (the whole frame must succeed) and return the frame and the diagnostics.
+fn render_degraded(body: &str) -> (Vec<u32>, String) {
+    let html = format!("<!doctype html><body style='margin:0'>{body}</body>");
+    on_engine_stack(move || {
+        let mut d = Document::parse_hosted(&html, None, 400, 400).unwrap();
+        let px = d
+            .render(400, 400, 1.0)
+            .unwrap_or_else(|e| panic!("the frame failed: {}", e.message));
+        let diag = serde_json::to_string(&d.diagnostics()).unwrap();
+        (px, diag)
+    })
+}
+
+#[test]
+fn a_gradient_with_too_many_stops_is_thinned() {
+    let stops: Vec<String> = (0..5000)
+        .map(|i| {
+            if i < 2500 {
+                "red".to_string()
+            } else {
+                "blue".to_string()
+            }
+        })
+        .collect();
+    let (px, diag) = render_degraded(&format!(
+        "<div style='width:400px;height:100px;background:linear-gradient(to right,{})'></div>",
+        stops.join(",")
+    ));
+    assert_eq!(px[50 * 400 + 10], 0xff0000, "left is red");
+    assert_eq!(px[50 * 400 + 390], 0x0000ff, "right is blue");
+    assert!(diag.contains("paint.capability.gradient-stops"), "{diag}");
+    assert!(diag.contains("BUDGET_EXCEEDED"), "{diag}");
+}
+
+#[test]
+fn a_filter_with_too_many_functions_keeps_the_first_ones() {
+    let (px, diag) = render_degraded(&format!(
+        "<div style='width:100px;height:100px;background:red;filter:{}'></div>",
+        ["invert(1)"; 65].join(" ")
+    ));
+    // 64 inverts cancel out: red stays red (the 65th is dropped).
+    assert_eq!(px[50 * 400 + 50], 0xff0000);
+    assert!(diag.contains("paint.capability.filter-functions"), "{diag}");
+}
+
+#[test]
+fn scopes_nested_too_deep_draw_in_their_deepest_allowed_scope() {
+    let (px, diag) = render_degraded(&format!(
+        "{}<div style='width:50px;height:50px;background:blue'></div>{}",
+        "<div style='overflow:hidden'>".repeat(129),
+        "</div>".repeat(129)
+    ));
+    assert_eq!(px[25 * 400 + 25], 0x0000ff, "the content is drawn");
+    assert!(diag.contains("paint.capability.scope-depth"), "{diag}");
+}
+
+#[test]
+fn expensive_css_filters_are_bounded() {
+    for (what, body) in [
+        (
+            "64 x blur(50px)",
+            format!(
+                "<div style='width:400px;height:400px;background:teal;filter:{}'>x</div>",
+                ["blur(50px)"; 64].join(" ")
+            ),
+        ),
+        (
+            "64 x drop-shadow",
+            format!(
+                "<div style='width:400px;height:400px;background:teal;filter:{}'>x</div>",
+                ["drop-shadow(0 0 50px red)"; 64].join(" ")
+            ),
+        ),
+        (
+            "64 nested blurred boxes",
+            format!(
+                "{}x{}",
+                "<div style='filter:blur(50px);padding:1px'>".repeat(64),
+                "</div>".repeat(64)
+            ),
+        ),
+    ] {
+        let r = bounded(move || {
+            let mut d = warm_document();
+            let t0 = Instant::now();
+            d.replace_children_html("host", &body).unwrap();
+            d.render(400, 400, 1.0).unwrap();
+            let diag = serde_json::to_string(&d.diagnostics()).unwrap();
+            (t0.elapsed(), diag)
+        });
+        let Some((_, (t, diag))) = r else {
+            panic!("{what}: no result after {:?}", budget() * 4);
+        };
+        assert!(t < budget(), "{what}: {t:?}");
+        assert!(
+            diag.contains("paint.capability.filter-budget"),
+            "{what}: {diag}"
+        );
+    }
+    // One ordinary blur is applied, not reported.
+    let (_, diag) = render_degraded(
+        "<div style='width:100px;height:100px;background:teal;filter:blur(4px)'></div>",
+    );
+    assert!(!diag.contains("filter-budget"), "{diag}");
+}

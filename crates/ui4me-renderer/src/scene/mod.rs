@@ -7,6 +7,7 @@ pub mod display_list;
 pub mod hit_index;
 pub mod inputs;
 pub mod paint;
+pub mod paint_budget;
 pub mod reuse;
 pub mod stacking;
 pub mod theme;
