@@ -147,7 +147,7 @@ impl TextServices {
                 if synth_font.is_none() {
                     let syn = run.synthesis();
                     synth_font = Some(SynthFont {
-                        blob: crate::text::fonts::environment::published_blob_id(font.data.id()),
+                        blob: blobs.published(font.data.id()),
                         index: font.index,
                         coords: run
                             .normalized_coords()
