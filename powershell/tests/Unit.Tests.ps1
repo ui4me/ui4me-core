@@ -10,9 +10,13 @@ BeforeAll {
 }
 
 Describe 'UI4ME.Core manifest and exports' {
-    It 'has the 1.0.1 identity and matching manifest/module exports' {
+    It 'has the release identity (Cargo.toml version) and matching manifest/module exports' {
         $m = Test-ModuleManifest $script:ModuleManifest
-        $m.Version.ToString() | Should -Be '1.0.1'
+        # The release version has one source (tools/release/version.py reads Cargo.toml, F-21).
+        $cargo = Get-Content -Raw (Join-Path $PSScriptRoot '../../Cargo.toml')
+        $release = [regex]::Match($cargo, '(?ms)^\[workspace\.package\].*?^version\s*=\s*"([^"]+)"').Groups[1].Value
+        $release | Should -Not -BeNullOrEmpty
+        $m.Version.ToString() | Should -Be $release
         $m.CompatiblePSEditions | Should -Contain 'Desktop'
         $m.CompatiblePSEditions | Should -Contain 'Core'
         $declared = @($m.ExportedFunctions.Keys | Sort-Object)
