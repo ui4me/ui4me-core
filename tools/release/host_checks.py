@@ -21,7 +21,7 @@ import struct
 # (32 MiB). Must equal the /STACK: link argument of crates/ui4me-host
 # (checked by tools/test_release_artifacts.py once the build sets it).
 WINDOWS_HOST_STACK_RESERVE = 33_554_432
-# Release hosts are ~30 MB (Windows) and ~41 MB (Linux) at 1.0.1; the Linux
+# Release hosts are ~30 MB (Windows) and ~41 MB (Linux) in the first releases; the Linux
 # debug host is ~345 MB.
 MAX_RELEASE_HOST_BYTES = 150 * 1024 * 1024
 DEBUG_ASSERTION_MARKER = b'unsafe precondition(s) violated'

@@ -1,0 +1,119 @@
+# Clean-machine verification of what users actually download (T12, gate P16).
+# Manual, read-only: installs the published packages from PyPI and the
+# PowerShell Gallery into fresh images and checks the hashes against the
+# GitHub release. Never publishes anything.
+name: Verify published packages
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Published version to verify'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: verify-published-${{ inputs.version }}
+  cancel-in-progress: true
+jobs:
+  hashes:
+    name: PyPI files equal the GitHub release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Compare PyPI digests with SHA256SUMS of v<version>
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'version must be X.Y.Z' >&2; exit 1; }
+          gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS --dir release
+          curl -fsSL "https://pypi.org/pypi/ui4me-core/$VERSION/json" \
+            | jq -r '.urls[] | "\(.digests.sha256)  \(.filename)"' | sort -k2 > pypi.sha256
+          sort -k2 release/SHA256SUMS > release.sha256
+          diff -u release.sha256 pypi.sha256
+
+  pypi-clean:
+    name: pip install in ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: python:3.10-slim
+            ref: python:3.10-slim@sha256:6ff506466f8b1e981719b468cc0023b8ef000b983cdec0eafe119d01f379e31d
+          - image: python:3.14-slim
+            ref: python:3.14-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      image: ${{ matrix.ref }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v${{ inputs.version }}
+          persist-credentials: false
+      - name: Install from PyPI and smoke-test
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          python -m pip install --disable-pip-version-check --root-user-action=ignore --only-binary :all: "ui4me-core==$VERSION"
+          cd /tmp
+          python "$GITHUB_WORKSPACE/tools/release/smoke_installed_wheel.py" --expect-version "$VERSION"
+
+  psgallery-clean:
+    name: PowerShell Gallery install (CurrentUser and AllUsers) on Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v${{ inputs.version }}
+          persist-credentials: false
+      - name: Save the published module, then AllUsers-as-root and run as a non-root user
+        env:
+          VERSION: ${{ inputs.version }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'version must be X.Y.Z' >&2; exit 1; }
+          mkdir -p saved
+          pwsh -NoProfile -Command "Save-PSResource -Name UI4ME.Core -Version '$VERSION' -Repository PSGallery -TrustRepository -Path ./saved"
+          docker run --rm --name "ui4me-verify-allusers-$RUN_ID" \
+            -v "$PWD/tools/release:/tools:ro" -v "$PWD/saved/UI4ME.Core/$VERSION:/module/UI4ME.Core:ro" \
+            mcr.microsoft.com/powershell:7.4-ubuntu-22.04@sha256:62300a213a9293916333df2b014cd3a8f22fb0b0b65f2bb446aaf436bcf8c868 \
+            sh /tools/smoke_psmodule_allusers.sh /module/UI4ME.Core
+
+  windows-clean:
+    name: pip and Install-Module on windows-2022
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: v${{ inputs.version }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: pip install from PyPI and smoke-test
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          python -m venv clean
+          & clean/Scripts/python -m pip install --only-binary :all: "ui4me-core==$env:VERSION"
+          if ($LASTEXITCODE -ne 0) { throw 'pip install failed' }
+          & clean/Scripts/python tools/release/smoke_installed_wheel.py --expect-version $env:VERSION
+          if ($LASTEXITCODE -ne 0) { throw 'Installed wheel smoke failed' }
+      - name: Install-Module from the Gallery and run the Pester suite against it
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module UI4ME.Core -RequiredVersion $env:VERSION -Scope CurrentUser -Force
+          $module = (Get-Module -ListAvailable UI4ME.Core | Where-Object { $_.Version -eq [version]$env:VERSION }).Path
+          ./tools/release/run_pester.ps1 -TestModule $module

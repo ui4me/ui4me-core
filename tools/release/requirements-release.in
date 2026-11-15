@@ -1,0 +1,7 @@
+# Release build and validation tools, pinned with hashes (RELEASE-09).
+# Versions are the ones that built the published 1.0.1 artifacts (publish run 43553378123).
+# Regenerate: uv pip compile --universal --generate-hashes --python-version 3.12 requirements-release.in -o requirements-release.txt
+build==1.6.1
+twine==7.0.0
+cibuildwheel==4.3.5
+wheel==0.48.0

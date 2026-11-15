@@ -89,8 +89,7 @@ class VersionSourceTests(unittest.TestCase):
 
     @unittest.skipUnless(git_available(), 'needs a Git checkout')
     def test_release_machinery_has_no_literal_version(self):
-        rows = [r for r in versioning.literal_occurrences() if r['category'] == 'release-machinery'
-                and r['path'].startswith('tools/release/')]
+        rows = [r for r in versioning.literal_occurrences() if r['category'] == 'release-machinery']
         self.assertEqual(rows, [], 'Workflows and tools/release must read tools/release/version.py; '
                                    'found literals:\n' + '\n'.join(f"{r['path']}:{r['line']}" for r in rows))
 
