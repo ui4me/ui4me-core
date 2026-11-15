@@ -531,6 +531,46 @@ fn document_clipboard_shortcuts_fall_back_to_the_physical_key() {
 }
 
 #[test]
+fn prevent_default_shortcut_rules_match_the_physical_key_on_a_non_latin_layout() {
+    // Found natively on KDE Wayland (workstream N): with a Russian layout winit reports Ctrl+A
+    // as key "ф" / code KeyA. The engine runs select-all for it (shortcut_key), so a
+    // prevent_default(keydown, key="a", ctrl) rule must stop it there too, not only on "a".
+    let mut d = doc("<!doctype html><input id=i value='hello world'>", 400, 300);
+    d.set_default_action(
+        DefaultActionRule {
+            element: "i".into(),
+            event: "keydown".into(),
+            key: Some("a".into()),
+            shift: None,
+            ctrl: Some(true),
+            alt: None,
+            meta: None,
+        },
+        true,
+    )
+    .unwrap();
+    d.focus("i").unwrap();
+    d.set_control_selection(Some("i"), None, 0, 0, "none")
+        .unwrap();
+    d.drain_events();
+    ctrl_key(&mut d, "a", "KeyA");
+    assert_eq!(
+        selection(&mut d, "i"),
+        (0, 0),
+        "US layout: rule stops select-all"
+    );
+    ctrl_key(&mut d, "ф", "KeyA");
+    assert_eq!(
+        selection(&mut d, "i"),
+        (0, 0),
+        "RU layout: rule stops select-all"
+    );
+    // Ctrl+C on the same layout is not covered by the rule and still copies.
+    let ev = ctrl_key(&mut d, "с", "KeyC");
+    assert_eq!(count(&ev, "copy", "i"), 1, "{:?}", types(&ev));
+}
+
+#[test]
 fn shortcut_key_maps_only_non_latin_letters_with_ctrl_or_meta() {
     use crate::interaction::frame::Modifiers;
     use crate::interaction::keyboard::shortcut_key;
