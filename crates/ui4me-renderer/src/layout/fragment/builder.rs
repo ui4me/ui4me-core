@@ -2281,14 +2281,17 @@ impl Build<'_> {
                 );
             // Monolithic content sliced across pages (015 STAB-1) is content down to its end.
             let sliced = self.host.paged && cn.frag_facts.monolithic && !cn.out_of_flow;
+            if !(splittable || sliced) {
+                return false;
+            }
             // A box with a definite height is content down to its end (it takes up the space it is given).
-            (splittable || sliced)
-                && ((top + cn.layout.size.height > y + EPS
-                    && (sliced
-                        || !cn.style.size.height.is_auto()
-                        || cn.frag_facts.fc_item
-                        || self.content_from(c, y - top)))
-                    || (self.paged && splittable && self.content_from(c, y - top)))
+            let ends_below = top + cn.layout.size.height > y + EPS;
+            if ends_below && (sliced || !cn.style.size.height.is_auto() || cn.frag_facts.fc_item) {
+                return true;
+            }
+            // Otherwise it depends on its own content. Asked at most once per child: asking in both
+            // cases (paged) doubled the work at every nesting level (fuzz hang, 2^depth).
+            (ends_below || (self.paged && splittable)) && self.content_from(c, y - top)
         })
     }
 
@@ -2872,11 +2875,14 @@ pub(crate) fn page_bands(
     };
     let floats = b.float_bottom(flow);
     // Fixed-height ancestors may have in-flow descendants continuing beyond their border boxes.
-    let mut bands = g.fragmentainers(
+    // More than MAX_PAGES (plus a leading band and one to tell) is refused by the caller: a flow
+    // tens of millions of pages tall (a huge font size) is not materialised band by band.
+    let mut bands = g.fragmentainers_upto(
         g.flow_height
             .max(n.layout.size.height)
             .max(floats)
             .max(host.deep_bottom(flow)),
+        crate::layout::fragmentation::paged::MAX_PAGES as u32 + 3,
     );
     while bands.len() > 1
         && bands.last().is_some_and(|l| {

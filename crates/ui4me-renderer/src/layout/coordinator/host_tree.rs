@@ -3189,9 +3189,13 @@ pub(crate) fn layout_boxes_paged(
     text: &mut TextServices,
     reports: &mut Vec<LayoutReport>,
     diagnostics: &mut Vec<ErrorRecord>,
-) -> (Vec<crate::layout::fragmentation::paged::PagedPage>, u32) {
+) -> (
+    Vec<crate::layout::fragmentation::paged::PagedPage>,
+    u32,
+    bool,
+) {
     use crate::layout::fragmentation::paged::{
-        MAX_PAGE_PASSES, PageBox, PageInfo, PagedPage, name_of, page_names, used_page,
+        MAX_PAGE_PASSES, MAX_PAGES, PageBox, PageInfo, PagedPage, name_of, page_names, used_page,
     };
     use crate::layout::fragmentation::{Bands, EPS};
     text.set_device_scale(scale);
@@ -3215,6 +3219,7 @@ pub(crate) fn layout_boxes_paged(
                 run: 0,
             }],
             0,
+            false,
         );
     };
     if boxes.get(root).style.writing_mode.is_vertical()
@@ -3314,7 +3319,12 @@ pub(crate) fn layout_boxes_paged(
                 .cloned()
                 .unwrap_or_default();
             let all = crate::layout::fragment::builder::page_bands(boxes, &tree, flow);
-            let band_rects: Vec<(f32, f32)> = all
+            // Only the bands that can become pages within MAX_PAGES are looked at: a run that does not end
+            // before them is refused below (page_names is bands x starts).
+            let usable = all
+                .len()
+                .min((lead_n + MAX_PAGES + 1).saturating_sub(run_start));
+            let band_rects: Vec<(f32, f32)> = all[..usable]
                 .iter()
                 .map(|b| (b.block_offset, b.block_offset + b.block_size))
                 .collect();
@@ -3323,7 +3333,7 @@ pub(crate) fn layout_boxes_paged(
             let mut next_resume = None;
             // Where the content width changes, the run ends at the first such page that starts at a block-level box.
             let mut next_box = None;
-            for k in lead_n + 1..all.len() {
+            for k in lead_n + 1..usable {
                 let pi = run_start + k - lead_n;
                 let info = named(
                     PageInfo {
@@ -3387,6 +3397,10 @@ pub(crate) fn layout_boxes_paged(
                         .collect::<Vec<_>>(),
                     g.starts
                 );
+            }
+            // Refused before any page is built (each build walks the whole flow).
+            if run_start + end.saturating_sub(lead_n) > MAX_PAGES {
+                return (Vec::new(), layouts, true);
             }
             for k in lead_n..end {
                 let pi = run_start + k - lead_n;
@@ -3477,7 +3491,7 @@ pub(crate) fn layout_boxes_paged(
         }
         assumed = next;
     }
-    (result, layouts)
+    (result, layouts, false)
 }
 
 /// Lay out a box tree in the viewport and build its fragment tree.

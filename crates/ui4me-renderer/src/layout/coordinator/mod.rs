@@ -301,7 +301,7 @@ pub fn layout_paged(
         let boxes = build_box_tree(src);
         let mut reports = boxes.reports.clone();
         let mut diagnostics = Vec::new();
-        let (pages, layouts) = host_tree::layout_boxes_paged(
+        let (pages, layouts, too_many_pages) = host_tree::layout_boxes_paged(
             &boxes,
             geometry,
             scale,
@@ -316,6 +316,7 @@ pub fn layout_paged(
             reports,
             diagnostics,
             layouts,
+            too_many_pages,
         }
     }))
     .map_err(|payload| {

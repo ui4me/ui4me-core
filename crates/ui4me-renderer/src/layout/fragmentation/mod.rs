@@ -280,9 +280,16 @@ pub(crate) struct FlowThreadGeometry {
 impl FlowThreadGeometry {
     /// The fragmentainers holding a flow thread `height` tall (at least one).
     pub fn fragmentainers(&self, height: f32) -> Vec<Fragmentainer> {
+        self.fragmentainers_upto(height, u32::MAX)
+    }
+
+    /// [`Self::fragmentainers`], at most the first `max` of them (paged media: a flow of more
+    /// pages than a pagination may hold is refused, its bands beyond that are never needed).
+    pub fn fragmentainers_upto(&self, height: f32, max: u32) -> Vec<Fragmentainer> {
         let h = self.block_size.max(EPS);
+        let max = max.max(1);
         if self.bands.sizes.is_none() {
-            let n = ((height - EPS) / h).ceil().max(1.0) as u32;
+            let n = (((height - EPS) / h).ceil().max(1.0) as u32).min(max);
             return (0..n)
                 .map(|i| Fragmentainer {
                     index: i,
@@ -292,7 +299,7 @@ impl FlowThreadGeometry {
                 .collect();
         }
         let (last, _, _) = self.bands.locate((height - EPS).max(0.0), h);
-        (0..=last)
+        (0..=last.min(max - 1))
             .map(|i| Fragmentainer {
                 index: i,
                 block_offset: self.bands.top_of(i, h),
