@@ -570,3 +570,26 @@ fn detaching_or_replacing_the_animating_sheet_returns_to_idle() {
         .unwrap();
     assert_eq!(transform["properties"]["transform"]["value"], "none");
 }
+
+/// F-02/R3 follow-up: one tick can start hundreds of transitions (a colour-scheme switch over many
+/// transitioned controls). Every event must be delivered, not the first 512.
+#[test]
+fn a_burst_of_transition_events_in_one_tick_is_delivered_whole() {
+    let n = 300;
+    let body: String = (0..n).map(|i| format!("<i id=b{i}></i>")).collect();
+    let mut d = Document::parse(&format!(
+        "<!doctype html><style>i{{display:block;height:1px;background:#fff;color:#000;\
+         outline-color:#000;transition:background-color 50ms,color 50ms,outline-color 50ms}}\
+         .dark i{{background:#000;color:#fff;outline-color:#fff}}</style><div id=box>{body}</div>"
+    ))
+    .unwrap();
+    d.use_manual_clock();
+    d.render(W as u32, 80, 1.0).unwrap();
+    d.drain_events();
+    let mut ev = apply(&mut d, "dark");
+    ev.extend(run(&mut d, 200));
+    let count = |t: &str| ev.iter().filter(|e| e["type"] == t).count();
+    assert_eq!(count("transitionrun"), 3 * n);
+    assert_eq!(count("transitionend"), 3 * n);
+    assert_eq!(d.dropped_event_count(), 0);
+}

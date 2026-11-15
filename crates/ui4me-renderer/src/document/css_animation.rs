@@ -27,8 +27,11 @@
 use super::*;
 use crate::interaction::element_events::{animation_event_init, dispatch_element_task};
 
-/// Events handled per drain; the rest of a burst is dropped (a page cannot grow the queue).
-const MAX_ANIMATION_EVENTS: usize = 512;
+/// Transition/animation events dispatched per drain. It shares the per-turn event budget
+/// (`MAX_EVENTS`, sized for the 10,000-event burst gate R3) so a colour-scheme switch over many
+/// transitioned controls is delivered whole. The rest of a larger burst is not dispatched and is
+/// counted in `dropped_event_count`, which the host reports (a page still cannot grow the queue).
+const MAX_ANIMATION_EVENTS: usize = MAX_EVENTS;
 
 impl Document {
     /// Run the CSS animation tick on the document clock. Returns whether a tick ran (the
@@ -48,6 +51,9 @@ impl Document {
             return;
         }
         let id = self.id();
+        if events.len() > MAX_ANIMATION_EVENTS {
+            self.dropped_events += (events.len() - MAX_ANIMATION_EVENTS) as u64;
+        }
         for e in events.into_iter().take(MAX_ANIMATION_EVENTS) {
             let init = animation_event_init(
                 e.kind.event_type(),
