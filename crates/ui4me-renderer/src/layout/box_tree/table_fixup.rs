@@ -255,6 +255,7 @@ pub(crate) fn fix_column_group_children(kids: Vec<Proto>) -> Vec<Proto> {
 
 /// Rule 3 for the children of a box that is not a table, row group or row: each run of consecutive
 /// table-internal boxes gets an anonymous table. White space between two internal boxes goes.
+#[inline(never)] // called on the box builder's recursion path (stack, F-01)
 pub(crate) fn wrap_misparented(
     container: NodeId,
     style: &BoxStyle,

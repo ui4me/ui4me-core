@@ -46,6 +46,12 @@ pub use document::{
     AccessibilityKey, Clipboard, ClipboardRequest, DefaultActionRule, Document, DomOp, Error,
     ImeState, ImeSurrounding, Input, MAX_PIXELS, MAX_TEXT, NodeOp, Rect, Result, ScrollState,
 };
+/// Stack the thread that owns documents must have (F-01). Style, box-tree construction, layout,
+/// paint and the accessibility tree recurse over DOM depth; the document validator caps depth at
+/// 256 and `tests/stack_depth.rs` proves every supported kind of nesting at that cap on **half**
+/// this stack. Hosts spawn their engine thread with exactly this size (`ui4me-host` also raises the
+/// Windows PE reserve to it).
+pub const ENGINE_STACK_BYTES: usize = 32 * 1024 * 1024;
 /// Generation-checked DOM node identity (opaque to hosts).
 pub use ui4me_engine_types::ids::NodeId;
 

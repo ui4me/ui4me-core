@@ -137,7 +137,8 @@ Each event carries `type`, `element` (the `id` of the nearest element with one),
 | Item | Limit |
 | --- | --- |
 | HTML per document load or file | 1 MiB, UTF-8 |
-| Nodes / nesting depth | 65,536 / 256 |
+| Nodes / nesting depth | 65,536 / 256 (the document node is level 0, `<html>` 1, `<body>` 2; text nodes count). Loads and every mutation (`insert_html`, `replace_children_html`, `move_element`, `set_text`, `append_text`) that would exceed it fail with `SIZE_LIMIT` and change nothing. Content at the maximum depth renders on every platform (it is tested on half the engine's 32 MiB stack). |
+| SVG image nesting | 128 levels, counting the content that `use`, `clip-path`, `mask`, `filter`, patterns, markers and nested `data:` SVG images pull in; reference cycles are refused. Deeper image SVG fails to decode (`DECODE_FAILED`) and is drawn as a broken image. Inline `<svg>` is limited to 48 levels. |
 | Text per text or value update | 16 KiB |
 | Stylesheets added at runtime | 64, each up to 1 MiB |
 | Batch operations | 1024 per batch |

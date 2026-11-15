@@ -248,7 +248,7 @@ pub fn run(config: AppConfig, headless: bool) -> Result<i32> {
             std::thread::sleep(Duration::from_millis(5));
         }
     } else {
-        let event_loop = EventLoop::new().context(
+        let event_loop = event_loop().context(
             "cannot create native event loop (Wayland or interactive Windows desktop required)",
         )?;
         let proxy = event_loop.create_proxy();
@@ -257,6 +257,19 @@ pub fn run(config: AppConfig, headless: bool) -> Result<i32> {
         event_loop.run_app(host)?;
     }
     Ok(result.load(Ordering::Relaxed))
+}
+
+/// The native event loop, built on the calling thread. `main` runs the host on a dedicated
+/// engine thread with an explicit stack (F-01), so the event loop must be allowed off the process
+/// main thread; the vendored winit backends (Win32, Wayland) support that. Windows and their
+/// surfaces are created and used only on this same thread.
+fn event_loop() -> Result<EventLoop, winit::error::EventLoopError> {
+    let mut builder = EventLoop::builder();
+    #[cfg(target_os = "linux")]
+    winit::platform::wayland::EventLoopBuilderExtWayland::with_any_thread(&mut builder, true);
+    #[cfg(windows)]
+    winit::platform::windows::EventLoopBuilderExtWindows::with_any_thread(&mut builder, true);
+    builder.build()
 }
 
 /// Deliver this launch to the primary instance. A primary that is still
@@ -309,7 +322,7 @@ pub fn run_probe() -> Result<i32> {
         },
     };
     platform::initialize_application(&config.app.id)?;
-    let event_loop = EventLoop::new()?;
+    let event_loop = event_loop()?;
     let proxy = event_loop.create_proxy();
     let result = Arc::new(AtomicI32::new(0));
     let host = Host::new(

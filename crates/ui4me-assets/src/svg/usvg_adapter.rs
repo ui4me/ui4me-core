@@ -83,9 +83,12 @@ fn kind_of(format: ImageFormat, data: Arc<Vec<u8>>) -> Option<usvg::ImageKind> {
     }
 }
 
+/// `used` is the effective depth of the documents around this one (F-03): a nested document only
+/// fits if its own depth keeps the whole recursion within [`prescan::SVG_MAX_DEPTH`].
 fn resolve_data(
     ctx: &Arc<Ctx>,
     depth: u32,
+    used: u32,
     mime: &str,
     data: Arc<Vec<u8>>,
 ) -> Option<usvg::ImageKind> {
@@ -147,8 +150,12 @@ fn resolve_data(
             return None;
         }
     };
+    if used.saturating_add(scan.depth) > prescan::SVG_MAX_DEPTH {
+        ctx.warn(Code::DecodeFailed);
+        return None;
+    }
     ctx.state.lock().unwrap_or_else(|p| p.into_inner()).elements += scan.elements as u64;
-    let opts = make_options(ctx, depth + 1);
+    let opts = make_options(ctx, depth + 1, used + scan.depth);
     match usvg::Tree::from_data(&data, &opts) {
         Ok(tree) => Some(usvg::ImageKind::SVG(tree)),
         Err(_) => {
@@ -167,7 +174,7 @@ fn resolve_string(ctx: &Arc<Ctx>, href: &str) -> Option<usvg::ImageKind> {
 }
 
 /// The options of one parse level; every field is set explicitly (never `Options::default()`).
-fn make_options(ctx: &Arc<Ctx>, depth: u32) -> usvg::Options<'static> {
+fn make_options(ctx: &Arc<Ctx>, depth: u32, used: u32) -> usvg::Options<'static> {
     let (cd, cs) = (ctx.clone(), ctx.clone());
     usvg::Options {
         resources_dir: None,
@@ -180,7 +187,7 @@ fn make_options(ctx: &Arc<Ctx>, depth: u32) -> usvg::Options<'static> {
         image_rendering: usvg::ImageRendering::OptimizeQuality,
         default_size: usvg::Size::from_wh(FALLBACK_SIZE.0, FALLBACK_SIZE.1).expect("positive size"),
         image_href_resolver: usvg::ImageHrefResolver {
-            resolve_data: Box::new(move |mime, data, _| resolve_data(&cd, depth, mime, data)),
+            resolve_data: Box::new(move |mime, data, _| resolve_data(&cd, depth, used, mime, data)),
             resolve_string: Box::new(move |href, _| resolve_string(&cs, href)),
         },
         style_sheet: None,
@@ -214,7 +221,8 @@ impl SvgRenderer for UsvgRenderer {
                 ..Default::default()
             }),
         });
-        let tree = usvg::Tree::from_data(bytes, &make_options(&ctx, 0)).map_err(map_usvg_error)?;
+        let tree = usvg::Tree::from_data(bytes, &make_options(&ctx, 0, pre.depth))
+            .map_err(map_usvg_error)?;
         let mut st = ctx.state.lock().unwrap_or_else(|p| p.into_inner());
         if let Some(f) = st.fatal.take() {
             return Err(f);

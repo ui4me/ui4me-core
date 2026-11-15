@@ -277,6 +277,7 @@ impl<S: StyledSource> Builder<'_, S> {
 
     /// `::before` or `::after` of `node`, pushed on `out` (FR-012). Nothing when the pseudo-element
     /// has no style, `content` is `none` or `normal`, or `display` is `none`.
+    #[inline(never)] // called on the box builder's recursion path (stack, F-01)
     pub(crate) fn pseudo_element(
         &mut self,
         node: NodeId,
