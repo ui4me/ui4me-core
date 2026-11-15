@@ -61,7 +61,12 @@ Rules enforced by the host:
 * At most 128 requests may be pending. Reusing the ID of a request that is still pending (a native dialog, external open or clipboard read) is a protocol violation: the host disconnects and fails the application.
 * A result that would not fit in a 2 MiB frame is replaced by an `unavailable` error. A notification that would not fit is dropped (a `document.event` that is too large is reported as `document.error` instead).
 
-Buffers: the host queues at most 128 outgoing messages / 8 MiB per connection, and a peer that does not read its messages is disconnected. Incoming messages share a 256-event / 8 MiB queue; when it is full the host stops reading from the connection (backpressure) until the GUI thread catches up. The Python client caps its own outgoing queue at 256 frames; both clients allow at most 128 pending requests, and the PowerShell client queues at most 128 incoming messages / 8 MiB (see the [PowerShell limits](powershell-api.md#limits)).
+Buffers and limits (host side):
+
+* **Outgoing (host to backend): bytes only.** Each connection has one ordered queue bounded by 8 MiB of encoded frames (header included). There is no message-count limit, so a burst of thousands of small notifications (for example the transition events of a colour-scheme switch) is queued, not refused. The host never drops or reorders outgoing messages: responses, host requests, lifecycle notifications (`app.shutdown`, `window.event`, `request.cancelled`, `document.error`, …) and `document.event` notifications are delivered in the order they were produced; under a burst they are delayed, not lost. Each frame is written to the socket or pipe with a single write.
+* **A backend is disconnected only when it falls behind by bytes or time**: when 8 MiB are queued and unsent, or when one frame cannot be written for 10 seconds. In practice that means a backend that has stopped reading; a slow reader that catches up between bursts is never disconnected. The host then fails the application as for any lost connection.
+* **Incoming (backend to host): messages and bytes.** Incoming messages share a 256-event / 8 MiB queue; when it is full the host stops reading from the connection (backpressure) until the GUI thread catches up. This never disconnects.
+* Client side: the Python client caps its own outgoing queue at 256 frames; both clients allow at most 128 pending requests, and the PowerShell client queues at most 128 incoming messages / 8 MiB (see the [PowerShell limits](powershell-api.md#limits)). A binding must read continuously and must not block its reader on application callbacks.
 
 ## Backend environment
 

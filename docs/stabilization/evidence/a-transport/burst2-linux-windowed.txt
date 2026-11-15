@@ -1,0 +1,49 @@
+# burst2.py on Linux windowed (private nested kwin_wayland --virtual, socket ui4me-wsa-0, 1280x900)
+# Release hosts: baseline = 1e49a6a (sha256 eddb8d06...), fixed = 8c8cab3 (sha256 22b31254...).
+# Python binding: repo python/ at the same commit (unchanged, still has F-29 client-side drops).
+# Command per run (6 colour-scheme switches, 120 s timeout because a failed desktop-mode
+# host keeps its error window open until the launcher is killed):
+#   env -u DISPLAY WAYLAND_DISPLAY=ui4me-wsa-0 PYTHONPATH=<repo>/python \
+#     UI4ME_HOST_BINARY=<host> timeout 120 python3 burst_measure.py \
+#     docs/audit/evidence/scripts/burst2.py N 6 env
+# frames/bytes = what the backend's reader received (burst_measure.py wraps read_exact).
+# warn_lines = host log lines 'peer cannot receive bounded output' (HOST-08 flood).
+
+baseline N=20 run=1 exit=124 secs=120.2 rounds_ok=5 result= warn_lines=37 
+baseline N=20 run=2 exit=0 secs=5.5 rounds_ok=6 result=PROBE_PASS warn_lines=0 MEASURE frames=1823 bytes=693585 client_dropped_notifications=0
+baseline N=20 run=3 exit=124 secs=120.1 rounds_ok=1 result= warn_lines=3 
+baseline N=100 run=1 exit=124 secs=120.0 rounds_ok=1 result= warn_lines=160 
+baseline N=100 run=2 exit=124 secs=120.0 rounds_ok=1 result= warn_lines=254 
+baseline N=100 run=3 exit=124 secs=120.0 rounds_ok=1 result= warn_lines=209 
+fixed N=20 run=1 exit=0 secs=4.4 rounds_ok=6 result=PROBE_PASS warn_lines=0 MEASURE frames=1823 bytes=693585 client_dropped_notifications=0
+fixed N=20 run=2 exit=0 secs=4.4 rounds_ok=6 result=PROBE_PASS warn_lines=0 MEASURE frames=1823 bytes=693585 client_dropped_notifications=61
+fixed N=20 run=3 exit=0 secs=4.4 rounds_ok=6 result=PROBE_PASS warn_lines=0 MEASURE frames=1823 bytes=693585 client_dropped_notifications=0
+fixed N=100 run=1 exit=0 secs=4.3 rounds_ok=6 result=PROBE_PASS warn_lines=0 MEASURE frames=5143 bytes=1980215 client_dropped_notifications=22
+fixed N=100 run=2 exit=0 secs=4.4 rounds_ok=6 result=PROBE_PASS warn_lines=0 MEASURE frames=5143 bytes=1980215 client_dropped_notifications=377
+fixed N=100 run=3 exit=0 secs=4.9 rounds_ok=6 result=PROBE_PASS warn_lines=0 MEASURE frames=5143 bytes=1980215 client_dropped_notifications=169
+
+# Baseline failure log, N=100 run 2 (lines aggregated with uniq -c):
+    253 ui4me-host warn: peer cannot receive bounded output (error=connection is closed)
+      1 ui4me-host warn: peer cannot receive bounded output (error=connection outgoing queue unavailable: sending on a full channel)
+      1 ui4me-host error: application failed (reason=Backend connection lost: closed by host)
+ROUND_OK 0 events 0
+
+# Baseline failure log, N=20 run 1:
+     36 ui4me-host warn: peer cannot receive bounded output (error=connection is closed)
+      1 ui4me-host warn: peer cannot receive bounded output (error=connection outgoing queue unavailable: sending on a full channel)
+      1 ui4me-host error: application failed (reason=Backend connection lost: closed by host)
+ROUND_OK 0 events 0
+ROUND_OK 1 events 360
+ROUND_OK 2 events 720
+ROUND_OK 3 events 1080
+ROUND_OK 4 events 1440
+
+# Fixed host, N=100 run 2 (full output):
+ROUND_OK 0 events 0
+ROUND_OK 1 events 1024
+ROUND_OK 2 events 1859
+ROUND_OK 3 events 2805
+ROUND_OK 4 events 3829
+ROUND_OK 5 events 4743
+PROBE_PASS
+MEASURE frames=5143 bytes=1980215 client_dropped_notifications=377

@@ -1,0 +1,9 @@
+# HOST-09: frames the Linux kernel absorbs before the writer blocks (non-reading peer)
+# Temporary measurement test (not committed): connect a peer that never reads, queue 220
+# document.event frames of 425 B each, wait 500 ms, read the connection's queued byte
+# counter (the frame blocked in the writer still counts as queued).
+# net.core.wmem_default = 212992, debug build, same machine, same test body.
+baseline (two writes per frame: header, body): SLACK frame=425B enqueued=220 still_queued=116 kernel_accepted=104
+fixed    (one write per frame):                 SLACK frame=425B enqueued=220 still_queued=53 kernel_accepted=167
+# Matches BIND-19 (104 vs 167 frames). On Windows the 64 KiB pipe quota is unchanged; the
+# fix there is one WriteFile per frame instead of two (no extra buffering).
