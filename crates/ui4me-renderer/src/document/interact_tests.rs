@@ -228,3 +228,162 @@ fn tab_inside_a_scrolled_modal_dialog_reveals_the_control() {
     assert_eq!(hit["element"], "b", "hit {hit}");
 }
 
+// ---------------------------------------------------------------------------------------------
+// T10 keyboard activation matrix (F-17 / INTERACT-05): Enter and Space on each kind of control,
+// against browser behaviour.
+
+const MATRIX: &str = "<!doctype html><style>body{margin:0}#gap{height:2000px}</style>\
+    <form id=f><button id=btn type=button>B</button><input id=sub type=submit value=S>\
+    <input id=cb type=checkbox><input id=r1 type=radio name=g><input id=r2 type=radio name=g></form>\
+    <details id=det><summary id=sum>More</summary>hidden</details>\
+    <a id=lnk href=\"next.html\">next</a><div id=rb role=button tabindex=0>R</div><div id=gap></div>";
+
+fn matrix() -> Document {
+    doc(MATRIX, 400, 300)
+}
+fn count(ev: &[Value], ty: &str, id: &str) -> usize {
+    ev.iter()
+        .filter(|e| e["type"] == ty && e["element"] == id)
+        .count()
+}
+fn checked(d: &mut Document, id: &str) -> bool {
+    let n = d.node(id).unwrap();
+    d.pipeline
+        .document()
+        .control_state(n)
+        .ok()
+        .flatten()
+        .and_then(|c| c.checkedness)
+        == Some(true)
+}
+fn details_open(d: &mut Document) -> bool {
+    let n = d.node("det").unwrap();
+    d.pipeline
+        .document()
+        .get_attribute(n, "open")
+        .ok()
+        .flatten()
+        .is_some()
+}
+/// Focus `id`, drain the focus events, then press `key` (down and up).
+fn press_on(d: &mut Document, id: &str, key: &str, code: &str) -> Vec<Value> {
+    d.focus(id).unwrap();
+    d.drain_events();
+    press_key(d, key, code)
+}
+
+#[test]
+fn enter_on_a_link_clicks_it_and_activates_it() {
+    let mut d = matrix();
+    let ev = press_on(&mut d, "lnk", "Enter", "Enter");
+    let t = types(&ev);
+    let click = t.iter().position(|e| e == "click@lnk");
+    let link = t.iter().position(|e| e == "link_activated@lnk");
+    assert!(click.is_some() && link.is_some(), "click then link_activated: {t:?}");
+    assert!(click < link, "click precedes link_activated: {t:?}");
+    assert_eq!(count(&ev, "click", "lnk"), 1);
+    assert!(
+        ev.iter().any(|e| e["type"] == "link_activated" && e["href"] == "next.html"),
+        "{ev:?}"
+    );
+}
+
+#[test]
+fn enter_on_a_link_honours_a_prevented_click() {
+    let mut d = matrix();
+    d.set_default_action(
+        DefaultActionRule {
+            element: "lnk".into(),
+            event: "click".into(),
+            key: None,
+            shift: None,
+            ctrl: None,
+            alt: None,
+            meta: None,
+        },
+        true,
+    )
+    .unwrap();
+    let ev = press_on(&mut d, "lnk", "Enter", "Enter");
+    assert_eq!(count(&ev, "click", "lnk"), 1, "{:?}", types(&ev));
+    assert_eq!(count(&ev, "link_activated", "lnk"), 0, "{:?}", types(&ev));
+}
+
+#[test]
+fn space_on_a_link_scrolls_and_does_not_activate_it() {
+    let mut d = matrix();
+    let ev = press_on(&mut d, "lnk", " ", "Space");
+    assert_eq!(count(&ev, "click", "lnk"), 0, "{:?}", types(&ev));
+    assert_eq!(count(&ev, "link_activated", "lnk"), 0);
+    assert!(page_y(&mut d) > 0.0, "Space scrolls the page");
+}
+
+#[test]
+fn enter_and_space_on_a_button_click_once_each() {
+    let mut d = matrix();
+    let ev = press_on(&mut d, "btn", "Enter", "Enter");
+    assert_eq!(count(&ev, "click", "btn"), 1, "Enter: {:?}", types(&ev));
+    d.drain_events();
+    let down = d.handle_input(key_input(" ", "Space", true, false, false)).unwrap();
+    assert_eq!(count(&down, "click", "btn"), 0, "Space clicks on keyup, not keydown");
+    let up = d.handle_input(key_input(" ", "Space", false, false, false)).unwrap();
+    assert_eq!(count(&up, "click", "btn"), 1, "Space keyup: {:?}", types(&up));
+    assert_eq!(page_y(&mut d), 0.0, "Space on a button does not scroll");
+}
+
+#[test]
+fn enter_and_space_on_a_submit_button_submit_the_form() {
+    for (key, code) in [("Enter", "Enter"), (" ", "Space")] {
+        let mut d = matrix();
+        let ev = press_on(&mut d, "sub", key, code);
+        assert_eq!(count(&ev, "click", "sub"), 1, "{key:?}: {:?}", types(&ev));
+        assert_eq!(count(&ev, "submit", "f"), 1, "{key:?}: {:?}", types(&ev));
+    }
+}
+
+#[test]
+fn space_toggles_a_checkbox_and_enter_does_not() {
+    let mut d = matrix();
+    let ev = press_on(&mut d, "cb", "Enter", "Enter");
+    assert_eq!(count(&ev, "click", "cb"), 0, "{:?}", types(&ev));
+    assert!(!checked(&mut d, "cb"));
+    let ev = press_key(&mut d, " ", "Space");
+    assert_eq!(count(&ev, "click", "cb"), 1, "{:?}", types(&ev));
+    assert_eq!(count(&ev, "change", "cb"), 1);
+    assert!(checked(&mut d, "cb"));
+}
+
+#[test]
+fn space_checks_a_radio_and_enter_does_not() {
+    let mut d = matrix();
+    let ev = press_on(&mut d, "r1", "Enter", "Enter");
+    assert_eq!(count(&ev, "click", "r1"), 0, "{:?}", types(&ev));
+    assert!(!checked(&mut d, "r1"));
+    let ev = press_key(&mut d, " ", "Space");
+    assert_eq!(count(&ev, "click", "r1"), 1, "{:?}", types(&ev));
+    assert!(checked(&mut d, "r1"));
+}
+
+#[test]
+fn enter_and_space_on_a_summary_toggle_its_details() {
+    let mut d = matrix();
+    let ev = press_on(&mut d, "sum", "Enter", "Enter");
+    assert_eq!(count(&ev, "click", "sum"), 1, "{:?}", types(&ev));
+    assert!(details_open(&mut d), "Enter opened the details");
+    let ev = press_key(&mut d, " ", "Space");
+    assert_eq!(count(&ev, "click", "sum"), 1, "{:?}", types(&ev));
+    assert!(!details_open(&mut d), "Space closed the details");
+}
+
+#[test]
+fn a_role_button_element_gets_no_synthetic_click() {
+    // Browser parity: an ARIA role grants no activation behaviour; the application handles
+    // `keydown` itself. The key events reach it.
+    let mut d = matrix();
+    for (key, code) in [("Enter", "Enter"), (" ", "Space")] {
+        let ev = press_on(&mut d, "rb", key, code);
+        assert_eq!(count(&ev, "click", "rb"), 0, "{key:?}: {:?}", types(&ev));
+        assert_eq!(count(&ev, "keydown", "rb"), 1, "{key:?}: {:?}", types(&ev));
+    }
+}
+

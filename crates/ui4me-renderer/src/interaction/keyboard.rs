@@ -2,13 +2,13 @@
 //!
 //! Key default actions of an uncanceled `keydown`/`keyup`: sequential focus navigation (Tab,
 //! Shift+Tab), button-like activation (Enter on keydown; Space on keyup, `:active` between
-//! the two) and keyboard scrolling of the nearest scroll container (arrows 40 px, PageUp /
+//! the two; a link follows Enter only, a checkbox or radio Space only, an element with only an
+//! ARIA `role=button` neither, as in browsers) and keyboard scrolling of the nearest scroll container (arrows 40 px, PageUp /
 //! PageDown / Space by 87.5 % of the scrollport, Home / End to the edges), unless the focused
 //! element consumes the key.
 //!
-//! Not done (012 T060-T066, T101 stay open): radio-group roving, the sequential navigation
-//! starting point after a click, `inert`/`display: none` exclusion (the focusable test is the
-//! slice's, no rendering check), arrow-key navigation inside controls, access keys.
+//! Radio-group roving and arrow keys inside controls live in `controls`. Not done: the
+//! sequential navigation starting point after a click, access keys.
 
 use crate::interaction::activation;
 use crate::interaction::dispatch::{DispatchHost, eng, run_dispatch};
@@ -145,6 +145,17 @@ fn is_button_like(d: &Document, n: NodeId) -> bool {
             .is_some_and(|e| matches!(e.local_name(), "button" | "input" | "summary"))
 }
 
+/// A hyperlink (`a` / `area` with `href`): Enter follows it with a click on keydown, as in
+/// browsers; Space does not activate it (it scrolls).
+fn is_link(d: &Document, n: NodeId) -> bool {
+    d.arena()
+        .get(n)
+        .and_then(|x| x.as_element())
+        .is_some_and(|e| {
+            e.is_html() && matches!(e.local_name(), "a" | "area") && e.attr("href").is_some()
+        })
+}
+
 fn is_checkbox_or_radio(d: &Document, n: NodeId) -> bool {
     d.arena()
         .get(n)
@@ -207,9 +218,10 @@ pub(crate) fn keydown_default(
         }
         "Enter" if focused => {
             if eng(host, doc, |_, d| {
-                is_button_like(d, target)
+                (is_button_like(d, target)
                     && !is_checkbox_or_radio(d, target)
-                    && !activation::is_disabled_form_control(d, target)
+                    && !activation::is_disabled_form_control(d, target))
+                    || is_link(d, target)
             })? {
                 run_dispatch(host, doc, target, click_init(m), true, origin, ts)?;
             }
