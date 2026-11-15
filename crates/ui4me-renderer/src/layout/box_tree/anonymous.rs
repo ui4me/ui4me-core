@@ -56,6 +56,7 @@ fn needs_line_context(items: &[Proto]) -> bool {
 /// container. Elsewhere a float joins the inline run around it (it is placed by the line holding it,
 /// CSS 2.1 §9.5); a run that holds only floats, out-of-flow boxes and collapsible white space
 /// generates no line box, and its floats and out-of-flow boxes become children of the container.
+#[inline(never)] // called on the box builder's recursion path (stack, F-01)
 pub(crate) fn wrap_inline_runs(
     container: NodeId,
     style: &BoxStyle,

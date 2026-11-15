@@ -178,7 +178,42 @@ fn input_type(info: &HtmlInfo) -> String {
 }
 
 /// The HTML rendering rules for one element that has an HTML identity.
+///
+/// Stack (F-01): only `button` and `fieldset` build their children here (recursing into the box
+/// builder); they are dispatched first, so the boxes of every other special element are built in
+/// [`special_leaf`]'s frame, which is gone before any recursion.
 pub(crate) fn special<S: StyledSource>(
+    b: &mut Builder<'_, S>,
+    node: NodeId,
+    info: &HtmlInfo,
+    style: &BoxStyle,
+    d: DisplayValue,
+) -> Special {
+    let block_level = d.is_block_level();
+    match info.name.as_str() {
+        // A button with `display: flex | grid` is that container (the reference browser honours it): its
+        // children are the items and there is no anonymous inner box (Bootstrap `.accordion-button`,
+        // whose `::after` icon is a flex item beside the label; L-GEO-r9).
+        "button"
+            if !matches!(
+                d,
+                DisplayValue::Flex
+                    | DisplayValue::InlineFlex
+                    | DisplayValue::Grid
+                    | DisplayValue::InlineGrid
+            ) =>
+        {
+            Special::Generated(button(b, node, style, block_level, None))
+        }
+        "fieldset" if block_level || d.is_atomic_inline() => fieldset(b, node, style, !block_level),
+        _ => special_leaf(b, node, info, style, d),
+    }
+}
+
+/// The special elements whose boxes are leaves (replaced elements, controls) or need no
+/// children built here.
+#[inline(never)]
+fn special_leaf<S: StyledSource>(
     b: &mut Builder<'_, S>,
     node: NodeId,
     info: &HtmlInfo,
@@ -252,20 +287,6 @@ pub(crate) fn special<S: StyledSource>(
                 children: vec![text],
             }))
         }
-        // A button with `display: flex | grid` is that container (the reference browser honours it): its
-        // children are the items and there is no anonymous inner box (Bootstrap `.accordion-button`,
-        // whose `::after` icon is a flex item beside the label; L-GEO-r9).
-        "button"
-            if !matches!(
-                d,
-                DisplayValue::Flex
-                    | DisplayValue::InlineFlex
-                    | DisplayValue::Grid
-                    | DisplayValue::InlineGrid
-            ) =>
-        {
-            Special::Generated(Box::new(button(b, node, style, block_level, None)))
-        }
         "input" => {
             let ty = input_type(info);
             match ty.as_str() {
@@ -292,7 +313,7 @@ pub(crate) fn special<S: StyledSource>(
                             .to_string(),
                         _ => value.unwrap_or("").to_string(),
                     };
-                    Special::Generated(Box::new(button(b, node, style, block_level, Some(label))))
+                    Special::Generated(button(b, node, style, block_level, Some(label)))
                 }
                 "checkbox" => leaf(b, ReplacedKind::Control(ControlSpec::Checkbox)),
                 "radio" => leaf(b, ReplacedKind::Control(ControlSpec::Radio)),
@@ -439,9 +460,6 @@ pub(crate) fn special<S: StyledSource>(
                 e.ratio = info.attr("viewbox").and_then(embedded::view_box_ratio);
                 return leaf(b, ReplacedKind::Embedded(e));
             }
-            if name == "fieldset" && (block_level || d.is_atomic_inline()) {
-                return fieldset(b, node, style, !block_level);
-            }
             Special::Ordinary
         }
     }
@@ -454,31 +472,52 @@ fn button<S: StyledSource>(
     style: &BoxStyle,
     block_level: bool,
     label: Option<String>,
-) -> Proto {
-    let content_style = BoxStyle::inheriting(style, DisplayValue::Block);
+) -> Box<Proto> {
+    let content_style = boxed_inheriting(style, DisplayValue::Block);
     let kids = match label {
-        Some(l) if !l.is_empty() => vec![Proto::Text {
-            text: l,
-            style: content_style.clone(),
-            owner: node,
-            pseudo: None,
-        }],
+        Some(l) if !l.is_empty() => label_text(l, &content_style, node),
         Some(_) => Vec::new(),
         None => {
             let kids = b.children(node, &content_style);
             super::anonymous::wrap_inline_runs(node, &content_style, kids, false)
         }
     };
+    finish_button(node, style, content_style, kids, block_level)
+}
+
+#[inline(never)]
+fn boxed_inheriting(style: &BoxStyle, display: DisplayValue) -> Box<BoxStyle> {
+    Box::new(BoxStyle::inheriting(style, display))
+}
+
+#[inline(never)]
+fn label_text(text: String, style: &BoxStyle, node: NodeId) -> Vec<Proto> {
+    vec![Proto::Text {
+        text,
+        style: style.clone(),
+        owner: node,
+        pseudo: None,
+    }]
+}
+
+#[inline(never)]
+fn finish_button(
+    node: NodeId,
+    style: &BoxStyle,
+    content_style: Box<BoxStyle>,
+    kids: Vec<Proto>,
+    block_level: bool,
+) -> Box<Proto> {
     let content = Proto::Block {
         owner: BoxOwner::Anonymous(node),
-        style: content_style,
+        style: *content_style,
         children: kids,
         inner: InnerDisplay::FlowRoot,
         list_item: false,
         tag: BoxTag::ButtonContent,
         atomic: false,
     };
-    Proto::Block {
+    Box::new(Proto::Block {
         owner: BoxOwner::Element(node),
         style: style.clone(),
         children: vec![content],
@@ -486,7 +525,7 @@ fn button<S: StyledSource>(
         list_item: false,
         tag: BoxTag::None,
         atomic: !block_level,
-    }
+    })
 }
 
 /// `fieldset` (HTML 15.3.13; 015 HTML-3): a block formatting context. Without a rendered legend it is one
@@ -524,32 +563,51 @@ fn fieldset<S: StyledSource>(
             && matches!(b.src.node(c), super::SourceNode::Element(ls) if ls.float == super::FloatValue::None && !ls.position.is_out_of_flow() && !matches!(ls.display, DisplayValue::None | DisplayValue::Contents))
     });
     let Some(legend) = legend else {
-        return Special::Generated(Box::new(b.block_boxed(
+        return Special::Generated(b.block_boxed(
             BoxOwner::Element(node),
             node,
-            style.clone(),
+            boxed_clone(style),
             inner,
             false,
             BoxTag::Fieldset,
             atomic,
-        )));
+        ));
     };
-    let mut kids = b.children(node, style);
+    let kids = b.children(node, style);
+    fieldset_with_legend(b, node, style, atomic, inner, legend, kids)
+}
+
+#[inline(never)]
+fn boxed_clone(style: &BoxStyle) -> Box<BoxStyle> {
+    Box::new(style.clone())
+}
+
+/// The rest of [`fieldset`] once its children exist, out of line (stack, see [`special`]).
+#[inline(never)]
+fn fieldset_with_legend<S: StyledSource>(
+    b: &mut Builder<'_, S>,
+    node: NodeId,
+    style: &BoxStyle,
+    atomic: bool,
+    inner: InnerDisplay,
+    legend: NodeId,
+    mut kids: Vec<Proto>,
+) -> Special {
     // The legend's box is edited below: no child subtree stays taken over (incremental.rs).
     b.expand_reused(&mut kids);
     let pos = kids.iter().position(
         |c| matches!(c, Proto::Block { owner: BoxOwner::Element(n), .. } if *n == legend),
     );
     let Some(pos) = pos else {
-        return Special::Generated(Box::new(b.block_boxed(
+        return Special::Generated(b.block_boxed(
             BoxOwner::Element(node),
             node,
-            style.clone(),
+            boxed_clone(style),
             inner,
             false,
             BoxTag::Fieldset,
             atomic,
-        )));
+        ));
     };
     let mut legend_proto = kids.remove(pos);
     b.tainted.push(legend);

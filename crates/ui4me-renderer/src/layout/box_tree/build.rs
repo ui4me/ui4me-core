@@ -594,32 +594,21 @@ impl<S: StyledSource> Builder<'_, S> {
             let before = self.later_siblings.len();
             match self.src.node(child) {
                 SourceNode::Text(t) => {
-                    let text = Proto::Text {
-                        text: t.to_string(),
-                        style: parent_style.clone(),
-                        owner: parent,
-                        pseudo: None,
-                    };
-                    if in_slot {
-                        hidden.push(text)
-                    } else {
-                        out.push(text)
-                    }
+                    push_text(
+                        if in_slot { &mut hidden } else { &mut out },
+                        t,
+                        parent_style,
+                        parent,
+                    );
                 }
                 SourceNode::Element(style) => {
-                    if let Some(p) = self.try_reuse(child, parent_style, style) {
-                        if in_slot {
-                            hidden.push(p)
-                        } else {
-                            out.push(p)
-                        }
+                    let target = if in_slot { &mut hidden } else { &mut out };
+                    if self.try_reuse_into(child, parent_style, style, target) {
                         debug_assert_eq!(self.later_siblings.len(), before);
                         self.later_siblings.pop();
                         continue;
                     }
-                    let mut style = style.clone();
-                    style.decorations = propagate_decorations(parent_style, &style);
-                    complete_first_line(parent_style, &mut style);
+                    let style = child_style(parent_style, style);
                     if in_slot {
                         self.element(child, style, &mut slot_out);
                         hidden.append(&mut slot_out);
@@ -633,11 +622,7 @@ impl<S: StyledSource> Builder<'_, S> {
             self.later_siblings.pop();
         }
         if !hidden.is_empty() {
-            out.push(html_rendering::closed_details_slot(
-                parent,
-                parent_style,
-                hidden,
-            ));
+            push_closed_details_slot(&mut out, parent, parent_style, hidden);
         }
         self.pseudo_element(parent, super::PseudoKind::After, parent_style, &mut out);
         // CSS 2.1 §17.2.1 rule 3: table-internal boxes outside a table get an anonymous table.
@@ -706,7 +691,13 @@ impl<S: StyledSource> Builder<'_, S> {
     /// One element: its counter operations apply (in tree order) when it generates a box, and its
     /// children see the counters it created (FR-085). An element with `display: none` has no
     /// effect on counters; neither has one with `display: contents`.
-    fn element(&mut self, node: NodeId, style: BoxStyle, out: &mut Vec<Proto>) {
+    ///
+    /// Stack (F-01): this function, [`Self::element_dispatch`], [`Self::block_boxed`] and
+    /// [`Self::children`] recurse once per DOM level. They hold only boxed styles and protos and
+    /// small values; every large temporary (a `BoxStyle` or `Proto` is ~1.5 KiB) is built in an
+    /// `#[inline(never)]` helper that returns before or after the recursive call, so it never
+    /// stays on the stack below the deeper levels. `tests/stack_depth.rs` measures the result.
+    fn element(&mut self, node: NodeId, style: Box<BoxStyle>, out: &mut Vec<Proto>) {
         let (log0, reads0, writes0, volatile0, n0) = (
             self.report_log.len(),
             self.reads(),
@@ -724,12 +715,26 @@ impl<S: StyledSource> Builder<'_, S> {
         if counts {
             self.leave_counters();
         }
-        // One box subtree of the element's own (incremental.rs): recorded for the next build.
-        if let Some(decorations) = decorations
-            && out.len() == n0 + 1
-            && self.reads() == reads0
-            && self.volatile == volatile0
-        {
+        if let Some(decorations) = decorations {
+            self.record_candidate(
+                node,
+                decorations,
+                out,
+                (log0, reads0, writes0, volatile0, n0),
+            );
+        }
+    }
+
+    /// One box subtree of the element's own (incremental.rs): recorded for the next build.
+    #[inline(never)]
+    fn record_candidate(
+        &mut self,
+        node: NodeId,
+        decorations: Arc<[crate::text::paragraph::DecorationLayer]>,
+        out: &[Proto],
+        (log0, reads0, writes0, volatile0, n0): (usize, u64, u64, u64, usize),
+    ) {
+        if out.len() == n0 + 1 && self.reads() == reads0 && self.volatile == volatile0 {
             let wrapper = match &out[n0] {
                 Proto::Block {
                     owner: BoxOwner::Element(n),
@@ -814,7 +819,7 @@ impl<S: StyledSource> Builder<'_, S> {
             }
             es.decorations = propagate_decorations(&root_style, &es);
             let mut out = Vec::new();
-            self.element(n, es, &mut out);
+            self.element(n, Box::new(es), &mut out);
             children.extend(out);
         }
     }
@@ -830,6 +835,25 @@ impl<S: StyledSource> Builder<'_, S> {
     /// The box subtree of element `node` from the previous tree, when nothing it was built from changed
     /// (`incremental.rs`). Its counter frame is opened and closed as a full build does, and its reports
     /// are made again in place.
+    /// [`Self::try_reuse`], pushing the taken-over proto into `out`; out of line (see
+    /// [`Self::element`]).
+    #[inline(never)]
+    fn try_reuse_into(
+        &mut self,
+        node: NodeId,
+        parent_style: &BoxStyle,
+        style: &BoxStyle,
+        out: &mut Vec<Proto>,
+    ) -> bool {
+        match self.try_reuse(node, parent_style, style) {
+            Some(p) => {
+                out.push(p);
+                true
+            }
+            None => false,
+        }
+    }
+
     fn try_reuse(
         &mut self,
         node: NodeId,
@@ -908,16 +932,14 @@ impl<S: StyledSource> Builder<'_, S> {
     }
 
     /// The display dispatch of one element (FR-002, FR-003), after the HTML rendering rules.
-    fn element_dispatch(&mut self, node: NodeId, style: BoxStyle, out: &mut Vec<Proto>) {
+    fn element_dispatch(&mut self, node: NodeId, style: Box<BoxStyle>, out: &mut Vec<Proto>) {
         let display = self.display(node, &style);
-        if !matches!(display, DisplayValue::None | DisplayValue::Contents)
-            && let Some(info) = self.src.html(node)
-        {
-            match html_rendering::special(self, node, &info, &style, display) {
+        if !matches!(display, DisplayValue::None | DisplayValue::Contents) {
+            match self.html_special(node, &style, display) {
                 Special::Ordinary => {}
                 Special::Skip => return,
                 Special::Generated(p) => {
-                    out.push(*p);
+                    push_boxed(out, p);
                     return;
                 }
             }
@@ -939,15 +961,103 @@ impl<S: StyledSource> Builder<'_, S> {
             }
             DisplayValue::Table | DisplayValue::InlineTable => {
                 let kids = self.children(node, &style);
-                let kids = table_fixup::fix_table_children(node, &style, kids);
-                out.push(table_fixup::assemble(
-                    BoxOwner::Anonymous(node),
-                    BoxOwner::Element(node),
-                    style,
-                    kids,
-                    display == DisplayValue::InlineTable,
-                ));
+                push_table(out, node, style, kids, display == DisplayValue::InlineTable);
             }
+            DisplayValue::TableRowGroup
+            | DisplayValue::TableHeaderGroup
+            | DisplayValue::TableFooterGroup
+            | DisplayValue::TableRow
+            | DisplayValue::TableColumnGroup => {
+                let kids = self.children(node, &style);
+                self.push_table_part(out, node, style, display, kids);
+            }
+            DisplayValue::TableCell => {
+                let (col_span, row_span) = self.cell_spans(node);
+                let tag = BoxTag::Table(TableTag::Cell { col_span, row_span });
+                let p = self.block_boxed(
+                    BoxOwner::Element(node),
+                    node,
+                    style,
+                    InnerDisplay::FlowRoot,
+                    false,
+                    tag,
+                    false,
+                );
+                push_boxed(out, p);
+            }
+            DisplayValue::TableCaption => {
+                let tag = BoxTag::Table(TableTag::Caption);
+                let p = self.block_boxed(
+                    BoxOwner::Element(node),
+                    node,
+                    style,
+                    InnerDisplay::FlowRoot,
+                    false,
+                    tag,
+                    false,
+                );
+                push_boxed(out, p);
+            }
+            DisplayValue::TableColumn => {
+                // CSS 2.1 §17.2.1 rule 1.1: the children of a column generate nothing.
+                self.push_table_part(out, node, style, display, Vec::new());
+            }
+            d if d.is_block_level() => {
+                let inner = d.inner().unwrap_or(InnerDisplay::Flow);
+                let p = self.block(
+                    BoxOwner::Element(node),
+                    node,
+                    style,
+                    inner,
+                    d == DisplayValue::ListItem,
+                );
+                push_boxed(out, p);
+            }
+            d if d.is_atomic_inline() => {
+                // `inline-block`, `inline-flex`, `inline-grid`: one atomic inline-level box whose
+                // contents are a flow-root, flex or grid formatting context (FR-010).
+                let inner = d.inner().unwrap_or(InnerDisplay::FlowRoot);
+                let p = self.block_boxed(
+                    BoxOwner::Element(node),
+                    node,
+                    style,
+                    inner,
+                    false,
+                    BoxTag::None,
+                    true,
+                );
+                push_boxed(out, p);
+            }
+            _ => {
+                // `inline` and the unsupported values (boxed as `inline`).
+                let kids = self.children(node, &style);
+                push_split_inline(out, node, style, kids);
+            }
+        }
+    }
+
+    /// The HTML rendering rules of an HTML element (`html_rendering::special`), out of line: its
+    /// `HtmlInfo` and generated boxes stay off the recursion stack of ordinary elements.
+    #[inline(never)]
+    fn html_special(&mut self, node: NodeId, style: &BoxStyle, display: DisplayValue) -> Special {
+        match self.src.html(node) {
+            Some(info) => html_rendering::special(self, node, &info, style, display),
+            None => Special::Ordinary,
+        }
+    }
+
+    /// A table row group, row, column or column group holding `kids` (fixed up per CSS 2.1
+    /// §17.2.1).
+    #[inline(never)]
+    fn push_table_part(
+        &self,
+        out: &mut Vec<Proto>,
+        node: NodeId,
+        style: Box<BoxStyle>,
+        display: DisplayValue,
+        kids: Vec<Proto>,
+    ) {
+        let p = match display {
             DisplayValue::TableRowGroup
             | DisplayValue::TableHeaderGroup
             | DisplayValue::TableFooterGroup => {
@@ -956,59 +1066,30 @@ impl<S: StyledSource> Builder<'_, S> {
                     DisplayValue::TableFooterGroup => RowGroupKind::Footer,
                     _ => RowGroupKind::Body,
                 };
-                let kids = self.children(node, &style);
                 let kids = table_fixup::fix_group_children(node, &style, kids);
-                out.push(self.table_part(
+                self.table_part(
                     node,
-                    style,
+                    *style,
                     InnerDisplay::Flow,
                     TableTag::RowGroup(kind),
                     kids,
-                ));
+                )
             }
             DisplayValue::TableRow => {
-                let kids = self.children(node, &style);
                 let kids = table_fixup::fix_row_children(node, &style, kids);
-                out.push(self.table_part(node, style, InnerDisplay::Flow, TableTag::Row, kids));
-            }
-            DisplayValue::TableCell => {
-                let (col_span, row_span) = self.cell_spans(node);
-                let tag = BoxTag::Table(TableTag::Cell { col_span, row_span });
-                out.push(self.block_boxed(
-                    BoxOwner::Element(node),
-                    node,
-                    style,
-                    InnerDisplay::FlowRoot,
-                    false,
-                    tag,
-                    false,
-                ));
-            }
-            DisplayValue::TableCaption => {
-                let tag = BoxTag::Table(TableTag::Caption);
-                out.push(self.block_boxed(
-                    BoxOwner::Element(node),
-                    node,
-                    style,
-                    InnerDisplay::FlowRoot,
-                    false,
-                    tag,
-                    false,
-                ));
+                self.table_part(node, *style, InnerDisplay::Flow, TableTag::Row, kids)
             }
             DisplayValue::TableColumn => {
-                // CSS 2.1 §17.2.1 rule 1.1: the children of a column generate nothing.
                 let span = self.column_span(node, "col");
-                out.push(self.table_part(
+                self.table_part(
                     node,
-                    style,
+                    *style,
                     InnerDisplay::Flow,
                     TableTag::Column { span },
                     Vec::new(),
-                ));
+                )
             }
-            DisplayValue::TableColumnGroup => {
-                let kids = self.children(node, &style);
+            _ => {
                 let cols = table_fixup::fix_column_group_children(kids);
                 // `span` counts only when the group has no `col` child (HTML §4.9.12).
                 let span = if cols.is_empty() {
@@ -1016,54 +1097,26 @@ impl<S: StyledSource> Builder<'_, S> {
                 } else {
                     1
                 };
-                out.push(self.table_part(
+                self.table_part(
                     node,
-                    style,
+                    *style,
                     InnerDisplay::Flow,
                     TableTag::ColumnGroup { span },
                     cols,
-                ));
+                )
             }
-            d if d.is_block_level() => {
-                let inner = d.inner().unwrap_or(InnerDisplay::Flow);
-                out.push(self.block(
-                    BoxOwner::Element(node),
-                    node,
-                    style,
-                    inner,
-                    d == DisplayValue::ListItem,
-                ));
-            }
-            d if d.is_atomic_inline() => {
-                // `inline-block`, `inline-flex`, `inline-grid`: one atomic inline-level box whose
-                // contents are a flow-root, flex or grid formatting context (FR-010).
-                let inner = d.inner().unwrap_or(InnerDisplay::FlowRoot);
-                out.push(self.block_boxed(
-                    BoxOwner::Element(node),
-                    node,
-                    style,
-                    inner,
-                    false,
-                    BoxTag::None,
-                    true,
-                ));
-            }
-            _ => {
-                // `inline` and the unsupported values (boxed as `inline`).
-                let kids = self.children(node, &style);
-                out.extend(split_inline(node, style, kids));
-            }
-        }
+        };
+        out.push(p);
     }
 
     fn block(
         &mut self,
         owner: BoxOwner,
         node: NodeId,
-        style: BoxStyle,
+        style: Box<BoxStyle>,
         inner: InnerDisplay,
         list_item: bool,
-    ) -> Proto {
+    ) -> Box<Proto> {
         self.block_boxed(owner, node, style, inner, list_item, BoxTag::None, false)
     }
 
@@ -1073,20 +1126,46 @@ impl<S: StyledSource> Builder<'_, S> {
         &mut self,
         owner: BoxOwner,
         node: NodeId,
-        style: BoxStyle,
+        style: Box<BoxStyle>,
         inner: InnerDisplay,
         list_item: bool,
         tag: BoxTag,
         atomic: bool,
-    ) -> Proto {
+    ) -> Box<Proto> {
         // The marker's number is read before the children are built: a nested list creates its own
         // `list-item` counter, which must not be seen by the item's marker (CSS Lists 3 section 4.4).
         let marker = if list_item {
-            self.marker(node, &style)
+            self.boxed_marker(node, &style)
         } else {
             None
         };
-        let mut kids = self.children(node, &style);
+        let kids = self.children(node, &style);
+        self.finish_block(
+            owner, node, style, kids, marker, inner, list_item, tag, atomic,
+        )
+    }
+
+    #[inline(never)]
+    fn boxed_marker(&mut self, node: NodeId, style: &BoxStyle) -> Option<Box<(Proto, bool)>> {
+        self.marker(node, style).map(Box::new)
+    }
+
+    /// The rest of [`Self::block_boxed`] once the children exist (out of line, see
+    /// [`Self::element`]).
+    #[allow(clippy::too_many_arguments)]
+    #[inline(never)]
+    fn finish_block(
+        &mut self,
+        owner: BoxOwner,
+        node: NodeId,
+        style: Box<BoxStyle>,
+        mut kids: Vec<Proto>,
+        marker: Option<Box<(Proto, bool)>>,
+        inner: InnerDisplay,
+        list_item: bool,
+        tag: BoxTag,
+        atomic: bool,
+    ) -> Box<Proto> {
         // 015 TXT-5: the `::first-letter` of a block container (flow content: not flex, grid or table).
         if let Some(fl) = style.first_letter.clone()
             && matches!(inner, InnerDisplay::Flow | InnerDisplay::FlowRoot)
@@ -1102,7 +1181,7 @@ impl<S: StyledSource> Builder<'_, S> {
             // subtree on the way down to that line (found by the multicol random harness, lane L-MC2).
             self.expand_reused(&mut kids);
             self.expand_first_line_path(&mut kids);
-            super::pseudo::place_marker(&mut kids, marker, &mut self.tainted);
+            super::pseudo::place_marker(&mut kids, *marker, &mut self.tainted);
         }
         // Text and inline-level children of a flex or grid container become anonymous items,
         // even when no block-level sibling exists (FR-008).
@@ -1152,16 +1231,80 @@ impl<S: StyledSource> Builder<'_, S> {
                 children = rows;
             }
         }
-        Proto::Block {
+        Box::new(Proto::Block {
             owner,
-            style,
+            style: *style,
             children,
             inner,
             list_item,
             tag,
             atomic,
-        }
+        })
     }
+}
+
+/// Out-of-line pushes for the recursive builder (see [`Builder::element`]): each one keeps its
+/// ~1.5 KiB `Proto`/`BoxStyle` temporaries in its own short-lived frame.
+#[inline(never)]
+fn push_boxed(out: &mut Vec<Proto>, p: Box<Proto>) {
+    out.push(*p);
+}
+
+#[inline(never)]
+fn push_text(out: &mut Vec<Proto>, text: &str, parent_style: &BoxStyle, parent: NodeId) {
+    out.push(Proto::Text {
+        text: text.to_string(),
+        style: parent_style.clone(),
+        owner: parent,
+        pseudo: None,
+    });
+}
+
+/// The style of a child element box: its computed style with the decorations and `::first-line`
+/// it inherits from its parent box.
+#[inline(never)]
+fn child_style(parent_style: &BoxStyle, style: &BoxStyle) -> Box<BoxStyle> {
+    let mut style = Box::new(style.clone());
+    style.decorations = propagate_decorations(parent_style, &style);
+    complete_first_line(parent_style, &mut style);
+    style
+}
+
+#[inline(never)]
+fn push_closed_details_slot(
+    out: &mut Vec<Proto>,
+    parent: NodeId,
+    parent_style: &BoxStyle,
+    hidden: Vec<Proto>,
+) {
+    out.push(html_rendering::closed_details_slot(
+        parent,
+        parent_style,
+        hidden,
+    ));
+}
+
+#[inline(never)]
+fn push_table(
+    out: &mut Vec<Proto>,
+    node: NodeId,
+    style: Box<BoxStyle>,
+    kids: Vec<Proto>,
+    inline: bool,
+) {
+    let kids = table_fixup::fix_table_children(node, &style, kids);
+    out.push(table_fixup::assemble(
+        BoxOwner::Anonymous(node),
+        BoxOwner::Element(node),
+        *style,
+        kids,
+        inline,
+    ));
+}
+
+#[inline(never)]
+fn push_split_inline(out: &mut Vec<Proto>, node: NodeId, style: Box<BoxStyle>, kids: Vec<Proto>) {
+    out.extend(split_inline(node, *style, kids));
 }
 
 impl<S: StyledSource> Builder<'_, S> {
@@ -1814,7 +1957,7 @@ fn build_with<S: StyledSource>(
         DisplayValue::None => None,
         DisplayValue::Table | DisplayValue::InlineTable => {
             let mut out = Vec::new();
-            b.element(root, style, &mut out);
+            b.element(root, Box::new(style), &mut out);
             out.into_iter().next()
         }
         d => {
@@ -1827,13 +1970,13 @@ fn build_with<S: StyledSource>(
             let mut p = b.block(
                 BoxOwner::Element(root),
                 root,
-                style,
+                Box::new(style),
                 inner,
                 d == DisplayValue::ListItem,
             );
             b.append_top_layer(&mut p);
             b.leave_counters();
-            Some(p)
+            Some(*p)
         }
     };
     let read_skipped = b.skipped_writes && b.reads() > 0;
