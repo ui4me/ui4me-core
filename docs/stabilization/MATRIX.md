@@ -18,8 +18,8 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | F-11 | Medium | process | F | IN_PROGRESS | test_release_artifacts.py | pending | pending | 5d1dc25 8aa7f4a 126075e |  |
 | F-12 | Medium | runtime | G | FIXED_VERIFIED | host::headless::tests, tools/test_headless_clock.py (T3) | T3 burst passes (baseline -32601); RSS growth 10k writes 2,460 -> 136 KiB | T3 transition burst and R5(c) pass natively (evidence/lead/windows-lifecycle-81b8c85.md) | 85c817f | Unsubscribed-type assertion needs host-side subscription (3.1, not done). Headless CPU use higher while transitions run. |
 | F-13 | Medium | runtime | E | IN_PROGRESS | T9 | pending | pending |  |  |
-| F-14 | Medium | runtime | H | OPEN | T6 | pending | pending |  |  |
-| F-15 | Medium | runtime | H | OPEN | T6 | pending | pending |  |  |
+| F-14 | Medium | runtime | H | FIXED_VERIFIED | crates/ui4me-renderer/tests/content_stalls.rs, crates/ui4me-assets/tests/svg_filter_cost.rs, fuzz_resources::harness_svg_filters (T6), chunked_parsing_builds_the_same_tree (html5lib corpus), stack_depth inline-block/button (T1) | verify.py all stages PASS (verify-integ5, cd4a12e); release renderer 546 tests; fuzz depth 120 s/151 cases and svg_filters 90 s/1476 cases 0 findings. Before/after: 26 nested inline-blocks 7.7 s->0.2 s; 40k unclosed div 5.0 s->2 ms; 4,000 inline inputs 17.0 s->0.95 s; feTurbulence 46.8 s->0.2 s (evidence/h-stalls/) | Windows release (winDEV, cd4a12e): content_stalls 13/13, svg_filter_cost 5/5, stack_depth 8/8 incl. inline-block/button, renderer lib 553/553 (evidence/lead/windows-integration-cd4a12e.md) | 467bb7d b20efc5 268de65 c526a94 ecf3504 ec4a764 | Layout still O(atomic depth x subtree) in places (~53 ms at 250 deep); final-layout reuse relies on all layout runs going through cache_store (new invariant). SVG budget is per raster, not per frame. CSS filter estimate assumes scale 1 (HiDPI cost x scale^2). Parse just under the cap up to the node limit ~0.27 s. |
+| F-15 | Medium | runtime | H | FIXED_VERIFIED | content_stalls F-15 tests (gradient stops, filter functions, mask layers, scope depth) | four F-15 tests fail on baseline with the audit's errors, pass after; 64 x blur(50px) 6.2 s->0.19 s; verify PASS | Windows release (winDEV, cd4a12e): content_stalls 13/13, svg_filter_cost 5/5, stack_depth 8/8 incl. inline-block/button, renderer lib 553/553 (evidence/lead/windows-integration-cd4a12e.md) | ecf3504 | CSS filter estimate underestimates many small filtered layers (~3x for 50 shadowed cards). |
 | F-18 | Medium | runtime | G | FIXED_VERIFIED | platform::linux::tests::supervised_environment_skips_what_systemd_rejects, test_host_lifecycle::test_t15_supervised_start_with_rejected_environment | real systemd-run; baseline: Cannot assign environment variable BASH_FUNC_x%% | n/a | 3dc57a7 |  |
 | F-19 | Medium | runtime | E | IN_PROGRESS | T12 | pending | pending |  |  |
 | F-20 | Medium | process | F | NOT_REPRODUCED |  | gh api: visibility=public; PublicEvent 2026-11-12 by owner; 18/19 metadata URLs 200 (CHANGELOG 404 until on main) | pending | 37c0399 |  |
@@ -46,7 +46,7 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | HOST-03 | Medium | F-18 | G | FIXED_VERIFIED | 3dc57a7 |  |
 | HOST-04 | Low-Med | F-25 | G | FIXED_VERIFIED | 7813ef8 0adab8c |  |
 | HOST-05 | Low-Med |  | G | FIXED_VERIFIED | eb4bb24 |  |
-| HOST-06 | Low | F-14 | H | IN_PROGRESS |  | request_submit linear in release (24/31/44 ms at 1k/2k/4k fields). Superlinear cost is first layout of many inline inputs (0.52/2.33/17.3 s) - handed to ws H. |
+| HOST-06 | Low | F-14 | H | FIXED_VERIFIED | c30e1e0 ( 268de65 | request_submit linear in release (24/31/44 ms at 1k/2k/4k fields). Superlinear cost is first layout of many inline inputs (0.52/2.33/17.3 s) - handed to ws H. |
 | HOST-07 | Low-Med | F-25 | G | IN_PROGRESS | 92977d2 f5b3fb7 |  |
 | HOST-08 | Low | F-25 | G | FIXED_VERIFIED | 8c8cab3 |  |
 | HOST-09 | Low | F-02 | A | FIXED_VERIFIED | c90062f 78df633 8c8cab3 eae0ad9 |  |
@@ -66,7 +66,7 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | RENDER-06 | Medium | F-16b | C+D | FIXED_VERIFIED | c955e44 |  |
 | RENDER-07 | Medium | F-16b | C+D | DEFERRED |  | Measured 26-27 ms per set_text at 2,000 rows (layout ~17, scene ~5, raster ~4-5). O(dirty) pipeline is roadmap 8.1, optional; postponed per 08 until measured need beyond R5(b) 100 ms budget, which is met. |
 | RENDER-08 | Low-Med |  | C | DEFERRED |  | Full frame 8 ms @1280x800, ~20 ms @4K; damage-limited present is roadmap 8.3 (optional). |
-| RENDER-09 | Low |  | C | OPEN |  |  |
+| RENDER-09 | Low |  | C | DEFERRED |  | insert_html validation is ~95% of cost on 40k-node docs (3.85 ms/insert). Exact fragment-only check needs an id index and reachable-node counter in ui4me-document; plan in evidence/h-stalls/inputsec-10-11-render-09.md. |
 | RENDER-10 | Low (test gap) |  | C | FIXED_VERIFIED | 8806f21 | Fuzz workers on half production stack + depth/SVG generators; nightly scheduled by ws F. |
 | RENDER-11 | Low |  | C | OPEN |  |  |
 | RENDER-12 | Low-Med | F-27 | F | OPEN |  |  |
@@ -126,15 +126,15 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | BIND-PS-19 | Low |  | E | OPEN |  |  |
 | INPUTSEC-01 | High (=F-01) | F-01 | B | FIXED_VERIFIED | 96c549e 554b58d |  |
 | INPUTSEC-02 | High (=F-03) | F-03 | B | FIXED_VERIFIED | c8b9832 |  |
-| INPUTSEC-03 | Medium | F-14 | H | OPEN |  |  |
-| INPUTSEC-04 | Medium | F-15 | H | OPEN |  |  |
-| INPUTSEC-05 | Low-Med | F-14 | H | OPEN |  |  |
-| INPUTSEC-06 | Medium | F-14 | H | OPEN |  |  |
+| INPUTSEC-03 | Medium | F-14 | H | FIXED_VERIFIED | c526a94 |  |
+| INPUTSEC-04 | Medium | F-15 | H | FIXED_VERIFIED | ecf3504 |  |
+| INPUTSEC-05 | Low-Med | F-14 | H | FIXED_VERIFIED | b20efc5 ec4a764 |  |
+| INPUTSEC-06 | Medium | F-14 | H | FIXED_VERIFIED | 467bb7d |  |
 | INPUTSEC-07 | High (=F-01) | F-01 | B | FIXED_VERIFIED | 554b58d c8b9832 |  |
 | INPUTSEC-08 | Low | F-23, F-27 | F | IN_PROGRESS |  |  |
 | INPUTSEC-09 | Low-Med | F-27 | F | IN_PROGRESS |  |  |
-| INPUTSEC-10 | Low |  | H | OPEN |  |  |
-| INPUTSEC-11 | Low |  | H | OPEN |  |  |
+| INPUTSEC-10 | Low |  | H | DEFERRED |  | Windows DLL search-order hardening (+crt-static, /DEPENDENTLOADFLAG:0x800, SetDefaultDllDirectories) belongs in host build/main; recommendations in evidence/h-stalls/inputsec-10-11-render-09.md. Not a regression; post-1.0.2. |
+| INPUTSEC-11 | Low |  | H | FIXED_VERIFIED | 79b9bec | checked_add in Reader::need and command length; unit test fails on baseline |
 | RELEASE-01 | High | F-10 | F | IN_PROGRESS |  |  |
 | RELEASE-02 | High→Medium (F-09) | F-09 | F | IN_PROGRESS |  |  |
 | RELEASE-03 | Medium | F-11 | F | IN_PROGRESS |  |  |
@@ -159,12 +159,12 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 
 | ID | Status | Location | CI | Notes |
 | --- | --- | --- | --- | --- |
-| T1 | FIXED_VERIFIED | crates/ui4me-renderer/tests/stack_depth.rs, crates/ui4me-assets/tests/svg_depth.rs | cargo test (default); release in nightly | Native Windows pass. inline-block pending F-14. |
+| T1 | FIXED_VERIFIED | crates/ui4me-renderer/tests/stack_depth.rs, crates/ui4me-assets/tests/svg_depth.rs | cargo test (default); release in nightly | Native Windows pass incl. inline-block and button at depth 256 (cd4a12e). |
 | T2 | FIXED_VERIFIED | crates/ui4me-host/src/transport.rs tests | cargo test (default) | Fails on baseline (message 236 refused). |
 | T3 | FIXED_VERIFIED | tools/test_headless_clock.py | python stage | Linux + Windows |
 | T4 | FIXED_VERIFIED | renderer font_identity_tests, tests/font_identity_soak.rs | cargo test (default) | Baseline: +78.3 MiB; fixed +95 KiB; native Windows pass |
 | T5 | IN_PROGRESS | renderer document::geometry_tests |  |  |
-| T6 | IN_PROGRESS | fuzz_gate.rs, fuzz_resources.rs (#[ignore]) | nightly (ws F) | Small-stack workers, depth/SVG generators; filter-cost generator pending ws H. |
+| T6 | FIXED_VERIFIED | fuzz_gate.rs, fuzz_resources.rs (#[ignore]) | nightly (ws F) | Small-stack workers; depth (incl. inline-block/button/multicol units), SVG depth and SVG filter-cost generators. Linux: depth 120 s/151 cases, svg_filters 90 s/1,476 cases, 0 findings. Nightly via ws F. |
 | T7 | IN_PROGRESS | tools/test_ci_signal.py, test_workflows.py |  |  |
 | T8 | IN_PROGRESS | tools/test_ci_gate.py |  |  |
 | T9 | OPEN |  |  |  |
@@ -209,4 +209,4 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | P17 | Vendored dependencies verifiably equal upstream plus patches | MET manually | MET manually |  |
 | P18 | Secrets least-privilege | MET | MET |  |
 
-Consolidated status counts: FIXED_VERIFIED 12, IN_PROGRESS 15, NOT_REPRODUCED 1, OPEN 2
+Consolidated status counts: FIXED_VERIFIED 14, IN_PROGRESS 15, NOT_REPRODUCED 1

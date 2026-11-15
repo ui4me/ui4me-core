@@ -566,23 +566,37 @@
    ],
    "evidence": "INPUTSEC timings",
    "reproduction": "see INPUTSEC-03/05/06",
-   "root_cause": "Uncapped costs",
-   "correction": "Caps, memoised intrinsic sizing, parse fix",
+   "root_cause": "INPUTSEC-06: an atomic inline invalidated its whole subtree cache before each final layout, so multi-pass containers re-laid every level (x2 per level); INPUTSEC-05: html5ever stack scans with bounds checked only after the full parse; HOST-06: line breaking re-summed every candidate line end (cubic); INPUTSEC-03: no bound on SVG filter work",
+   "correction": "Per-pass memo of intrinsic/measuring layouts and final-layout-only invalidation; DomLimits::parse_depth (512) with chunked parse abandoned at the cap/node limit; running line sums (bit-identical widths); SVG filter-work estimate with 100 ms budget, filters dropped over budget (RasterStats::filters_skipped)",
    "dependencies": "",
    "overlap": "",
    "tests_required": [
     "T6"
    ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending",
+    "linux": "verify.py all stages PASS (verify-integ5, cd4a12e); release renderer 546 tests; fuzz depth 120 s/151 cases and svg_filters 90 s/1476 cases 0 findings. Before/after: 26 nested inline-blocks 7.7 s->0.2 s; 40k unclosed div 5.0 s->2 ms; 4,000 inline inputs 17.0 s->0.95 s; feTurbulence 46.8 s->0.2 s (evidence/h-stalls/)",
+    "windows": "Windows release (winDEV, cd4a12e): content_stalls 13/13, svg_filter_cost 5/5, stack_depth 8/8 incl. inline-block/button, renderer lib 553/553 (evidence/lead/windows-integration-cd4a12e.md)",
     "required": "both"
    },
-   "status": "OPEN",
-   "commits": [],
-   "remaining_risk": "",
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "467bb7d",
+    "b20efc5",
+    "268de65",
+    "c526a94",
+    "ecf3504",
+    "ec4a764"
+   ],
+   "remaining_risk": "Layout still O(atomic depth x subtree) in places (~53 ms at 250 deep); final-layout reuse relies on all layout runs going through cache_store (new invariant). SVG budget is per raster, not per frame. CSS filter estimate assumes scale 1 (HiDPI cost x scale^2). Parse just under the cap up to the node limit ~0.27 s.",
    "owner_decision": false,
-   "notes": ""
+   "notes": "",
+   "tests": [
+    "crates/ui4me-renderer/tests/content_stalls.rs",
+    "crates/ui4me-assets/tests/svg_filter_cost.rs",
+    "fuzz_resources::harness_svg_filters (T6)",
+    "chunked_parsing_builds_the_same_tree (html5lib corpus)",
+    "stack_depth inline-block/button (T1)"
+   ]
   },
   {
    "id": "F-15",
@@ -601,23 +615,28 @@
    ],
    "evidence": "INPUTSEC",
    "reproduction": "see INPUTSEC-04",
-   "root_cause": "Budget error propagates to frame/document",
-   "correction": "Skip offending item",
+   "root_cause": "Paint-budget errors propagated out of scene build and failed the frame/document",
+   "correction": "scene/paint_budget.rs degrades over-budget items on every built scene (thin stops to 1024, cap filter functions at 64, mask limits, flatten scopes at depth 128, CSS blur/drop-shadow removed over 100 ms estimated) and reports BUDGET_EXCEEDED under paint.capability.*",
    "dependencies": "",
    "overlap": "",
    "tests_required": [
     "T6"
    ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending",
+    "linux": "four F-15 tests fail on baseline with the audit's errors, pass after; 64 x blur(50px) 6.2 s->0.19 s; verify PASS",
+    "windows": "Windows release (winDEV, cd4a12e): content_stalls 13/13, svg_filter_cost 5/5, stack_depth 8/8 incl. inline-block/button, renderer lib 553/553 (evidence/lead/windows-integration-cd4a12e.md)",
     "required": "both"
    },
-   "status": "OPEN",
-   "commits": [],
-   "remaining_risk": "",
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "ecf3504"
+   ],
+   "remaining_risk": "CSS filter estimate underestimates many small filtered layers (~3x for 50 shadowed cards).",
    "owner_decision": false,
-   "notes": ""
+   "notes": "",
+   "tests": [
+    "content_stalls F-15 tests (gradient stops, filter functions, mask layers, scope depth)"
+   ]
   },
   {
    "id": "F-16a",
@@ -1428,14 +1447,20 @@
    "reproduction": "`python3 adv_run.py fast_reader_single_command_burst ADV_N=1000`.",
    "root_cause": "",
    "correction": "(a) renderer: find the superlinear path in interactive validation (`request_submit` / `invalid` dispatch); (b) host: measure per-command duration and log commands > 100 ms with op name; (c) longer term, a per-pump time budget (process messages until ~8 ms elapsed, then yield and re-wake) instead of a fixed count of 64. Document the tradeoff.",
-   "status": "IN_PROGRESS",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "c30e1e0 (G: time-budgeted pump, slow-command log)",
+    "268de65"
+   ],
+   "tests": [
+    "host::tests::pump_budget_yields_and_rewakes_until_the_queue_is_drained",
+    "content_stalls::many_inline_inputs_lay_out_in_linear_time"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "4,000 inline inputs 17.0 s -> 0.95 s first layout; pump budget test PASS",
+    "windows": "host tests and content_stalls pass on winDEV (cd4a12e)"
    },
-   "remaining_risk": "",
+   "remaining_risk": "One <input> per <div> grows linearly with control-text shaping (~160 us/input).",
    "notes": "request_submit linear in release (24/31/44 ms at 1k/2k/4k fields). Superlinear cost is first layout of many inline inputs (0.52/2.33/17.3 s) - handed to ws H."
   },
   {
@@ -1965,7 +1990,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "validate only the fragment (script/attribute/id rules) and check id uniqueness against the DOM's id index (`element_by_id`) and depth via the insertion parent (shares the fix with RENDER-03). **Complexity**: S. **Confidence**: High.",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -1973,7 +1998,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "insert_html validation is ~95% of cost on 40k-node docs (3.85 ms/insert). Exact fragment-only check needs an id index and reachable-node counter in ui4me-document; plan in evidence/h-stalls/inputsec-10-11-render-09.md."
   },
   {
    "id": "RENDER-10",
@@ -3369,12 +3394,16 @@
    "reproduction": "`gen_cases.py` -> `turbulence.html` (inline `<svg>`, octaves 10000 => ~47 s main-thread stall). Raise octaves for an effectively unbounded stall.",
    "root_cause": "no bound on filter-primitive work (octaves, kernel area, morphology radius, primitive count), and filter rasterisation is synchronous on the paint thread with no time budget.",
    "correction": "clamp dangerous filter parameters in the SVG prescan/adapter before rasterising — cap `numOctaves` (browsers effectively cap near ~5-10), `feConvolveMatrix` order, `feMorphology` radius and total primitive count; and/or move SVG rasterisation off the GUI thread or wrap it in a wall-clock budget. Test: assert bounded time for `turbulence.html` and friends.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "c526a94"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -3393,12 +3422,16 @@
    "reproduction": "`gen_cases.py` -> `stops5000.html`, `filters65.html`, `overflow129.html`.",
    "root_cause": "the scene validator rejects the whole built scene instead of degrading the one offending display item (clamp stop count, drop excess filter functions, flatten scopes past the cap); and the host treats any `render_into` error as fatal.",
    "correction": "in `raster/validate.rs` / scene building, clamp rather than reject (cap stops to `MAX_STOPS`, drop filter functions past `MAX_FILTER_FUNCTIONS`, stop applying scopes past the nesting cap) and map genuinely unavoidable cases to a non-`INTERNAL_INVARIANT` code; in `host/native.rs::draw`, treat a render error as a skipped frame / per-item degrade, not a document kill. Test: each case renders (rc 0) w",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "ecf3504"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -3417,12 +3450,17 @@
    "reproduction": "`gen_cases.py` -> `divs40k.html`.",
    "root_cause": "`MAX_NODES = 65_536` combined with per-node O(depth) scope scans; nothing caps *open-element depth* early during tokenising.",
    "correction": "enforce an open-element depth cap in the sink during parsing (reject once the open-element stack passes a bound, e.g. a few hundred) so the quadratic blowup is cut off early, consistent with INPUTSEC-01's layout depth bound. Test: assert `divs40k.html` is rejected quickly.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "b20efc5",
+    "ec4a764"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -3441,12 +3479,16 @@
    "reproduction": "`gen_cases.py` -> `ifb26.html` (~8-11 s); increase depth to make it unbounded.",
    "root_cause": "intrinsic-size passes are recomputed per level without memoising the child's min/max-content across the two parent passes (the final pass does `clear_subtree_cache`, but intrinsic passes re-descend).",
    "correction": "memoise min-content/max-content intrinsic widths per node within one layout (Taffy has a cache; ensure the intrinsic passes consult it rather than recomputing), and/or add a layout work/time budget. Test: assert near-linear scaling of nested inline-block depth.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "467bb7d"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -3541,7 +3583,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3549,7 +3591,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Windows DLL search-order hardening (+crt-static, /DEPENDENTLOADFLAG:0x800, SetDefaultDllDirectories) belongs in host build/main; recommendations in evidence/h-stalls/inputsec-10-11-render-09.md. Not a regression; post-1.0.2."
   },
   {
    "id": "INPUTSEC-11",
@@ -3563,15 +3605,19 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "79b9bec"
+   ],
+   "tests": [
+    "ui4me-host transport/batch decode unit test"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "verify PASS",
+    "windows": "host tests pass on winDEV (cd4a12e)"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "checked_add in Reader::need and command length; unit test fails on baseline"
   },
   {
    "id": "RELEASE-01",
@@ -4277,7 +4323,7 @@
    "status": "FIXED_VERIFIED",
    "location": "crates/ui4me-renderer/tests/stack_depth.rs, crates/ui4me-assets/tests/svg_depth.rs",
    "ci": "cargo test (default); release in nightly",
-   "notes": "Native Windows pass. inline-block pending F-14."
+   "notes": "Native Windows pass incl. inline-block and button at depth 256 (cd4a12e)."
   },
   {
    "id": "T2",
@@ -4314,10 +4360,10 @@
   {
    "id": "T6",
    "kind": "test",
-   "status": "IN_PROGRESS",
+   "status": "FIXED_VERIFIED",
    "location": "fuzz_gate.rs, fuzz_resources.rs (#[ignore])",
    "ci": "nightly (ws F)",
-   "notes": "Small-stack workers, depth/SVG generators; filter-cost generator pending ws H."
+   "notes": "Small-stack workers; depth (incl. inline-block/button/multicol units), SVG depth and SVG filter-cost generators. Linux: depth 120 s/151 cases, svg_filters 90 s/1,476 cases, 0 findings. Nightly via ws F."
   },
   {
    "id": "T7",
