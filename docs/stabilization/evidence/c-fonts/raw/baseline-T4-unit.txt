@@ -1,0 +1,6 @@
+thread 'text::fonts::environment::font_identity_tests::system_font_identity_is_stable_across_source_cache_prunes' (149631) panicked at crates/ui4me-renderer/src/text/fonts/environment.rs:955:13:
+assertion `left == right` failed: the bold file was published under a new identity after a prune (cycle 0)
+  left: [4611686018427387906]
+ right: [4611686018427387904]
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 508 filtered out; finished in 0.82s
+error: test failed, to rerun pass `-p ui4me-renderer --lib`

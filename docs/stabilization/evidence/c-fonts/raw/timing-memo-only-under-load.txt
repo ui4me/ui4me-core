@@ -1,0 +1,6 @@
+rows=2000 1280x800 updates=7: parse=35.8ms first_render=859.6ms (shaped 2001) set_text+render median=34.45ms max=40.42ms (shaped 7) append+render=65.3ms (shaped 1) scroll+render median=10.06ms
+rows=2000 1280x800 updates=20: parse=30.1ms first_render=787.5ms (shaped 2001) set_text+render median=30.73ms max=33.23ms (shaped 20) append+render=64.8ms (shaped 1) scroll+render median=10.45ms
+rows=2000 1280x800 updates=7: parse=35.0ms first_render=869.7ms (shaped 2001) set_text+render median=33.69ms max=38.71ms (shaped 7) append+render=66.1ms (shaped 1) scroll+render median=10.39ms
+rows=2000 1280x800 updates=20: parse=29.3ms first_render=727.6ms (shaped 2001) set_text+render median=31.24ms max=33.04ms (shaped 20) append+render=64.7ms (shaped 1) scroll+render median=9.31ms
+rows=2000 1280x800 updates=7: parse=45.5ms first_render=905.6ms (shaped 2001) set_text+render median=37.22ms max=41.53ms (shaped 7) append+render=65.6ms (shaped 1) scroll+render median=10.62ms
+rows=2000 1280x800 updates=20: parse=38.3ms first_render=894.5ms (shaped 2001) set_text+render median=33.31ms max=39.23ms (shaped 20) append+render=69.9ms (shaped 1) scroll+render median=10.23ms

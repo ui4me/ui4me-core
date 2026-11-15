@@ -1,0 +1,4 @@
+live heap: 13283447 B at op 2128, 93426086 B at op 21888 (growth 80142639 B, peak +80142639 B, 131 cycles)
+thread 'issue2_op_stream_keeps_the_live_heap_flat' (151818) panicked at crates/ui4me-renderer/tests/font_identity_soak.rs:122:5:
+live heap grew 78264 KiB over 19760 operations (limit 1 MiB): [(2128, 12972), (2280, 13575), (2432, 14179), (2584, 14782), (2736, 15386), (2888, 15990), (3040, 16607), (3192, 17211), (3344, 17814), (3496, 18418), (3648, 19021), (3800, 19625), (3952, 20229), (4104, 20834), (4256, 21436), (4408, 22037), (4560, 22638), (4712, 23239), (4864, 23841), (5016, 24442), (5168, 25043), (5320, 25644), (5472, 
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 97.62s

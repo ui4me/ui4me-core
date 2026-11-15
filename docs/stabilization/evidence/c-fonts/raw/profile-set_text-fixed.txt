@@ -1,0 +1,12 @@
+    [prof] raster 4.73 (partial frames 5)
+    [prof] restyle 0.97 snapshot 0.00 rest 0.31
+    [prof]   style bridge: lang_dir 0.60 total 1.95
+    [prof]   incremental box build: unclean 6 candidates 2 read_skipped false
+    [prof] box_build 3.04 compare 0.01
+    [prof]   ifc_new 2.06 taffy_style 0.46 table_grid 0.00
+    [prof]   tree.add 6.19 compute 0.04 post 0.03 build_fragments 3.60 (nodes 2004, replayed 1, fragmented layouts 0 kept 0)
+    [prof] box_build 0.00 ms, host_layout+fragments 11.85 ms
+    [prof]   scene prepare 2.61 build 2.41 items 6004 (subtrees reused 1 built 3)
+    [prof] style 1.27 layout 17.77 scene 5.11
+    [prof] raster 3.90 (partial frames 6)
+    [prof] restyle 1.12 snapshot 0.00 rest 0.32
