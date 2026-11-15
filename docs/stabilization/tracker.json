@@ -450,19 +450,19 @@
     "T12"
    ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending",
+    "linux": "qualify_windows_rc --allow-non-windows tool tests (tools/test_qualification_tools.py) PASS",
+    "windows": "Local 1.0.2 RC wheel (sha256 2c2dca51...e926c1, from bba9e6d sdist) qualified natively: first frame, depth 250, svgdepth 700, burst 100x6 PASS (evidence/lead/windows-rc-1.0.2.md)",
     "required": "both"
    },
-   "status": "IN_PROGRESS",
+   "status": "BLOCKED",
    "commits": [
     "5d1dc25",
     "8aa7f4a",
     "126075e"
    ],
-   "remaining_risk": "",
+   "remaining_risk": "The CI-built wheel will have a different hash unless the MSVC build is reproducible; it must be qualified again.",
    "owner_decision": false,
-   "notes": "Interim 6.0 tooling done; needs Windows qualification of the exact RC wheel.",
+   "notes": "Tooling and a full local RC qualification done. Remaining step needs authorization: push, CI build-dist run, qualify THAT wheel, publish with expected_windows_wheel_sha256. Historical 1.0.0/1.0.1 discrepancy is documented in the 1.0.1 erratum (cannot be fixed retroactively).",
    "tests": [
     "test_release_artifacts.py"
    ]
@@ -957,14 +957,15 @@
    "tests_required": [],
    "verification": {
     "linux": "bump_version.py 1.0.2 rewrote the 8 forced locations; version.py --check --strict PASS; test_version_source PASS",
-    "windows": "RC wheel built from the 1.0.2 sdist on winDEV (see F-11)",
+    "windows": "RC wheel ui4me_core-1.0.2 built from the 1.0.2 sdist on winDEV and qualified (evidence/lead/windows-rc-1.0.2.md)",
     "required": "both"
    },
    "status": "FIXED_VERIFIED",
    "commits": [
     "d24fbe0",
     "805e59e",
-    "bba9e6d"
+    "bba9e6d",
+    "see test_run_example fix"
    ],
    "remaining_risk": "",
    "owner_decision": false,
