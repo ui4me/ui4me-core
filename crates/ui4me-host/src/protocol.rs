@@ -15,7 +15,6 @@ pub const MAX_FRAME_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_PENDING: usize = 128;
 pub const MAX_ID_BYTES: usize = 128;
 pub const MAX_METHOD_BYTES: usize = 128;
-pub const MAX_OUTGOING_BYTES: usize = 8 * 1024 * 1024;
 
 pub mod code {
     pub const PARSE_ERROR: i64 = -32700;

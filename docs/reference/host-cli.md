@@ -31,10 +31,12 @@ Validates the manifest, starts the backend it describes and runs the application
 | Option | Meaning |
 | --- | --- |
 | `--app <APP>` | Path to the TOML manifest (required). |
-| `--headless` | Protocol and lifecycle without a desktop: no native windows, dialogs, clipboard or external open. For CI and binding tests. It does not claim desktop integration. |
+| `--headless` | Protocol and lifecycle without a desktop: no native windows, dialogs, clipboard or external open. For CI and binding tests. It does not claim desktop integration. Documents still get frames (without a surface) and may use the test-only virtual clock `test.advance_time` (see [Test mode](protocol.md#test-mode-headless-only)). |
 | `--allow-unsupervised` | Linux only: run without the `systemd-run --user` scope. A diagnostic mode; hard host death no longer reliably cleans up the backend. Ignored on Windows. |
 
-Exit status: `0` after a normal shutdown, `1` when the manifest is invalid, the backend fails, does not become ready before `startup_timeout_ms`, exits on its own, exits non-zero during shutdown, or overruns `shutdown_timeout_ms`. A secondary launch forwarded to a running single instance exits `0` once the primary accepted it.
+Exit status: `0` after a normal shutdown, `1` when the manifest is invalid, the backend fails, does not become ready before `startup_timeout_ms`, exits on its own, exits non-zero during shutdown, overruns `shutdown_timeout_ms`, or is ended by a force quit (`app.force_quit`, Ctrl+Shift+Q). A secondary launch forwarded to a running single instance exits `0` once the primary accepted it.
+
+Termination requests: on Linux `SIGTERM`, `SIGINT` and `SIGHUP`, on Windows console Ctrl+C, Ctrl+Break, console close, logoff and shutdown events and the session end (`WM_QUERYENDSESSION`/`WM_ENDSESSION`) start an orderly shutdown instead of ending the host at once: pending close/quit decisions are cancelled (a termination request is not an answer to them), the backend receives `app.shutdown` with a deadline of at most 3 seconds (`shutdown_timeout_ms` if that is shorter), and the host exits once the backend has exited — with `128 + signal` on Linux (`143` for `SIGTERM`, `130` for `SIGINT`, `129` for `SIGHUP`), `130` for Ctrl+C/Ctrl+Break and `0` for the other Windows events — or with `1` if it had to kill the backend at the deadline. A second request more than one second after the first forces the quit (an immediate repeat, such as a terminal Ctrl+C that the direct-start launcher also forwards, counts as one). Under systemd supervision `systemctl --user stop` and logout signal every process of the unit (`KillMode=control-group`), so the backend may receive its own `SIGTERM` at the same time.
 
 ### `probe`
 
@@ -60,7 +62,7 @@ Prints a JSON object with environment facts: `host_version`, `protocol_version`,
 
 ### Diagnostics output
 
-The host writes structured JSON log lines to **stderr**. Backend stdout/stderr lines are drained into bounded buffers (512 records of up to 4 KiB each) and re-emitted as log records with `"source":"backend"`. The default filter is `ui4me_host=info`; set `RUST_LOG` (for example `RUST_LOG=ui4me_host=debug`) to change it. The direct-start launchers turn these records back into plain output; `UI4ME_VERBOSE=1` also shows informational host records.
+The host writes structured JSON log lines to **stderr**. A panic on any host thread is also logged as an `error` record (`host thread panicked`, with `thread`, `location` and `panic`) before the standard panic message. Backend stdout/stderr lines are drained into bounded buffers (512 records of up to 4 KiB each) and re-emitted as log records with `"source":"backend"`. The default filter is `ui4me_host=info`; set `RUST_LOG` (for example `RUST_LOG=ui4me_host=debug`) to change it. The direct-start launchers turn these records back into plain output; `UI4ME_VERBOSE=1` also shows informational host records.
 
 ## The `app.toml` manifest
 
@@ -115,14 +117,14 @@ The whole table is optional.
 
 | Platform | How the backend is contained |
 | --- | --- |
-| Linux | `run` and `probe` re-launch the host under a transient user service: `systemd-run --user --wait --pipe --collect --service-type=exec --expand-environment=no --property=KillMode=control-group --property=TimeoutStopSec=5s --same-dir`. Environment *names* are forwarded with `--setenv=NAME`, never values on the command line. The backend runs in its own session with a parent-death signal (`SIGKILL`). The supervised host also watches the launching process and shuts down if it disappears. Without a working systemd user manager, `run` fails; `--allow-unsupervised` is the explicit diagnostic escape hatch. |
+| Linux | `run` and `probe` re-launch the host under a transient user service: `systemd-run --user --wait --pipe --collect --service-type=exec --expand-environment=no --property=ExitType=main --property=KillMode=control-group --property=TimeoutStopSec=5s --same-dir`. Environment *names* are forwarded with `--setenv=NAME`, never values on the command line. Variables systemd cannot represent are **not inherited** under supervision: names that are not shell identifiers (`[A-Za-z_][A-Za-z0-9_]*`, for example the `BASH_FUNC_name%%` entries of `export -f`, Lmod and Environment Modules) and values that are not UTF-8. Their names are logged at debug level. The backend runs in its own session with a parent-death signal (`SIGKILL`). The supervised host also watches the launching process and shuts down if it disappears. Without a working systemd user manager, `run` fails; `--allow-unsupervised` is the explicit diagnostic escape hatch. |
 | Windows | The backend is created inside a Job Object with *kill on job close*, so it ends with the host. The host releases a console window it owns when launched from Explorer or the Start menu. |
 
 The direct-start launchers additionally bind the host to themselves: Linux uses a parent-death signal (`setpriv --pdeathsig` for PowerShell when available), Windows a kill-on-close job.
 
 ## Single instance
 
-With `instance = "single"` (default), the first launch for a given `app.id` in the same desktop session becomes the primary instance. On Linux the session is the user plus the Wayland compositor socket; on Windows it is the logon session (a named mutex). A later launch does not start a backend. It sends `app.activate` to the primary with its `args`, `cwd` and (on Linux) `XDG_ACTIVATION_TOKEN`, retries while the primary is still starting (within `startup_timeout_ms` + 5 s), and exits `0`. The primary focuses one of its windows where the platform allows and delivers an `app.activated` notification to the backend. With `instance = "multiple"`, every launch is independent.
+With `instance = "single"` (default), the first launch for a given `app.id` in the same desktop session becomes the primary instance. On Linux the session is the user plus the Wayland compositor socket; on Windows it is the logon session (a named mutex). A later launch does not start a backend. It sends `app.activate` to the primary with its `args`, `cwd` and (on Linux) `XDG_ACTIVATION_TOKEN`, retries while the primary is still starting (within `startup_timeout_ms` + 5 s), and exits `0`. If the primary is **shutting down** (it answers `-32004`, or its endpoint is already closed), the launch waits for the primary to exit — at most the launch's own `shutdown_timeout_ms` + 2 s — and then starts normally as the new primary (or is forwarded to whichever launch took over first). The primary focuses one of its windows where the platform allows and delivers an `app.activated` notification to the backend. With `instance = "multiple"`, every launch is independent.
 
 ## Example: Python application
 

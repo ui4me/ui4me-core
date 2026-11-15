@@ -52,6 +52,37 @@ impl Drop for LogGuard {
     }
 }
 
+/// HOST-16: a panic on any host thread is also a structured `error` record with the thread
+/// name and source location, so it reaches the JSON log (and the direct-start launchers, which
+/// show error records) and not only the raw stderr text; the default hook still runs after it.
+/// Install once, from the process main thread, before other threads start.
+pub fn install_panic_hook() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let thread = std::thread::current();
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()));
+        tracing::error!(
+            thread = thread.name().unwrap_or("unnamed"),
+            location,
+            panic = panic_message(info.payload()),
+            "host thread panicked"
+        );
+        default(info);
+    }));
+}
+
+/// The text of a panic payload (`panic!` with a literal or a formatted message), bounded.
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
+    let text = payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("non-string panic payload");
+    text.chars().take(2048).collect()
+}
+
 /// Initialize JSON diagnostics after environment setup and before the GUI.
 /// Libraries embedding the host may install their own subscriber instead.
 pub fn init() -> Result<LogGuard> {
@@ -101,6 +132,18 @@ pub fn diagnostics() -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn panic_payloads_become_bounded_text() {
+        let literal: Box<dyn std::any::Any + Send> = Box::new("literal");
+        assert_eq!(panic_message(literal.as_ref()), "literal");
+        let formatted: Box<dyn std::any::Any + Send> = Box::new(format!("n={}", 3));
+        assert_eq!(panic_message(formatted.as_ref()), "n=3");
+        let other: Box<dyn std::any::Any + Send> = Box::new(7_u8);
+        assert_eq!(panic_message(other.as_ref()), "non-string panic payload");
+        let long: Box<dyn std::any::Any + Send> = Box::new("x".repeat(5000));
+        assert_eq!(panic_message(long.as_ref()).len(), 2048);
+    }
     use std::sync::mpsc;
     use std::time::Instant;
 

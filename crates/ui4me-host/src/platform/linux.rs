@@ -113,19 +113,36 @@ pub fn runtime_directory() -> Result<PathBuf> {
 }
 
 fn ensure_private_directory(path: &Path) -> Result<()> {
-    match std::fs::create_dir(path) {
-        Ok(()) => std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?,
+    use std::os::unix::fs::DirBuilderExt;
+    // HOST-13: created private in one step (mode 0700, the umask can only remove bits), so the
+    // directory is never visible with wider permissions, even briefly.
+    match std::fs::DirBuilder::new().mode(0o700).create(path) {
+        Ok(()) => (),
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists => (),
         Err(error) => return Err(error.into()),
     }
     let metadata = std::fs::symlink_metadata(path)?;
-    if !metadata.is_dir()
-        || metadata.file_type().is_symlink()
-        || metadata.uid() != unsafe { libc::geteuid() }
-        || metadata.mode() & 0o077 != 0
-    {
+    let euid = unsafe { libc::geteuid() };
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
         bail!(
-            "private runtime directory has unsafe ownership or permissions: {}",
+            "private runtime directory is not a directory: {}",
+            path.display()
+        );
+    }
+    if metadata.uid() != euid {
+        // A predictable fallback under the shared temporary directory can be pre-created by
+        // another user (fails closed). Name the owner so the cause is clear.
+        bail!(
+            "private runtime directory {} belongs to uid {}, not to this user (uid {euid}); \
+             set XDG_RUNTIME_DIR to a private directory",
+            path.display(),
+            metadata.uid()
+        );
+    }
+    if metadata.mode() & 0o077 != 0 {
+        bail!(
+            "private runtime directory has unsafe permissions {:o}: {}",
+            metadata.mode() & 0o777,
             path.display()
         );
     }
@@ -211,6 +228,25 @@ impl NativeListener {
         }
         Ok(None)
     }
+}
+
+/// HOST-04: accept errors after which the listener stays usable (descriptor or memory
+/// exhaustion, a connection aborted before it was accepted). The accept loop retries them;
+/// anything else ends the listener.
+pub fn accept_error_is_transient(error: &io::Error) -> bool {
+    matches!(
+        error.raw_os_error(),
+        Some(
+            libc::EMFILE
+                | libc::ENFILE
+                | libc::ENOBUFS
+                | libc::ENOMEM
+                | libc::ECONNABORTED
+                | libc::EPROTO
+                | libc::EINTR
+                | libc::EAGAIN
+        )
+    )
 }
 
 impl Drop for NativeListener {
@@ -445,20 +481,53 @@ pub fn bootstrap_supervised(args: &[OsString]) -> Result<Option<i32>> {
         .env("UI4ME_DESKTOP_REALM", desktop_realm())
         .env(LAUNCHER_ENV, launcher_identity(std::process::id())?);
     const OWN: [&str; 3] = ["UI4ME_SYSTEMD_UNIT", "UI4ME_DESKTOP_REALM", LAUNCHER_ENV];
-    for (key, _) in std::env::vars_os() {
-        if !OWN.iter().any(|own| key == OsStr::new(own)) {
-            let mut argument = OsString::from("--setenv=");
-            argument.push(key);
-            command.arg(argument);
-        }
+    let (forwarded, skipped) = systemd_environment(
+        std::env::vars_os().filter(|(key, _)| !OWN.iter().any(|own| key == OsStr::new(own))),
+    );
+    if !skipped.is_empty() {
+        // Names only: values may be secrets.
+        tracing::debug!(
+            skipped = skipped.join(","),
+            "environment variables systemd cannot represent are not inherited under supervision"
+        );
     }
     command
+        .args(forwarded)
         .args(OWN.map(|own| format!("--setenv={own}")))
         .arg("--")
         .arg(std::env::current_exe()?)
         .args(args);
     let status = command.status().context("cannot start systemd user supervision; run doctor, or explicitly choose --allow-unsupervised for diagnostics")?;
     Ok(Some(status.code().unwrap_or(1)))
+}
+
+/// F-18 (HOST-03): the `--setenv=NAME` arguments for the variables systemd can represent, and
+/// the names of the others. systemd-run refuses the whole start for a name that is not a shell
+/// identifier (`BASH_FUNC_name%%` from `export -f`, Lmod and Environment Modules) or a value that
+/// is not UTF-8, so such variables are left out instead. Only names reach the command line; each
+/// value is taken from this process's environment by systemd-run itself.
+fn systemd_environment(
+    variables: impl IntoIterator<Item = (OsString, OsString)>,
+) -> (Vec<OsString>, Vec<String>) {
+    let mut forwarded = Vec::new();
+    let mut skipped = Vec::new();
+    for (name, value) in variables {
+        let valid_name = name.to_str().is_some_and(|name| {
+            let mut bytes = name.bytes();
+            bytes
+                .next()
+                .is_some_and(|first| first == b'_' || first.is_ascii_alphabetic())
+                && bytes.all(|byte| byte == b'_' || byte.is_ascii_alphanumeric())
+        });
+        if valid_name && value.to_str().is_some() {
+            let mut argument = OsString::from("--setenv=");
+            argument.push(&name);
+            forwarded.push(argument);
+        } else {
+            skipped.push(name.to_string_lossy().into_owned());
+        }
+    }
+    (forwarded, skipped)
 }
 
 /// The supervised host's lifetime remains bound to the launcher that the
@@ -559,6 +628,97 @@ pub fn is_systemd_managed() -> bool {
         .unwrap_or(false)
 }
 
+/// Write end of the signal self-pipe; -1 until [`install_termination_handlers`] ran.
+static SIGNAL_PIPE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(-1);
+
+extern "C" fn on_termination_signal(signal: libc::c_int) {
+    // Async-signal-safe: one atomic load and one write(2) of the signal number; errno is kept.
+    let fd = SIGNAL_PIPE.load(Ordering::Relaxed);
+    if fd >= 0 {
+        // SAFETY: errno location is thread-local and always valid.
+        let errno = unsafe { *libc::__errno_location() };
+        let byte = signal as u8;
+        // SAFETY: writes one byte from a live stack variable to the pipe's write end.
+        unsafe {
+            libc::write(fd, (&byte as *const u8).cast(), 1);
+            *libc::__errno_location() = errno;
+        }
+    }
+}
+
+/// HOST-07: route `SIGTERM`, `SIGINT` and `SIGHUP` to `termination` instead of the default
+/// disposition (immediate death without `app.shutdown`). The handler writes the signal number
+/// to a self-pipe; a watcher thread turns it into a [`crate::termination::Request`] with exit
+/// status 128 + signal. Handlers are process-wide and reset to the default by `exec`, so
+/// backends and other children are unaffected. Installed once per process.
+pub fn install_termination_handlers(
+    termination: std::sync::Arc<crate::termination::Termination>,
+) -> Result<()> {
+    static INSTALLED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+    if INSTALLED.get().is_some() {
+        return Ok(());
+    }
+    let mut fds = [0; 2];
+    // SAFETY: pipe2 fills two descriptors on success.
+    if unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) } != 0 {
+        return Err(io::Error::last_os_error()).context("signal self-pipe");
+    }
+    // SAFETY: both descriptors were just created and are owned here.
+    let (read, write) = unsafe { (OwnedFd::from_raw_fd(fds[0]), OwnedFd::from_raw_fd(fds[1])) };
+    // A full pipe must never block the handler (the watcher drains it).
+    // SAFETY: fcntl on an owned descriptor.
+    unsafe {
+        let flags = libc::fcntl(write.as_raw_fd(), libc::F_GETFL);
+        libc::fcntl(write.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK);
+    }
+    let mut reader = File::from(read);
+    std::thread::Builder::new()
+        .name("ui4me-signals".into())
+        .spawn(move || {
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(1) => {
+                        let signal = i32::from(byte[0]);
+                        let source = match signal {
+                            libc::SIGTERM => "SIGTERM",
+                            libc::SIGINT => "SIGINT",
+                            libc::SIGHUP => "SIGHUP",
+                            _ => "signal",
+                        };
+                        tracing::warn!(signal = source, "termination requested");
+                        termination.request(crate::termination::Request {
+                            source,
+                            exit_code: 128 + signal,
+                        });
+                    }
+                    Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                    _ => return,
+                }
+            }
+        })
+        .context("start signal watcher")?;
+    // The write end stays open for the rest of the process: a handler may run at any time.
+    SIGNAL_PIPE.store(
+        std::os::fd::IntoRawFd::into_raw_fd(write),
+        Ordering::Relaxed,
+    );
+    for signal in [libc::SIGTERM, libc::SIGINT, libc::SIGHUP] {
+        // SAFETY: a zeroed sigaction with a valid handler, an empty mask and SA_RESTART.
+        unsafe {
+            let mut action: libc::sigaction = std::mem::zeroed();
+            action.sa_sigaction = on_termination_signal as *const () as libc::sighandler_t;
+            action.sa_flags = libc::SA_RESTART;
+            libc::sigemptyset(&mut action.sa_mask);
+            if libc::sigaction(signal, &action, std::ptr::null_mut()) != 0 {
+                return Err(io::Error::last_os_error()).context("install signal handler");
+            }
+        }
+    }
+    let _ = INSTALLED.set(());
+    Ok(())
+}
+
 /// Only Windows creates a console window for a GUI launch.
 pub fn detach_owned_console() {}
 
@@ -610,6 +770,9 @@ pub fn spawn_backend(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    for name in super::HOST_PRIVATE_ENV {
+        command.env_remove(name);
+    }
     let parent = unsafe { libc::getpid() };
     unsafe {
         command.pre_exec(move || {
@@ -816,6 +979,55 @@ mod tests {
         for invalid in ["", "../escape", "/tmp/escape", "not-hex"] {
             assert!(endpoint_for(invalid).is_err());
         }
+    }
+
+    /// F-18 (HOST-03, T15): names systemd rejects and non-UTF-8 values are left out; every
+    /// shell-identifier name with a UTF-8 value is forwarded by name only.
+    #[test]
+    fn supervised_environment_skips_what_systemd_rejects() {
+        use std::os::unix::ffi::OsStringExt;
+        let variables = [
+            ("PATH", OsString::from("/usr/bin")),
+            ("_private1", OsString::from("x")),
+            (
+                "BASH_FUNC_module%%",
+                OsString::from("() {  eval $(modulecmd bash $*)\n}"),
+            ),
+            ("A-B", OsString::from("x")),
+            ("1ABC", OsString::from("x")),
+            ("LATIN", OsString::from_vec(b"caf\xe9".to_vec())),
+            ("EMPTY", OsString::new()),
+            ("UNICODE_VALUE", OsString::from("Příliš 😀")),
+        ]
+        .map(|(name, value)| (OsString::from(name), value));
+        let (forwarded, skipped) = systemd_environment(variables);
+        assert_eq!(
+            forwarded,
+            ["PATH", "_private1", "EMPTY", "UNICODE_VALUE"]
+                .map(|name| OsString::from(format!("--setenv={name}")))
+        );
+        assert_eq!(skipped, ["BASH_FUNC_module%%", "A-B", "1ABC", "LATIN"]);
+        let mut non_utf8_name = OsString::from_vec(b"N\xffX".to_vec());
+        non_utf8_name.push("");
+        let (forwarded, skipped) = systemd_environment([(non_utf8_name, OsString::from("x"))]);
+        assert!(forwarded.is_empty());
+        assert_eq!(skipped.len(), 1);
+    }
+
+    /// HOST-13: the directory is created private in one step; an existing directory with group
+    /// or other access is refused with its mode in the message.
+    #[test]
+    fn private_directories_are_created_private_and_wide_ones_refused() {
+        let base = tempfile::tempdir().unwrap();
+        let created = base.path().join("created");
+        ensure_private_directory(&created).unwrap();
+        let mode = std::fs::metadata(&created).unwrap().mode() & 0o777;
+        assert_eq!(mode, 0o700);
+        let wide = base.path().join("wide");
+        std::fs::create_dir(&wide).unwrap();
+        std::fs::set_permissions(&wide, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let error = format!("{:#}", ensure_private_directory(&wide).unwrap_err());
+        assert!(error.contains("unsafe permissions 755"), "{error}");
     }
 
     #[test]

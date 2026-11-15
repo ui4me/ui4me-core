@@ -69,6 +69,24 @@ fn patched_size(
     }
 }
 
+/// HOST-17: methods without parameters decode `{}` strictly like every other method; an
+/// unknown key is an error, not silently ignored. (`host.hello` alone stays open to unknown
+/// keys, so newer bindings can negotiate with older hosts.)
+fn no_params(method: &str, params: &Value) -> Result<(), RpcError> {
+    match params.as_object() {
+        Some(map) if map.is_empty() => Ok(()),
+        Some(map) => Err(RpcError::invalid_params(format!(
+            "{method} takes no parameters (unknown: {})",
+            map.keys()
+                .take(8)
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))),
+        None => Err(RpcError::invalid_params("params must be an object")),
+    }
+}
+
 fn decode<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, RpcError> {
     serde_json::from_value(value).map_err(|e| RpcError::invalid_params(e.to_string()))
 }
@@ -222,6 +240,20 @@ impl Host {
                 "Application is shutting down or failed",
             ));
         }
+        if matches!(
+            method,
+            "host.capabilities"
+                | "host.diagnostics"
+                | "app.ready"
+                | "app.request_quit"
+                | "app.force_quit"
+                | "window.list"
+                | "desktop.paths"
+                | "desktop.preferences"
+                | "clipboard.read_text"
+        ) {
+            no_params(method, &params)?;
+        }
         let value = match method {
             "bitmap.create" | "bitmap.present" | "bitmap.close" => {
                 self.dispatch_bitmap(method, params, event_loop)?
@@ -239,11 +271,12 @@ impl Host {
                 result?
             }
             "host.capabilities" => self.capabilities(),
+            "test.advance_time" => self.advance_time(params)?,
             "host.diagnostics" => {
                 json!({"phase":self.lifecycle.phase(),"windows":self.windows.keys().collect::<Vec<_>>(),
                 "pending_jobs":self.jobs.len(),"pending_transfers":self.transfers.len(),"pid":std::process::id(),
                 "backend_pid":self.backend.as_ref().map(Backend::id),"containment":platform::containment_description(),
-                "logging":crate::logging::diagnostics()})
+                "logging":crate::logging::diagnostics(),"pump":self.take_pump_stats()})
             }
             "app.ready" => {
                 if self.windows.is_empty() {
@@ -953,6 +986,52 @@ fn refuse_executable_file(path: &std::path::Path) -> Result<(), RpcError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// HOST-17: zero-parameter methods reject unknown keys; `host.hello` tolerates them.
+    #[test]
+    fn zero_parameter_methods_are_strict_but_hello_negotiates() {
+        let mut host = super::super::tests::controller(true);
+        super::super::tests::add_window(&mut host, "w1");
+        for method in [
+            "host.capabilities",
+            "host.diagnostics",
+            "window.list",
+            "desktop.preferences",
+        ] {
+            assert!(
+                host.dispatch(method, json!({}), None, None).is_ok(),
+                "{method}"
+            );
+            let error = host
+                .dispatch(method, json!({"junk": "x".repeat(64)}), None, None)
+                .unwrap_err();
+            assert_eq!(error.code, protocol::code::INVALID_PARAMS, "{method}");
+            assert!(error.message.contains("junk"), "{}", error.message);
+        }
+        assert_eq!(
+            host.dispatch("app.request_quit", json!({"reason":"x"}), None, None)
+                .unwrap_err()
+                .code,
+            protocol::code::INVALID_PARAMS
+        );
+        assert_eq!(
+            host.lifecycle.phase(),
+            Phase::Running,
+            "a rejected request does nothing"
+        );
+        let mut host = super::super::tests::controller(false);
+        host.client = None;
+        host.lifecycle = Lifecycle::new();
+        host.lifecycle.begin_connecting().unwrap();
+        host.token = "t".repeat(64);
+        let hello = json!({"token":host.token,"protocol_version":1,
+            "client":{"name":"future"},"capabilities":{"event_subscriptions":true}});
+        assert!(
+            host.hello(7, &hello).is_ok(),
+            "unknown hello keys are tolerated"
+        );
+    }
+
     #[test]
     fn external_open_is_data_and_rejects_executable_uri_schemes() {
         assert!(validate_external_target("https://example.com/a?b=c").is_ok());

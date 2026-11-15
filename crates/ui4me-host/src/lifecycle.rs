@@ -140,6 +140,13 @@ pub struct Decision {
     pub id: String,
     #[serde(flatten)]
     pub kind: DecisionKind,
+    /// How often this decision was asked again after a busy answer (HOST-15).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub retries: u32,
+}
+
+fn is_zero(value: &u32) -> bool {
+    *value == 0
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -258,6 +265,29 @@ impl DecisionTracker {
         })
     }
 
+    /// HOST-15: ask a pending decision again under a new ID (the backend answered "busy"). The
+    /// old ID becomes stale; the decision keeps its place (window close or application quit).
+    pub fn reissue(&mut self, id: &str) -> Result<Decision, DecisionError> {
+        let old = self
+            .decisions
+            .get(id)
+            .ok_or(DecisionError::Unknown)?
+            .clone();
+        // Allocate first: exhaustion must not discard the pending decision.
+        let mut decision = self.allocate(old.kind.clone())?;
+        decision.retries = old.retries + 1;
+        self.decisions.remove(id);
+        match &decision.kind {
+            DecisionKind::CloseWindow { window_id } => {
+                self.by_window
+                    .insert(window_id.clone(), decision.id.clone());
+            }
+            DecisionKind::QuitApplication => self.quit = Some(decision.id.clone()),
+        }
+        self.decisions.insert(decision.id.clone(), decision.clone());
+        Ok(decision)
+    }
+
     pub fn cancel_for_window(&mut self, window_id: &str) -> Option<Decision> {
         self.by_window
             .remove(window_id)
@@ -275,6 +305,7 @@ impl DecisionTracker {
         Ok(Decision {
             id: format!("host:decision:{}", self.next),
             kind,
+            retries: 0,
         })
     }
 }
@@ -367,6 +398,27 @@ mod tests {
         assert_eq!(tracker.pending_count(), 0);
         // A cancelled app quit leaves window a available for a fresh decision.
         assert!(tracker.begin_close("a").is_ok());
+    }
+
+    #[test]
+    fn a_reissued_decision_keeps_its_place_and_stales_the_old_id() {
+        let mut tracker = DecisionTracker::default();
+        let close = tracker.begin_close("a").unwrap().decision;
+        let again = tracker.reissue(&close.id).unwrap();
+        assert_ne!(again.id, close.id);
+        assert_eq!(again.retries, 1);
+        assert_eq!(tracker.pending_count(), 1);
+        assert_eq!(tracker.begin_close("a").unwrap().decision.id, again.id);
+        assert_eq!(
+            tracker.resolve(&close.id, true),
+            Err(DecisionError::Unknown)
+        );
+        let quit = tracker.begin_quit().unwrap().decision;
+        let quit_again = tracker.reissue(&quit.id).unwrap();
+        assert!(tracker.has_pending_quit());
+        assert_eq!(tracker.begin_quit().unwrap().decision.id, quit_again.id);
+        assert!(tracker.resolve(&quit_again.id, false).is_ok());
+        assert!(!tracker.has_pending_quit());
     }
 
     #[test]

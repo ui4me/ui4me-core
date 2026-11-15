@@ -617,6 +617,7 @@ impl ApplicationHandler for Host {
             || !self.transfers.is_empty()
             || !self.deferred_clipboard_reads.is_empty()
             || !self.jobs.is_empty()
+            || !self.decision_retries.is_empty()
             || self.connected.keys().any(|id| Some(*id) != self.client);
         let interval = if deadlines_pending { 50 } else { 500 };
         event_loop.set_control_flow(ControlFlow::WaitUntil(

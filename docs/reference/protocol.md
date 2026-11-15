@@ -22,10 +22,10 @@ The host creates a private endpoint, starts the backend from the [manifest](host
 
 | Platform | Endpoint (`UI4ME_ENDPOINT`) | Protection |
 | --- | --- | --- |
-| Linux | Unix stream socket `$XDG_RUNTIME_DIR/ui4me-host/<key>.sock` (falls back to `<tmp>/ui4me-runtime-<uid>/…` without `XDG_RUNTIME_DIR`) | Directory mode `0700` owned by the user (checked, symlinks refused); socket mode `0600` |
-| Windows | Named pipe `\\.\pipe\ui4me-host-<key>` | Byte-mode pipe, `PIPE_REJECT_REMOTE_CLIENTS`, protected DACL granting access only to the current logon SID |
+| Linux | Unix stream socket `$XDG_RUNTIME_DIR/ui4me-host/<key>.sock` (falls back to `<tmp>/ui4me-runtime-<uid>/…` without `XDG_RUNTIME_DIR`) | Directory created with mode `0700` in one step, owned by the user (checked, symlinks refused; a fallback directory pre-created by another user is refused with its owner named); socket mode `0600` |
+| Windows | Named pipe `\\.\pipe\ui4me-host-<key>` | Byte-mode pipe, `PIPE_REJECT_REMOTE_CLIENTS`, protected DACL granting access only to the current logon SID. A forwarding launch connects at identification level (the server cannot impersonate it) and refuses a pipe served from another session |
 
-`<key>` is a hex hash of the app ID and desktop session for single-instance apps, or random otherwise. There is no TCP listener. Treat the endpoint as an opaque string from the environment; do not construct it.
+`<key>` is a hex hash of the app ID and desktop session for single-instance apps, or 12 random bytes otherwise (never derived from the token). There is no TCP listener. Treat the endpoint as an opaque string from the environment; do not construct it.
 
 Connection limits (host side): at most 8 simultaneous connections; a connection must send its first frame within 15 seconds; a connection that has not authenticated with `host.hello` is closed after about 5 seconds. Only one connection can be the authenticated backend.
 
@@ -57,7 +57,7 @@ Rules enforced by the host:
 * `jsonrpc` must be exactly `"2.0"`; unknown top-level members are rejected.
 * `id` must be a **string** of 1–128 bytes without control characters. Numeric and `null` IDs are rejected.
 * `method` is 1–128 bytes of ASCII letters, digits, `.`, `_` or `-`, and must not start with `rpc.`.
-* `params` must be an object (named parameters) or omitted (treated as `{}`). Positional arrays are rejected. Every params object is decoded strictly: unknown keys are an `invalid params` error.
+* `params` must be an object (named parameters) or omitted (treated as `{}`). Positional arrays are rejected. Every params object is decoded strictly: unknown keys are an `invalid params` error, also for methods without parameters (they take `{}` or no `params`). The one exception is `host.hello`, which ignores keys it does not know, so that a newer binding can offer optional features to an older host.
 * At most 128 requests may be pending. Reusing the ID of a request that is still pending (a native dialog, external open or clipboard read) is a protocol violation: the host disconnects and fails the application.
 * A result that would not fit in a 2 MiB frame is replaced by an `unavailable` error. A notification that would not fit is dropped (a `document.event` that is too large is reported as `document.error` instead).
 
@@ -79,7 +79,7 @@ The host starts the backend with its own environment plus `[backend.env]`, and t
 | `UI4ME_APP_ID` | `[app].id` from the manifest |
 | `UI4ME_PROTOCOL_VERSION` | `1` |
 
-These four names, and any name beginning with `UI4ME_HOST_`, are reserved: a manifest that sets them in `[backend.env]` is rejected (case-insensitively). The token is never written to a manifest, a command line or the log. A binding should remove these variables from its own process environment after connecting, so that child processes started by the application cannot reuse them (both bindings do). A binding that finds only one of `UI4ME_ENDPOINT`/`UI4ME_TOKEN` should fail rather than guess.
+The host's own process variables `UI4ME_SYSTEMD_UNIT`, `UI4ME_LAUNCHER` and `UI4ME_DESKTOP_REALM` are removed from the backend's environment, so a UI4ME application that the backend starts is supervised, watched and single-instance-arbitrated as an independent application. These seven names, and any name beginning with `UI4ME_HOST_`, are reserved: a manifest that sets them in `[backend.env]` is rejected (case-insensitively). The token is never written to a manifest, a command line or the log. A binding should remove these variables from its own process environment after connecting, so that child processes started by the application cannot reuse them (both bindings do). A binding that finds only one of `UI4ME_ENDPOINT`/`UI4ME_TOKEN` should fail rather than guess.
 
 ## Handshake: `host.hello`
 
@@ -131,16 +131,18 @@ When the user closes a window (`reason: "native_close"`) or the backend calls `w
 1. sends `window.event` with `type: "close_requested"`, `data: {"reason":…}`;
 2. sends the **request** `window.before_close` with `{"window_id":"w1","reason":"native_close"}` and an ID such as `"host:decision:7"`.
 
-The backend answers `{"allow": true}` or `{"allow": false}`. Anything else, including an error response, counts as **deny**. On allow the window is destroyed (`window.event` `type: "closed"`) — unless it is the last open window, in which case the host starts an application quit with `reason: "last_window"`. A window closed before `app.ready` cancels startup and shuts down.
+The backend answers `{"allow": true}` or `{"allow": false}`; `{"allow": false}` is the only **veto**. Any other answer is **no decision**, which never closes or quits anything (so a failing policy cannot lose unsaved data): an error `-32005` (busy, for example a full callback queue) is asked again under a new decision ID after 100, 200, 400, 800 and 1600 ms; after that, and for any other error or a result without a boolean `allow`, the window stays open (or the application keeps running), the host logs a warning, and the user can close or quit again or force the quit. Answers to a superseded decision ID are ignored. On allow the window is destroyed (`window.event` `type: "closed"`) — unless it is the last open window, in which case the host starts an application quit with `reason: "last_window"`. A window closed before `app.ready` cancels startup and shuts down.
 
 ### Quitting the application
 
 `app.request_quit` (`{}` → `{"requested":true}`) or a last-window close sends the **request** `app.before_quit` with `{"reason":"backend_request"|"last_window"}`. While it is pending, `window.create` returns `-32005`. Pending window-close decisions are superseded and reported with the notification `request.cancelled` `{"id":"host:decision:N","reason":"application_quit"}`; late answers to them are ignored.
 
-* **Deny** (`{"allow":false}`): the application keeps running.
+* **Deny** (`{"allow":false}`): the application keeps running. **No decision** (an error answer or a result without a boolean `allow`, after the busy retries described above): the application keeps running as well, and the quit can be requested again.
 * **Allow:** the host cancels native jobs and sends the **notification** `app.shutdown` `{"deadline_ms": <shutdown_timeout_ms>}`. The backend should clean up and exit. If it has not exited when the deadline passes, the host kills it and exits with status 1. A backend that exits non-zero during shutdown also gives exit status 1.
 
-`app.force_quit` (`{}` → `{"requested":true}`) skips the decision, kills the backend and stops. The user can do the same with **Ctrl+Shift+Q** in a window.
+A termination request from outside the application (a signal, a console control event or the end of the desktop session; see [host CLI](host-cli.md#run)) skips the decision too: it cancels pending decisions and sends `app.shutdown` with a deadline of at most 3000 ms.
+
+`app.force_quit` (`{}` → `{"requested":true}`) skips the decision, kills the backend and stops; the host then exits with status 1. The user can do the same with **Ctrl+Shift+Q** in a window.
 
 ### Second launches: `app.activated`
 
@@ -159,13 +161,15 @@ For `instance = "single"`, a second launch of the same app sends `app.activate` 
 | Method | Params | Result |
 | --- | --- | --- |
 | `host.capabilities` | `{}` | Capability object (below) |
-| `host.diagnostics` | `{}` | `phase`, `windows` (IDs), `pending_jobs`, `pending_transfers`, `pid`, `backend_pid`, `containment`, `logging` |
+| `host.diagnostics` | `{}` | `phase`, `windows` (IDs), `pending_jobs`, `pending_transfers`, `pid`, `backend_pid`, `containment`, `logging`, `pump` (see below) |
 | `app.ready` | `{}` | `{"ready":true}` |
 | `app.request_quit` | `{}` | `{"requested":true}` (outcome follows through `app.before_quit`) |
 | `app.force_quit` | `{}` | `{"requested":true}` |
 | `request.cancel` | `{"id":"<pending request id>"}` | `{"cancelled":bool}`; the cancelled request is answered with `-32006`. Usually sent as a notification. |
 
-`host.capabilities` returns `capability_schema: 2` with top-level flags (`native`, `headless`, `max_windows`, `max_documents` (16), `renderer: "cpu"`, `css_profile: "ui4me-desktop-1.0"`, `platform`, `containment`, `window_positioning`, `limits` {`frame_bytes`, `pending_requests`, …}, `printing: false`, `tray: false`), a `features` map and the current `native_preferences`. Each feature is `{"implemented":bool,"available":true|false|null,"qualification":…,"scope":"…"}`, where `available: null` means "not observed yet". Feature keys: `window_constraints`, `window_observation`, `window_visibility`, `window_focus`, `window_position`, `window_restore`, `attention`, `clipboard_text`, `file_dialogs`, `external_open`, `reveal_file`, `native_preferences`, `ime`, `ime_purpose_hints`, `incoming_drop`, `accessibility`, `printing`, `tray`. Prefer `features` over the legacy top-level booleans.
+The host handles backend messages on its GUI thread in turns of at most 8 ms or 64 messages; then it yields to native events and frames and continues in the next turn. A single message that takes longer still runs to completion (and one over 100 ms is logged with its method or `document.command` op). `host.diagnostics` `pump` reports, since the previous `host.diagnostics`: `longest_turn_ms` (the longest time frames and input waited for backend work), `budget_yields`, `slow_commands`, `budget_ms` and `budget_messages`.
+
+`host.capabilities` returns `capability_schema: 2` with top-level flags (`native`, `headless`, `test_clock` (headless test mode only, see [Test mode](#test-mode-headless-only)), `max_windows`, `max_documents` (16), `renderer: "cpu"`, `css_profile: "ui4me-desktop-1.0"`, `platform`, `containment`, `window_positioning`, `limits` {`frame_bytes`, `pending_requests`, …}, `printing: false`, `tray: false`), a `features` map and the current `native_preferences`. Each feature is `{"implemented":bool,"available":true|false|null,"qualification":…,"scope":"…"}`, where `available: null` means "not observed yet". Feature keys: `window_constraints`, `window_observation`, `window_visibility`, `window_focus`, `window_position`, `window_restore`, `attention`, `clipboard_text`, `file_dialogs`, `external_open`, `reveal_file`, `native_preferences`, `ime`, `ime_purpose_hints`, `incoming_drop`, `accessibility`, `printing`, `tray`. Prefer `features` over the legacy top-level booleans.
 
 ## Windows
 
@@ -288,6 +292,18 @@ Dialogs, external open and reveal are answered when the user or the OS service f
 | `text`, `dropped_text`, `dropped_files` | Only for the built-in diagnostic probe surface (a window without a document) |
 
 Drops onto a document are delivered as `document.event`.
+
+## Test mode (headless only)
+
+These requests exist for automated tests of a backend or binding against `ui4me-host run --headless`. They are **not part of the application protocol**: a native host answers them with `-32001` and `host.capabilities` reports `test_clock: false`.
+
+A headless host runs the same frame pump as a native window, without a surface: whenever a document has pending work it gets a frame at most every 16 ms of wall time, which commits pending DOM writes (style, layout, scene) and sends the events that produces, such as `transitionrun` after a style change. Its document clock is real time, so a backend that never uses the request below sees time pass as in a native window.
+
+| Method | Params | Result |
+| --- | --- | --- |
+| `test.advance_time` | `{"ms": 0…60000}` | `{"advanced_ms":…, "frames":…, "virtual_time_ms":…}` |
+
+`test.advance_time` switches the host to a **deterministic virtual clock** the first time it is called: from then on the clock of every document (also documents loaded later) moves only through this request. It first commits pending changes at the current virtual time (a change made just before the call starts its transitions there, as the next native frame would), then advances in 16 ms frames, running each frame. Every `document.event` those frames produce is sent **before** the result, so a backend that waits for the result has seen all of them. `{"ms":0}` only switches to the virtual clock and commits pending work. Smooth scrolling, CSS transitions and keyframe animations follow the virtual clock; caret blinking does not.
 
 ## Error codes
 

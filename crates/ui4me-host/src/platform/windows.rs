@@ -140,6 +140,25 @@ fn session_id() -> Result<u32> {
     Ok(value)
 }
 
+/// HOST-12: pipe names are one namespace for every session, so a process of another session
+/// could have created the name first. Nothing (activation arguments, working directory) is sent
+/// to a pipe whose server runs in a different session than this process.
+fn verify_pipe_server_session(handle: &Handle) -> io::Result<()> {
+    let mut server = 0;
+    // SAFETY: a connected client pipe handle and a valid output location.
+    if unsafe { GetNamedPipeServerSessionId(handle.0, &mut server) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let own = session_id().map_err(|e| io::Error::other(format!("{e:#}")))?;
+    if server != own {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("the instance pipe is served from another session ({server}, not {own})"),
+        ));
+    }
+    Ok(())
+}
+
 struct Descriptor(LocalAllocation);
 impl Descriptor {
     fn for_logon() -> Result<Self> {
@@ -298,6 +317,15 @@ impl NativeListener {
                         return Err(error);
                     }
                 }
+                ERROR_NO_DATA => {
+                    // HOST-04: a client connected and closed before this call. The instance
+                    // is reusable after a disconnect; report the transient error.
+                    unsafe {
+                        DisconnectNamedPipe(handle.0);
+                    }
+                    self.pending = Some(handle);
+                    return Err(io::Error::from_raw_os_error(ERROR_NO_DATA as i32));
+                }
                 error => return Err(io::Error::from_raw_os_error(error as i32)),
             }
         }
@@ -309,6 +337,26 @@ impl NativeListener {
         }
         Ok(Some(NativeStream::new(handle)))
     }
+}
+
+/// HOST-04: accept errors after which the listener stays usable: a client that disconnected
+/// before `ConnectNamedPipe` (`ERROR_NO_DATA`, `ERROR_BROKEN_PIPE`), all instances in use
+/// (`ERROR_PIPE_BUSY` from `CreateNamedPipeW`), or exhausted resources. The accept loop retries
+/// them; anything else ends the listener.
+pub fn accept_error_is_transient(error: &io::Error) -> bool {
+    matches!(
+        error.raw_os_error().map(|code| code as u32),
+        Some(
+            ERROR_NO_DATA
+                | ERROR_PIPE_BUSY
+                | ERROR_BROKEN_PIPE
+                | ERROR_PIPE_NOT_CONNECTED
+                | ERROR_NO_SYSTEM_RESOURCES
+                | ERROR_NOT_ENOUGH_MEMORY
+                | ERROR_OUTOFMEMORY
+                | ERROR_OPERATION_ABORTED
+        )
+    )
 }
 
 /// One end of a connected pipe shared by reader, writer and control clones.
@@ -410,12 +458,16 @@ impl NativeStream {
                     0,
                     null(),
                     OPEN_EXISTING,
-                    FILE_FLAG_OVERLAPPED,
+                    // HOST-12: the server may identify this client but never impersonate it.
+                    FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION,
                     null_mut(),
                 )
             };
             match Handle::checked(raw) {
-                Ok(handle) => return Ok(Self::new(handle)),
+                Ok(handle) => {
+                    verify_pipe_server_session(&handle)?;
+                    return Ok(Self::new(handle));
+                }
                 Err(error)
                     if matches!(
                         error.raw_os_error().map(|v| v as u32),
@@ -581,6 +633,156 @@ fn wait_pending(
             }
         }
     }
+}
+
+fn termination_target() -> &'static OnceLock<Arc<crate::termination::Termination>> {
+    static TARGET: OnceLock<Arc<crate::termination::Termination>> = OnceLock::new();
+    &TARGET
+}
+
+/// How long a console close/logoff/shutdown handler or `WM_ENDSESSION` may hold the process
+/// for the orderly shutdown (Windows allows about 5 s before it terminates the process).
+const SESSION_END_WAIT: Duration = Duration::from_millis(4_500);
+
+unsafe extern "system" fn on_console_control(kind: u32) -> windows_sys::core::BOOL {
+    use windows_sys::Win32::System::Console::{
+        CTRL_BREAK_EVENT, CTRL_CLOSE_EVENT, CTRL_C_EVENT, CTRL_LOGOFF_EVENT, CTRL_SHUTDOWN_EVENT,
+    };
+    let Some(termination) = termination_target().get() else {
+        return 0;
+    };
+    let (source, exit_code) = match kind {
+        CTRL_C_EVENT => ("CTRL_C_EVENT", 130),
+        CTRL_BREAK_EVENT => ("CTRL_BREAK_EVENT", 130),
+        CTRL_CLOSE_EVENT => ("CTRL_CLOSE_EVENT", 0),
+        CTRL_LOGOFF_EVENT => ("CTRL_LOGOFF_EVENT", 0),
+        CTRL_SHUTDOWN_EVENT => ("CTRL_SHUTDOWN_EVENT", 0),
+        _ => return 0,
+    };
+    // The handler runs on its own thread, so it may log and wake the engine thread.
+    tracing::warn!(event = source, "termination requested");
+    termination.request(crate::termination::Request { source, exit_code });
+    if matches!(
+        kind,
+        CTRL_CLOSE_EVENT | CTRL_LOGOFF_EVENT | CTRL_SHUTDOWN_EVENT
+    ) {
+        // Returning ends the process for these events: give the shutdown its chance first.
+        termination.wait_finished(SESSION_END_WAIT);
+    }
+    1
+}
+
+unsafe extern "system" fn session_procedure(
+    hwnd: windows_sys::Win32::Foundation::HWND,
+    message: u32,
+    w: WPARAM,
+    l: LPARAM,
+) -> LRESULT {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        DefWindowProcW, WM_ENDSESSION, WM_QUERYENDSESSION,
+    };
+    match message {
+        WM_QUERYENDSESSION => {
+            if let Some(termination) = termination_target().get() {
+                tracing::warn!(event = "WM_QUERYENDSESSION", "session end requested");
+                termination.request(crate::termination::Request {
+                    source: "WM_QUERYENDSESSION",
+                    exit_code: 0,
+                });
+            }
+            // Allow the session to end; the orderly shutdown has started.
+            1
+        }
+        WM_ENDSESSION => {
+            if w != 0 {
+                if let Some(termination) = termination_target().get() {
+                    // The process may be terminated as soon as this returns.
+                    termination.request(crate::termination::Request {
+                        source: "WM_ENDSESSION",
+                        exit_code: 0,
+                    });
+                    termination.wait_finished(SESSION_END_WAIT);
+                }
+            }
+            0
+        }
+        _ => unsafe { DefWindowProcW(hwnd, message, w, l) },
+    }
+}
+
+/// A hidden top-level window on its own thread: only top-level windows receive
+/// `WM_QUERYENDSESSION`/`WM_ENDSESSION` (a message-only window does not), and the engine
+/// thread's winit windows do not handle them.
+fn watch_session_end() -> Result<()> {
+    use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        CreateWindowExW, DispatchMessageW, GetMessageW, RegisterClassW, TranslateMessage, MSG,
+        WNDCLASSW, WS_POPUP,
+    };
+    std::thread::Builder::new()
+        .name("ui4me-session-end".into())
+        .spawn(|| unsafe {
+            let instance = GetModuleHandleW(null());
+            let name = match wide_str(&format!("UI4ME.SessionEnd.{}", std::process::id())) {
+                Ok(name) => name,
+                Err(_) => return,
+            };
+            let class = WNDCLASSW {
+                lpfnWndProc: Some(session_procedure),
+                hInstance: instance,
+                lpszClassName: name.as_ptr(),
+                ..std::mem::zeroed()
+            };
+            if RegisterClassW(&class) == 0 {
+                tracing::warn!(error = %io::Error::last_os_error(), "cannot observe session end");
+                return;
+            }
+            let window = CreateWindowExW(
+                0,
+                name.as_ptr(),
+                name.as_ptr(),
+                WS_POPUP,
+                0,
+                0,
+                0,
+                0,
+                null_mut(),
+                null_mut(),
+                instance,
+                null(),
+            );
+            if window.is_null() {
+                tracing::warn!(error = %io::Error::last_os_error(), "cannot observe session end");
+                return;
+            }
+            let mut message: MSG = std::mem::zeroed();
+            while GetMessageW(&mut message, null_mut(), 0, 0) > 0 {
+                TranslateMessage(&message);
+                DispatchMessageW(&message);
+            }
+        })
+        .context("start session-end watcher")?;
+    Ok(())
+}
+
+/// HOST-07: console control events (Ctrl+C, Ctrl+Break, console close, logoff, shutdown) and
+/// the session end (`WM_QUERYENDSESSION`/`WM_ENDSESSION`) start an orderly shutdown instead of
+/// ending the process at once. Installed once per process.
+pub fn install_termination_handlers(
+    termination: Arc<crate::termination::Termination>,
+) -> Result<()> {
+    if termination_target().set(termination).is_err() {
+        return Ok(());
+    }
+    // SAFETY: registers a handler function with static lifetime.
+    if unsafe {
+        windows_sys::Win32::System::Console::SetConsoleCtrlHandler(Some(on_console_control), 1)
+    } == 0
+    {
+        // No console (a GUI launch released it): only the session end applies.
+        tracing::debug!(error = %io::Error::last_os_error(), "no console control handler");
+    }
+    watch_session_end()
 }
 
 pub fn bootstrap_supervised(_args: &[OsString]) -> Result<Option<i32>> {
@@ -800,6 +1002,9 @@ pub fn spawn_backend(
     let mut environment: BTreeMap<String, (OsString, OsString)> = BTreeMap::new();
     for (key, value) in std::env::vars_os() {
         environment.insert(key.to_string_lossy().to_uppercase(), (key, value));
+    }
+    for name in super::HOST_PRIVATE_ENV {
+        environment.remove(name);
     }
     for (key, value) in &config.env {
         environment.insert(key.to_uppercase(), (key.into(), value.into()));

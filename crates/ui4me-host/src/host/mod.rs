@@ -5,6 +5,7 @@ mod bitmap;
 mod document_integration_tests;
 mod document_native;
 mod documents;
+mod headless;
 mod native;
 use documents::HostedDocument;
 mod requests;
@@ -217,23 +218,67 @@ pub struct Host {
     presentation: Option<softbuffer::Context<OwnedDisplayHandle>>,
     preferences: platform::preferences::PreferenceWatch,
     preference_revision: u64,
+    /// F-12: `None` until the first `test.advance_time`; then the virtual time advanced so far.
+    virtual_time_ms: Option<f64>,
+    /// HOST-07: termination requests (signals, console control, session end) and how many of
+    /// them this host has handled.
+    termination: Option<Arc<crate::termination::Termination>>,
+    termination_seen: usize,
+    termination_started: Option<Instant>,
+    /// HOST-15: the policy requests sent for pending decisions (for a retry after "busy"), and
+    /// the retries waiting for their backoff.
+    decision_requests: HashMap<String, (&'static str, Value)>,
+    decision_retries: Vec<(Instant, String)>,
+    /// The last pump yielded with backend messages possibly left (HOST-05).
+    pump_more: bool,
+    pump_stats: PumpStats,
 }
+
+/// HOST-05/HOST-06: one pump handles backend messages for at most this long, or at most
+/// [`PUMP_MESSAGES`] of them, before it yields to native events and frames (and re-wakes).
+const PUMP_BUDGET: Duration = Duration::from_millis(8);
+const PUMP_MESSAGES: usize = 64;
+/// A single backend message that blocks the GUI thread at least this long is logged.
+const SLOW_COMMAND: Duration = Duration::from_millis(100);
+
+/// GUI-thread time accounting reported by `host.diagnostics` (`pump`), since the last report.
+#[derive(Default)]
+struct PumpStats {
+    longest_turn: Duration,
+    budget_yields: u64,
+    slow_commands: u64,
+}
+
+/// The operation a backend message names, for the slow-command log: the `document.command`
+/// `op`, otherwise the method (responses have none).
+fn slow_command_name(value: &Value) -> String {
+    let method = value
+        .get("method")
+        .and_then(Value::as_str)
+        .unwrap_or("response");
+    match value.pointer("/params/command/op").and_then(Value::as_str) {
+        Some(op) if method == "document.command" => format!("document.command {op}"),
+        _ => method.chars().take(128).collect(),
+    }
+}
+
+/// HOST-15: how often a decision answered with "busy" is asked again (100 ms … 1.6 s backoff,
+/// about 3 s in total) before it counts as no decision.
+const MAX_DECISION_RETRIES: u32 = 5;
 
 /// Launch a manifest, forwarding secondary launches to the existing instance.
 pub fn run(config: AppConfig, headless: bool) -> Result<i32> {
     platform::initialize_application(&config.app.id)?;
     let instance = if config.host.instance == InstancePolicy::Single {
-        Some(InstanceLock::acquire(&config.app.id)?)
+        match primary_or_forward(&config)? {
+            Some(lock) => Some(lock),
+            None => return Ok(0),
+        }
     } else {
         None
     };
-    if let Some(lock) = &instance {
-        if !lock.primary {
-            forward_activation(&lock.endpoint, &config)?;
-            return Ok(0);
-        }
-    }
     let result = Arc::new(AtomicI32::new(0));
+    let termination = crate::termination::Termination::global();
     if headless {
         let mut host = Host::new(
             config,
@@ -243,9 +288,12 @@ pub fn run(config: AppConfig, headless: bool) -> Result<i32> {
             Arc::new(|| {}),
             result.clone(),
         )?;
+        host.watch_termination(termination.clone());
         while host.lifecycle.phase() != Phase::Stopped {
             host.pump(None);
-            std::thread::sleep(Duration::from_millis(5));
+            if !host.pump_more {
+                std::thread::sleep(Duration::from_millis(5));
+            }
         }
     } else {
         let event_loop = event_loop().context(
@@ -253,9 +301,13 @@ pub fn run(config: AppConfig, headless: bool) -> Result<i32> {
         )?;
         let proxy = event_loop.create_proxy();
         let wake: Wake = Arc::new(move || proxy.wake_up());
-        let host = Host::new(config, false, false, instance, wake, result.clone())?;
-        event_loop.run_app(host)?;
+        let mut host = Host::new(config, false, false, instance, wake, result.clone())?;
+        host.watch_termination(termination.clone());
+        let outcome = event_loop.run_app(host);
+        termination.finished();
+        outcome?;
     }
+    termination.finished();
     Ok(result.load(Ordering::Relaxed))
 }
 
@@ -272,21 +324,74 @@ fn event_loop() -> Result<EventLoop, winit::error::EventLoopError> {
     builder.build()
 }
 
+/// The primary instance lock, or `None` once this launch was delivered to the running primary.
+///
+/// HOST-10: a primary that is shutting down answers `-32004`, and one that has already closed
+/// its endpoint cannot be reached; either is about to release the lock. This launch then waits
+/// for the lock (bounded by the primary's shutdown deadline plus a margin) and becomes the new
+/// primary, instead of failing the user's relaunch. If another launch became the primary in the
+/// meantime, this one is forwarded to it.
+fn primary_or_forward(config: &AppConfig) -> Result<Option<InstanceLock>> {
+    let lock = InstanceLock::acquire(&config.app.id)?;
+    if lock.primary {
+        return Ok(Some(lock));
+    }
+    let error = match forward_activation(&lock.endpoint, config, None) {
+        Ok(()) => return Ok(None),
+        Err(error) if primary_is_ending(&error) => error,
+        Err(error) => return Err(error),
+    };
+    drop(lock);
+    tracing::info!(
+        reason = format!("{error:#}"),
+        "primary instance is shutting down; waiting to take over"
+    );
+    let deadline = Instant::now()
+        + Duration::from_millis(config.host.shutdown_timeout_ms)
+        + Duration::from_secs(2);
+    loop {
+        std::thread::sleep(Duration::from_millis(50));
+        let lock = InstanceLock::acquire(&config.app.id)?;
+        if lock.primary {
+            tracing::info!("previous primary instance has exited; this launch is the primary");
+            return Ok(Some(lock));
+        }
+        // Still held: by the ending primary, or by a launch that took over first.
+        match forward_activation(&lock.endpoint, config, Some(Duration::from_millis(250))) {
+            Ok(()) => return Ok(None),
+            Err(error) if primary_is_ending(&error) && Instant::now() < deadline => {}
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+/// The primary answered "shutting down", or could not be reached or answer at all: it closes
+/// its endpoint, and then its connections, before it exits and releases the lock. Any other
+/// answer from a live primary (for example invalid parameters) is final.
+fn primary_is_ending(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<RpcError>()
+        .is_none_or(|rpc| rpc.code == protocol::code::CLOSED)
+}
+
 /// Deliver this launch to the primary instance. A primary that is still
 /// starting (for example two simultaneous launches) cannot yet deliver the
 /// activation to a ready backend, so retry within the manifest's bounded
 /// startup deadline instead of losing the user's launch.
-fn forward_activation(endpoint: &str, config: &AppConfig) -> Result<()> {
+/// `attempt` caps the time of each connection attempt (default 5 s).
+fn forward_activation(endpoint: &str, config: &AppConfig, attempt: Option<Duration>) -> Result<()> {
     let request = json!({"jsonrpc":"2.0","id":"activation","method":"app.activate",
         "params":{"args":std::env::args().collect::<Vec<_>>(),"cwd":std::env::current_dir()?,
             "activation_token":std::env::var("XDG_ACTIVATION_TOKEN").ok()}});
     let deadline = Instant::now()
         + Duration::from_millis(config.host.startup_timeout_ms)
         + Duration::from_secs(5);
+    let attempt = attempt.unwrap_or(Duration::from_secs(5));
     loop {
-        let timeout = deadline
-            .saturating_duration_since(Instant::now())
-            .clamp(Duration::from_millis(100), Duration::from_secs(5));
+        let timeout = deadline.saturating_duration_since(Instant::now()).clamp(
+            Duration::from_millis(100),
+            attempt.max(Duration::from_millis(100)),
+        );
         let response = transport::request(endpoint, request.clone(), timeout)?;
         match protocol::parse_response(response)?.outcome {
             Ok(_) => return Ok(()),
@@ -325,7 +430,7 @@ pub fn run_probe() -> Result<i32> {
     let event_loop = event_loop()?;
     let proxy = event_loop.create_proxy();
     let result = Arc::new(AtomicI32::new(0));
-    let host = Host::new(
+    let mut host = Host::new(
         config,
         false,
         true,
@@ -333,7 +438,11 @@ pub fn run_probe() -> Result<i32> {
         Arc::new(move || proxy.wake_up()),
         result.clone(),
     )?;
-    event_loop.run_app(host)?;
+    let termination = crate::termination::Termination::global();
+    host.watch_termination(termination.clone());
+    let outcome = event_loop.run_app(host);
+    termination.finished();
+    outcome?;
     Ok(result.load(Ordering::Relaxed))
 }
 
@@ -368,6 +477,14 @@ fn random_token() -> Result<String> {
     Ok(bytes.iter().map(|v| format!("{v:02x}")).collect())
 }
 
+/// HOST-11: the endpoint key of an `instance = "multiple"` host. It is public (socket path,
+/// pipe name, `UI4ME_ENDPOINT`, logs), so it is drawn independently of the secret token.
+fn multiple_instance_key() -> Result<String> {
+    let mut bytes = [0u8; 12];
+    getrandom::fill(&mut bytes).map_err(|e| anyhow::anyhow!("OS random source: {e}"))?;
+    Ok(bytes.iter().map(|v| format!("{v:02x}")).collect())
+}
+
 impl Host {
     fn new(
         config: AppConfig,
@@ -384,10 +501,10 @@ impl Host {
         }
         let icon = crate::icons::load(config.app.icon.as_deref())?;
         let token = random_token()?;
-        let instance_key = instance
-            .as_ref()
-            .map(|i| i.instance_key.clone())
-            .unwrap_or_else(|| token[..24].to_owned());
+        let instance_key = match &instance {
+            Some(lock) => lock.instance_key.clone(),
+            None => multiple_instance_key()?,
+        };
         let server = if standalone {
             None
         } else {
@@ -454,6 +571,14 @@ impl Host {
             presentation: None,
             preferences,
             preference_revision: 0,
+            virtual_time_ms: None,
+            termination: None,
+            termination_seen: 0,
+            termination_started: None,
+            decision_requests: HashMap::new(),
+            decision_retries: Vec::new(),
+            pump_more: false,
+            pump_stats: PumpStats::default(),
             #[cfg(test)]
             observed_notifications: Vec::new(),
         })
@@ -530,6 +655,15 @@ impl Host {
             self.send(client, message);
         }
     }
+    /// `host.diagnostics` `pump`: GUI-thread turn statistics since the previous report. The
+    /// longest turn bounds how long frames and input waited for backend work (gate R5(c)).
+    fn take_pump_stats(&mut self) -> Value {
+        let stats = std::mem::take(&mut self.pump_stats);
+        json!({"longest_turn_ms":stats.longest_turn.as_secs_f64() * 1000.0,
+            "budget_yields":stats.budget_yields,"slow_commands":stats.slow_commands,
+            "budget_ms":PUMP_BUDGET.as_millis() as u64,"budget_messages":PUMP_MESSAGES})
+    }
+
     fn window_event_message(&mut self, id: &str, kind: &str, data: Value) {
         self.notify(
             "window.event",
@@ -538,19 +672,58 @@ impl Host {
     }
 
     fn pump(&mut self, event_loop: Option<&dyn ActiveEventLoop>) {
+        let turn = Instant::now();
         self.apply_native_preferences(event_loop);
-        // An input/log flood must not monopolize native event dispatch.
-        for _ in 0..64 {
+        // HOST-05/HOST-06: an input/log flood or a slow command must not monopolize native
+        // event dispatch. Backend messages are processed until PUMP_BUDGET has elapsed or
+        // PUMP_MESSAGES were handled; then the loop yields (frames, input) and is woken again
+        // at once for the rest instead of waiting for the next timer or input event.
+        self.pump_more = false;
+        let mut handled = 0;
+        loop {
+            if handled == PUMP_MESSAGES || turn.elapsed() >= PUMP_BUDGET {
+                self.pump_more = true;
+                self.pump_stats.budget_yields += 1;
+                (self.wake)();
+                break;
+            }
             let event = self
                 .server
                 .as_ref()
                 .and_then(|s| s.incoming.try_recv().ok());
             let Some(event) = event else { break };
+            handled += 1;
             match event {
                 TransportEvent::Connected(id) => {
                     self.connected.insert(id, Instant::now());
                 }
-                TransportEvent::Message(id, value) => self.message(id, value, event_loop),
+                TransportEvent::Message(id, value) => {
+                    let operation = slow_command_name(&value);
+                    let started = Instant::now();
+                    self.message(id, value, event_loop);
+                    let took = started.elapsed();
+                    if took >= SLOW_COMMAND {
+                        self.pump_stats.slow_commands += 1;
+                        tracing::warn!(
+                            operation,
+                            duration_ms = took.as_millis() as u64,
+                            "backend message took long on the GUI thread"
+                        );
+                    }
+                }
+                TransportEvent::Disconnected(0, reason) => {
+                    // HOST-04: connection 0 is the listener itself (or a connection that could
+                    // not be attached). Transient accept errors are retried by the transport;
+                    // what reaches this point is visible instead of silently ignored.
+                    if reason.starts_with("listener:") {
+                        tracing::error!(
+                            reason,
+                            "IPC listener stopped; this instance can no longer be reached"
+                        );
+                    } else {
+                        tracing::warn!(reason, "incoming IPC connection could not be attached");
+                    }
+                }
                 TransportEvent::Disconnected(id, reason) => {
                     self.connection_closed(id);
                     if self.client == Some(id) {
@@ -659,6 +832,15 @@ impl Host {
                 self.begin_shutdown();
             }
         }
+        self.send_due_decision_retries();
+        let requests = self
+            .termination
+            .as_ref()
+            .map(|t| t.take_new(&mut self.termination_seen))
+            .unwrap_or_default();
+        for request in requests {
+            self.terminate(request);
+        }
         if let Some(event_loop) = event_loop {
             for target in std::mem::take(&mut self.deferred_clipboard_reads) {
                 self.read_clipboard_now(event_loop, target);
@@ -717,20 +899,52 @@ impl Host {
             }
         }
         self.flush_document_refreshes();
+        self.headless_frames(false);
+        let took = turn.elapsed();
+        if took > self.pump_stats.longest_turn {
+            self.pump_stats.longest_turn = took;
+        }
     }
 
     fn message(&mut self, connection: u64, value: Value, event_loop: Option<&dyn ActiveEventLoop>) {
         if value.get("method").is_none() && self.client == Some(connection) {
             match protocol::parse_response(value) {
                 Ok(response) => {
-                    let allowed = response
+                    // HOST-15: only an explicit boolean is a decision; `{"allow": false}` is
+                    // the only veto. An error answer is no decision: "busy" is asked again
+                    // after a backoff, anything else leaves the window open / the app running
+                    // (never an implicit allow) and is reported.
+                    let (allowed, problem) = match &response.outcome {
+                        Ok(result) => match result.get("allow").and_then(Value::as_bool) {
+                            Some(allowed) => (Some(allowed), None),
+                            None => (None, Some("answer without a boolean allow".to_owned())),
+                        },
+                        Err(error) => (None, Some(format!("{} ({})", error.message, error.code))),
+                    };
+                    let busy = response
                         .outcome
                         .as_ref()
-                        .ok()
-                        .and_then(|v| v.get("allow"))
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false);
+                        .err()
+                        .is_some_and(|e| e.code == protocol::code::BUSY);
+                    if busy
+                        && self
+                            .decisions
+                            .get(&response.id)
+                            .is_some_and(|d| d.retries < MAX_DECISION_RETRIES)
+                    {
+                        self.retry_decision(&response.id);
+                        return;
+                    }
+                    let Some(allowed) = allowed else {
+                        if let Ok(resolved) = self.decisions.resolve(&response.id, false) {
+                            self.no_decision(resolved.decision, problem.unwrap_or_default());
+                        } else {
+                            tracing::debug!("ignored stale decision response");
+                        }
+                        return;
+                    };
                     if let Ok(resolved) = self.decisions.resolve(&response.id, allowed) {
+                        self.decision_requests.remove(&response.id);
                         match resolved.decision.kind {
                             DecisionKind::CloseWindow { window_id } if resolved.allowed => {
                                 // A window awaiting cancellation of its native
@@ -868,6 +1082,86 @@ impl Host {
         }
     }
 
+    /// HOST-15: the backend answered "busy" (for example a full callback queue): ask the same
+    /// decision again under a new ID after an exponential backoff.
+    fn retry_decision(&mut self, id: &str) {
+        let Some(request) = self.decision_requests.remove(id) else {
+            return;
+        };
+        let Ok(decision) = self.decisions.reissue(id) else {
+            return;
+        };
+        let delay = Duration::from_millis(100 << decision.retries.min(5).saturating_sub(1));
+        tracing::info!(
+            retry = decision.retries,
+            delay_ms = delay.as_millis() as u64,
+            "backend was busy; asking the close/quit decision again"
+        );
+        self.decision_retries
+            .push((Instant::now() + delay, decision.id.clone()));
+        self.decision_requests.insert(decision.id, request);
+    }
+
+    /// Send a host -> backend policy request and remember it for a possible retry.
+    fn send_decision_request(&mut self, id: &str, method: &'static str, params: Value) {
+        let decisions = &self.decisions;
+        self.decision_requests
+            .retain(|pending, _| decisions.get(pending).is_some());
+        self.decision_requests
+            .insert(id.to_owned(), (method, params.clone()));
+        if let Some(client) = self.client {
+            self.send(
+                client,
+                json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}),
+            );
+        }
+    }
+
+    fn send_due_decision_retries(&mut self) {
+        if self.decision_retries.is_empty() {
+            return;
+        }
+        let now = Instant::now();
+        let (due, later): (Vec<_>, Vec<_>) = std::mem::take(&mut self.decision_retries)
+            .into_iter()
+            .partition(|(at, _)| *at <= now);
+        self.decision_retries = later;
+        for (_, id) in due {
+            // A decision cancelled meanwhile (window closed, quit superseded) is not re-sent.
+            if self.decisions.get(&id).is_none() {
+                continue;
+            }
+            if let Some((method, params)) = self.decision_requests.get(&id).cloned() {
+                self.send_decision_request(&id, method, params);
+            }
+        }
+    }
+
+    /// HOST-15: the backend gave no decision. Nothing is closed or quit (data-loss protection);
+    /// the user can request it again or force the quit.
+    fn no_decision(&mut self, decision: crate::lifecycle::Decision, problem: String) {
+        self.decision_requests.remove(&decision.id);
+        tracing::warn!(
+            decision = decision.id,
+            problem,
+            "backend gave no close/quit decision; nothing was closed"
+        );
+        match decision.kind {
+            DecisionKind::QuitApplication => {
+                let _ = self.lifecycle.cancel_quit();
+                self.status_all(
+                    "The application gave no quit decision. It keeps running; quit again to retry, or press Ctrl+Shift+Q to force.",
+                );
+            }
+            DecisionKind::CloseWindow { window_id } => {
+                if let Some(window) = self.windows.get_mut(&window_id) {
+                    window.probe.status = "The application gave no close decision. The window stays open; close it again to retry.".into();
+                }
+                self.refresh(&window_id);
+            }
+        }
+    }
+
     fn hello(&mut self, connection: u64, params: &Value) -> Result<Value, RpcError> {
         if self.client.is_some() {
             return Err(RpcError::busy("Backend is already connected"));
@@ -944,6 +1238,7 @@ impl Host {
             "platform":std::env::consts::OS,"containment":platform::containment_description(),
             "limits":{"frame_bytes":protocol::MAX_FRAME_BYTES,"pending_requests":protocol::MAX_PENDING,"probe_text_bytes":crate::presentation::MAX_TEXT_BYTES},
             "window_positioning":native && cfg!(target_os="windows"),"native_qualification":"requires local evidence"});
+        result["test_clock"] = json!(self.headless);
         result["capability_schema"] = json!(2);
         result["qualification"] = json!({"status":"unqualified_candidate","evidence":"No native qualification is inferred from compiled code, a previous release, or an available service"});
         result["legacy_flags"] = json!("Top-level service booleans describe enabled API surfaces; feature availability below is authoritative and null means unobserved");
@@ -998,13 +1293,11 @@ impl Host {
             }
             self.refresh(window_id);
             self.window_event_message(window_id, "close_requested", json!({"reason":reason}));
-            if let Some(client) = self.client {
-                self.send(
-                    client,
-                    json!({"jsonrpc":"2.0","id":decision.decision.id,"method":"window.before_close",
-                    "params":{"window_id":window_id,"reason":reason}}),
-                );
-            }
+            self.send_decision_request(
+                &decision.decision.id,
+                "window.before_close",
+                json!({"window_id":window_id,"reason":reason}),
+            );
         }
         Ok(())
     }
@@ -1043,14 +1336,70 @@ impl Host {
                 json!({"id":stale,"reason":"application_quit"}),
             );
         }
-        if let Some(client) = self.client {
-            self.send(client, json!({"jsonrpc":"2.0","id":start.decision.id,"method":"app.before_quit","params":{"reason":reason}}));
-        }
+        self.send_decision_request(
+            &start.decision.id,
+            "app.before_quit",
+            json!({"reason":reason}),
+        );
         self.status_all("Waiting for application quit decision. Ctrl+Shift+Q forces shutdown.");
         Ok(())
     }
 
+    /// Receive this process's termination requests (signals, console control, session end).
+    fn watch_termination(&mut self, termination: Arc<crate::termination::Termination>) {
+        termination.set_wake(self.wake.clone());
+        if let Err(error) = platform::install_termination_handlers(termination.clone()) {
+            tracing::warn!(
+                error = format!("{error:#}"),
+                "termination requests keep their default effect"
+            );
+        }
+        self.termination = Some(termination);
+    }
+
+    /// HOST-07: an external termination request (signal, console control, session end) is not
+    /// an answer to a pending decision: it cancels them and starts the orderly shutdown with a
+    /// deadline short enough for process managers and session ends. A second request while
+    /// already shutting down forces the quit.
+    fn terminate(&mut self, request: crate::termination::Request) {
+        let first = *self.termination_started.get_or_insert_with(Instant::now);
+        match self.lifecycle.phase() {
+            Phase::Stopped => {}
+            // One Ctrl+C often arrives twice: the terminal signals the host's process group and
+            // a direct-start launcher forwards its own SIGINT as SIGTERM a moment later. Only a
+            // request after this grace period is the user insisting.
+            Phase::Quitting if first.elapsed() < crate::termination::REPEAT_GRACE => {
+                tracing::debug!(
+                    source = request.source,
+                    "repeated termination request ignored"
+                );
+            }
+            Phase::Quitting => {
+                tracing::warn!(
+                    source = request.source,
+                    "termination requested again; forcing shutdown"
+                );
+                self.force_shutdown();
+            }
+            phase => {
+                tracing::warn!(
+                    source = request.source,
+                    "termination requested; shutting down"
+                );
+                if phase != Phase::Failed {
+                    self.exit_code.store(request.exit_code, Ordering::Relaxed);
+                }
+                let configured = Duration::from_millis(self.config.host.shutdown_timeout_ms);
+                self.begin_shutdown_within(configured.min(crate::termination::DEADLINE));
+            }
+        }
+    }
+
     fn begin_shutdown(&mut self) {
+        self.begin_shutdown_within(Duration::from_millis(self.config.host.shutdown_timeout_ms));
+    }
+
+    fn begin_shutdown_within(&mut self, deadline: Duration) {
         if self.lifecycle.phase() == Phase::QuitPending {
             let _ = self.lifecycle.commit_quit();
         } else {
@@ -1060,10 +1409,9 @@ impl Host {
         self.cancel_native_jobs("Application is shutting down");
         self.notify(
             "app.shutdown",
-            json!({"deadline_ms":self.config.host.shutdown_timeout_ms}),
+            json!({"deadline_ms":deadline.as_millis() as u64}),
         );
-        self.quit_deadline =
-            Some(Instant::now() + Duration::from_millis(self.config.host.shutdown_timeout_ms));
+        self.quit_deadline = Some(Instant::now() + deadline);
         self.status_all("Shutting down application...");
     }
 
@@ -1083,6 +1431,9 @@ impl Host {
         let _ = self.lifecycle.stop();
         if let Some(server) = &mut self.server {
             server.close();
+        }
+        if let Some(termination) = &self.termination {
+            termination.finished();
         }
         self.cancel_native_jobs("Host stopped");
         self.native_ids.clear();
@@ -1323,6 +1674,14 @@ mod tests {
             presentation: None,
             preferences: platform::preferences::PreferenceWatch::new(false, Arc::new(|| {})),
             preference_revision: 0,
+            virtual_time_ms: None,
+            termination: None,
+            termination_seen: 0,
+            termination_started: None,
+            decision_requests: HashMap::new(),
+            decision_retries: Vec::new(),
+            pump_more: false,
+            pump_stats: PumpStats::default(),
             #[cfg(test)]
             observed_notifications: Vec::new(),
         }
@@ -1443,6 +1802,215 @@ mod tests {
         assert_eq!(host.lifecycle.phase(), Phase::Stopped);
         assert_eq!(host.decisions.pending_count(), 0);
         assert_eq!(host.exit_code.load(Ordering::Relaxed), 1);
+    }
+
+    /// HOST-07 (T15): a termination request cancels a pending decision, delivers
+    /// `app.shutdown` with the short deadline and sets the 128 + signal exit status; a second
+    /// request while shutting down forces the quit.
+    #[test]
+    fn termination_request_starts_an_orderly_shutdown_and_a_second_forces_it() {
+        let mut host = controller(true);
+        add_window(&mut host, "one");
+        let termination = Arc::new(crate::termination::Termination::default());
+        host.termination = Some(termination.clone());
+        host.request_quit("backend_request").unwrap();
+        assert_eq!(host.decisions.pending_count(), 1);
+        // Keep the fixture in Quitting: a live backend has not exited yet.
+        host.quit_deadline = None;
+        termination.request(crate::termination::Request {
+            source: "SIGTERM",
+            exit_code: 143,
+        });
+        host.observed_notifications.clear();
+        let before = Instant::now();
+        host.pump(None);
+        // No backend in this fixture, so the orderly shutdown completes at once.
+        assert_eq!(host.lifecycle.phase(), Phase::Stopped);
+        assert_eq!(host.decisions.pending_count(), 0);
+        assert_eq!(host.exit_code.load(Ordering::Relaxed), 143);
+        let shutdown: Vec<_> = host
+            .observed_notifications
+            .iter()
+            .filter(|n| n["method"] == "app.shutdown")
+            .collect();
+        assert_eq!(shutdown.len(), 1);
+        assert_eq!(shutdown[0]["params"]["deadline_ms"], 3000);
+        assert!(host.quit_deadline.unwrap() <= before + Duration::from_millis(3100));
+
+        let mut host = controller(true);
+        let termination = Arc::new(crate::termination::Termination::default());
+        host.termination = Some(termination.clone());
+        host.begin_shutdown();
+        assert_eq!(host.lifecycle.phase(), Phase::Quitting);
+        termination.request(crate::termination::Request {
+            source: "SIGINT",
+            exit_code: 130,
+        });
+        let request = termination.take_new(&mut host.termination_seen).remove(0);
+        host.terminate(request.clone());
+        assert!(
+            !host.force_quit,
+            "an immediate repeat (terminal + launcher) is the same request"
+        );
+        host.termination_started = Some(Instant::now() - crate::termination::REPEAT_GRACE);
+        host.terminate(request);
+        assert!(host.force_quit, "a later second request forces the quit");
+    }
+
+    /// HOST-15 (T15): an error answer to a policy request is no decision, never a veto and
+    /// never an implicit allow. "Busy" is asked again after a backoff; other errors leave the
+    /// window open / the application running; only `{"allow": false}` vetoes.
+    #[test]
+    fn error_answers_to_policy_requests_are_no_decision() {
+        let mut host = controller(true);
+        add_window(&mut host, "one");
+        add_window(&mut host, "two");
+        let pending = |host: &Host| host.decision_requests.keys().next().cloned().unwrap();
+        host.request_close("one", "native_close").unwrap();
+        let first = pending(&host);
+        host.message(
+            7,
+            protocol::error(Some(&first), &RpcError::busy("Callback queue is full")),
+            None,
+        );
+        assert!(host.windows.contains_key("one"), "busy is not an allow");
+        assert_eq!(
+            host.decisions.pending_count(),
+            1,
+            "busy is not a veto either"
+        );
+        assert_eq!(host.decision_retries.len(), 1);
+        let retried = pending(&host);
+        assert_ne!(retried, first, "asked again under a new ID");
+        // The late answer to the old ID is stale.
+        host.message(7, protocol::success(&first, json!({"allow":true})), None);
+        assert!(host.windows.contains_key("one"));
+        // Backoff elapsed: the retry is sent (no transport in this fixture) and stays pending.
+        host.decision_retries[0].0 = Instant::now();
+        host.pump(None);
+        assert!(host.decision_retries.is_empty());
+        assert_eq!(host.decisions.pending_count(), 1);
+        // A failing policy callback: no decision, the window stays open, nothing pending.
+        host.message(
+            7,
+            protocol::error(
+                Some(&retried),
+                &RpcError::new(protocol::code::INTERNAL_ERROR, "Callback failed"),
+            ),
+            None,
+        );
+        assert!(host.windows.contains_key("one"));
+        assert_eq!(host.decisions.pending_count(), 0);
+        assert!(host.windows["one"]
+            .probe
+            .status
+            .contains("no close decision"));
+        // Asking again works, and an explicit allow closes.
+        host.request_close("one", "native_close").unwrap();
+        let again = pending(&host);
+        host.message(7, protocol::success(&again, json!({"allow":true})), None);
+        assert!(!host.windows.contains_key("one"));
+
+        // Busy beyond the retry budget is no decision as well.
+        host.request_close("two", "native_close").unwrap();
+        for _ in 0..=MAX_DECISION_RETRIES {
+            let id = pending(&host);
+            host.message(7, protocol::error(Some(&id), &RpcError::busy("full")), None);
+        }
+        assert!(host.windows.contains_key("two"));
+        assert_eq!(host.decisions.pending_count(), 0);
+
+        // Quit: an error answer keeps the application running (no veto status, no shutdown).
+        host.request_quit("backend_request").unwrap();
+        assert_eq!(host.lifecycle.phase(), Phase::QuitPending);
+        let quit = pending(&host);
+        host.message(
+            7,
+            protocol::error(
+                Some(&quit),
+                &RpcError::new(protocol::code::INTERNAL_ERROR, "x"),
+            ),
+            None,
+        );
+        assert_eq!(host.lifecycle.phase(), Phase::Running);
+        // A malformed answer is no decision too; an explicit false still vetoes.
+        host.request_quit("backend_request").unwrap();
+        let quit = pending(&host);
+        host.message(7, protocol::success(&quit, json!({"allow":"yes"})), None);
+        assert_eq!(host.lifecycle.phase(), Phase::Running);
+        host.request_quit("backend_request").unwrap();
+        let quit = pending(&host);
+        host.message(7, protocol::success(&quit, json!({"allow":false})), None);
+        assert_eq!(host.lifecycle.phase(), Phase::Running);
+        assert!(host.windows["two"].probe.status.contains("Quit cancelled"));
+    }
+
+    /// HOST-05 (T15): a pump that stops at its message budget re-wakes the loop for the rest
+    /// instead of leaving it queued until the next timer or input event.
+    #[test]
+    fn pump_budget_yields_and_rewakes_until_the_queue_is_drained() {
+        let app = format!("org.ui4me.host05.{}", std::process::id());
+        let lock = crate::platform::InstanceLock::acquire(&app).unwrap();
+        let mut host = controller(true);
+        let wakes = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = wakes.clone();
+        host.wake = Arc::new(move || {
+            counter.fetch_add(1, Ordering::SeqCst);
+        });
+        let server = Server::bind(&app, &lock.instance_key, Arc::new(|| {})).unwrap();
+        let mut peer =
+            crate::platform::NativeStream::connect(&server.endpoint, Duration::from_secs(5))
+                .unwrap();
+        host.server = Some(server);
+        let total = 3 * PUMP_MESSAGES + 10;
+        for _ in 0..total {
+            protocol::write_frame(&mut peer, &protocol::notification("test.noop", json!({})))
+                .unwrap();
+        }
+        // Wait until the reader thread has queued everything (Connected + messages).
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut pumps = 0;
+        let mut seen = 0;
+        while Instant::now() < deadline {
+            let before = wakes.load(Ordering::SeqCst);
+            host.pump(None);
+            pumps += 1;
+            if host.pump_more {
+                assert_eq!(wakes.load(Ordering::SeqCst), before + 1, "a yield re-wakes");
+                seen += 1;
+            } else if seen >= 3 {
+                break;
+            } else {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+        assert!(
+            seen >= 3,
+            "at least three budget yields for {total} messages"
+        );
+        assert!(pumps < 100);
+        assert_eq!(
+            slow_command_name(&json!({"method":"document.command",
+                "params":{"command":{"op":"request_submit"}}})),
+            "document.command request_submit"
+        );
+        assert_eq!(
+            slow_command_name(&json!({"id":"x","result":{}})),
+            "response"
+        );
+        host.server.as_mut().unwrap().close();
+    }
+
+    /// HOST-11: no part of the secret token becomes a public endpoint name.
+    #[test]
+    fn multiple_instance_endpoint_key_is_independent_of_the_token() {
+        let key = multiple_instance_key().unwrap();
+        assert_eq!(key.len(), 24);
+        assert!(key.bytes().all(|b| b.is_ascii_hexdigit()));
+        assert_ne!(key, multiple_instance_key().unwrap());
+        let token = random_token().unwrap();
+        assert!(!token.contains(&key));
+        assert!(crate::platform::endpoint_for(&key).is_ok());
     }
 
     #[test]
