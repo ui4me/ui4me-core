@@ -62,6 +62,12 @@ def claim_start() -> None:
     _started = True
 
 
+def release_start() -> None:
+    """A start that failed (StartupError, ...) does not count: allow a retry."""
+    global _started
+    _started = False
+
+
 def managed() -> bool:
     """True when this process is a backend started by the native host."""
     endpoint, token = os.environ.get(ENDPOINT), os.environ.get(TOKEN)

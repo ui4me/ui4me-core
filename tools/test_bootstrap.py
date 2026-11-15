@@ -92,6 +92,28 @@ class RoleTests(unittest.TestCase):
                 Application.start(name="Second")
         launch.assert_not_called()
 
+    def test_start_can_be_retried_after_a_startup_error(self):
+        """binding review #6: a failed start must not count as the one start."""
+        self.addCleanup(setattr, _bootstrap, "_started", False)
+        with mock.patch.dict(os.environ, CLEAN, clear=True), \
+                mock.patch.object(_bootstrap, "launch",
+                                  side_effect=[StartupError("no host yet"), 0]) as launch:
+            with self.assertRaisesRegex(StartupError, "no host yet"):
+                Application.start(name="Retry")
+            with self.assertRaises(SystemExit) as finished:
+                Application.start(name="Retry")
+        self.assertEqual(finished.exception.code, 0)
+        self.assertEqual(launch.call_count, 2)
+        with mock.patch.dict(os.environ, {**CLEAN, "UI4ME_ENDPOINT": "e", "UI4ME_TOKEN": "t"}, clear=True), \
+                mock.patch.object(Application, "from_environment",
+                                  side_effect=[StartupError("connect failed"), "app"]):
+            _bootstrap._started = False
+            with self.assertRaisesRegex(StartupError, "connect failed"):
+                Application.start(name="Retry")
+            self.assertEqual(Application.start(name="Retry"), "app")
+            with self.assertRaisesRegex(StartupError, "already called"):
+                Application.start(name="Retry")
+
     @unittest.skipUnless(os.name == "posix", "a negative (killed by signal) status exists only on POSIX")
     def test_host_killed_by_a_signal_maps_to_the_shell_status(self):
         with mock.patch("sys.stderr") as stderr:
