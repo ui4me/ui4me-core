@@ -96,7 +96,8 @@ Consequences for your code:
 - The program must be a script file or `python -m package.module`. `python -c`, code piped through standard input and the interactive interpreter raise `StartupError`.
 - **Arguments.** The backend is started with the same command line, so `python app.py --debug` gives the backend the same `sys.argv`, and `argparse` works in both roles.
 - The backend has no standard input, so `input()` cannot be used. `print()` output still reaches your terminal through the launcher.
-- **Lifetime.** Ctrl+C or SIGTERM in the terminal stops the host and the backend. If the launcher itself is killed, the host is stopped too (Linux: parent-death signal; Windows: a kill-on-close job object).
+- **Lifetime.** Ctrl+C or SIGTERM in the terminal stops the host and the backend (exit status 130 or 143; this is a hard stop, so `on_shutdown` callbacks do not run). If the launcher itself is killed, the host is stopped too (Linux: parent-death signal; Windows: a kill-on-close job object). If the host itself is ended by a signal, the launcher prints `ui4me-host was terminated by SIGKILL ...` and exits with the shell convention 128 + signal number (137 for SIGKILL).
+- **Once per process.** Call `Application.start()` once; a second call in the same process raises `StartupError` instead of starting another host.
 - **Errors.** If an exception escapes a `with Application.start(...)` block in the backend, its traceback is printed before the connection closes, so it is not lost when the host stops the failed backend.
 - Inside a backend that was started from a manifest (`ui4me-host run --app`), `Application.start()` simply connects, so the same script works both ways.
 
@@ -475,7 +476,7 @@ Common `RpcError.code` values: `-32602` invalid parameters (including unknown el
 
 An exception in a callback never stops the application or the callback thread: its full traceback is printed to stderr (`UI4ME: 'click' event handler failed:` followed by the traceback), and the other handlers registered for the same event still run. An exception in a close or quit policy callback counts as a veto (the window stays open or the application keeps running), and the traceback says that closing or quitting was refused.
 
-`sys.exit(n)` (`SystemExit`) or `KeyboardInterrupt` raised in any callback, typically a "Quit" button, requests an orderly application quit (as `app.request_quit()` would; the quit policy still applies) and `app.run()` then raises `SystemExit(n)` after the shutdown, so the process exits with that status (`KeyboardInterrupt`: 130). In `on_before_close` it refuses that close and requests the quit; in `on_before_quit` it allows the quit. A request result that cannot be encoded as JSON (for example `float("nan")` or an arbitrary object returned from an `app.rpc.on_request` handler) is answered with error `-32603` and printed, instead of leaving the host waiting.
+`sys.exit(n)` (`SystemExit`) or `KeyboardInterrupt` raised in any callback, typically a "Quit" button, requests an orderly application quit (as `app.request_quit()` would; the quit policy still applies) and `app.run()` then raises `SystemExit(n)` after the shutdown, so the backend process exits with that status (`KeyboardInterrupt`: 130; the host, and with it a direct-start launcher, reports any non-zero backend status as exit status 1). In `on_before_close` it refuses that close and requests the quit; in `on_before_quit` it allows the quit. A request result that cannot be encoded as JSON (for example `float("nan")` or an arbitrary object returned from an `app.rpc.on_request` handler) is answered with error `-32603` and printed, instead of leaving the host waiting.
 
 ## Threading and callbacks
 
@@ -561,7 +562,7 @@ A result that would exceed the message limit is an error, never silently truncat
 | `ui4me-host --version` | Host version. |
 | `ui4me-skill install\|status\|uninstall [--agents all\|claude,codex,...] [--scope user\|project] [--project PATH] [--dry-run] [--force]` | Install the bundled `ui4me-python` coding-agent skill. See [agent skills](../guides/agent-skills.md). |
 
-`ui4me_core.host_binary()` returns the path of the native host that `start()` and `ui4me-host` use (`UI4ME_HOST_BINARY` if set, otherwise the packaged binary, otherwise `ui4me-host` on `PATH`).
+`ui4me_core.host_binary()` returns the path of the native host that `start()` and `ui4me-host` use (`UI4ME_HOST_BINARY` if set, otherwise the packaged binary, otherwise the first native `ui4me-host` executable on `PATH`; the package's own `ui4me-host` console script is skipped, so a source checkout or editable install without a built host fails with `FileNotFoundError` instead of running that script in a loop).
 
 ## Parity with the PowerShell API
 

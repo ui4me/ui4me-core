@@ -45,6 +45,21 @@ class StartupError(RuntimeError):
     """UI4ME could not start the native host or connect to it."""
 
 
+# Process-local: forget_host_environment() removes the environment marker, so
+# a second Application.start() in a backend would otherwise launch a new host.
+_started = False
+
+
+def claim_start() -> None:
+    """Refuse a second Application.start() in one process (BIND-09)."""
+    global _started
+    if _started:
+        raise StartupError(
+            "Application.start() was already called in this process. Call it once, at the top "
+            "of the script, and pass the Application it returned to the code that needs it.")
+    _started = True
+
+
 def managed() -> bool:
     """True when this process is a backend started by the native host."""
     endpoint, token = os.environ.get(ENDPOINT), os.environ.get(TOKEN)
@@ -313,7 +328,7 @@ def run_host(command: list[str], *, env: dict[str, str]) -> int:
             assert process.stderr is not None
             for line in process.stderr:
                 relay_line(line, verbose=verbose, stdout=sys.stdout, stderr=sys.stderr)
-            return process.wait()
+            return _exit_status(process.wait())
         except (KeyboardInterrupt, _Interrupted) as interruption:
             stopped = True
             # A terminal Ctrl+C reaches the host too; a signal sent to the
@@ -338,6 +353,19 @@ def run_host(command: list[str], *, env: dict[str, str]) -> int:
             process.wait()
         if process.stderr is not None:
             process.stderr.close()
+
+
+def _exit_status(status: int) -> int:
+    """Map a POSIX "killed by signal N" status (-N) to the shell's 128 + N."""
+    if status >= 0:
+        return status
+    try:
+        name = signal.Signals(-status).name
+    except ValueError:
+        name = f"signal {-status}"
+    _write(sys.stderr, f"ui4me-host was terminated by {name}. If nothing else sent that signal, "
+                       "this is a UI4ME defect: please report it, with UI4ME_VERBOSE=1 output.")
+    return 128 - status
 
 
 _MANIFEST_PREFIX = "ui4me-start-"

@@ -13,7 +13,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
-import tomllib
+import time
 import unittest
 from unittest import mock
 
@@ -22,6 +22,14 @@ sys.path.insert(0, str(ROOT / "python"))
 sys.path.insert(0, str(ROOT / "tools"))
 from ui4me_core import Application, StartupError, _bootstrap  # noqa: E402
 from run_example import checkout_environment  # noqa: E402
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 (supported): tomllib is 3.11+
+    try:
+        import tomli as tomllib  # type: ignore[no-redef]
+    except ModuleNotFoundError:
+        tomllib = None
 
 
 def built_host() -> str | None:
@@ -55,6 +63,7 @@ class RoleTests(unittest.TestCase):
             self.assertEqual({k for k in os.environ if k.startswith("UI4ME_")}, {"UI4ME_VERBOSE"})
 
     def test_managed_start_connects_without_launching(self):
+        self.addCleanup(setattr, _bootstrap, "_started", False)
         sentinel = object()
         with mock.patch.dict(os.environ, {**CLEAN, "UI4ME_ENDPOINT": "e", "UI4ME_TOKEN": "t"}, clear=True), \
                 mock.patch.object(Application, "from_environment", return_value=sentinel) as connect, \
@@ -70,6 +79,25 @@ class RoleTests(unittest.TestCase):
                         {"startup_timeout_ms": 10}, {"shutdown_timeout_ms": True}):
             with self.subTest(options=options), self.assertRaises(ValueError):
                 Application.start(**options)
+
+    def test_second_start_in_one_process_is_refused(self):
+        self.addCleanup(setattr, _bootstrap, "_started", False)
+        with mock.patch.dict(os.environ, {**CLEAN, "UI4ME_ENDPOINT": "e", "UI4ME_TOKEN": "t"}, clear=True), \
+                mock.patch.object(Application, "from_environment", return_value=object()), \
+                mock.patch.object(_bootstrap, "launch") as launch:
+            Application.start(name="First")
+            # The first call removed the environment: without the guard this
+            # second call would launch another host from inside the backend.
+            with self.assertRaisesRegex(StartupError, "already called"):
+                Application.start(name="Second")
+        launch.assert_not_called()
+
+    def test_host_killed_by_a_signal_maps_to_the_shell_status(self):
+        with mock.patch("sys.stderr") as stderr:
+            self.assertEqual(_bootstrap._exit_status(-9), 137)
+            self.assertEqual(_bootstrap._exit_status(-6), 134)
+        self.assertIn("SIGKILL", "".join(str(c) for c in stderr.mock_calls))
+        self.assertEqual(_bootstrap._exit_status(3), 3)
 
     def test_from_environment_explains_direct_start(self):
         with mock.patch.dict(os.environ, CLEAN, clear=True), \
@@ -95,6 +123,8 @@ class ManifestTests(unittest.TestCase):
                 cwd="/tmp/a b", app_id="org.example.App", name='Say "hi" — café', version="2.0",
                 icon=None, instance="multiple", startup_timeout_ms=30000, shutdown_timeout_ms=5000,
                 max_windows=4, env={"PYTHONUNBUFFERED": "1"})
+            if tomllib is None:
+                self.skipTest("needs tomllib (Python 3.11+) or tomli to parse TOML")
             manifest = tomllib.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(manifest["backend"]["args"], arguments)
         self.assertEqual(manifest["backend"]["program"], r"C:\Users\Zoë\.venv\Scripts\python.exe")
@@ -254,6 +284,98 @@ class DirectStartIntegrationTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("StartupError: UI4ME_HOST_BINARY does not exist", result.stderr.decode())
         self.assertEqual(self.lines(result.stdout), ["ROLE launcher"])
+
+    def run_script(self, body, *arguments, timeout=60):
+        temporary = tempfile.TemporaryDirectory(prefix="ui4me direct ")
+        self.addCleanup(temporary.cleanup)
+        script = Path(temporary.name) / "app.py"
+        script.write_text(textwrap.dedent(body), encoding="utf-8")
+        env = checkout_environment(CLEAN)
+        env.update({"UI4ME_TEST_MODE": "1", "UI4ME_HOST_BINARY": built_host(), "PYTHONIOENCODING": "utf-8"})
+        return subprocess.run([sys.executable, str(script), *arguments], cwd=temporary.name, env=env,
+                              capture_output=True, timeout=timeout, check=False)
+
+    def test_second_start_raises_instead_of_launching_another_host(self):
+        started = time.monotonic()
+        result = self.run_script('''
+            from ui4me_core import Application, StartupError
+            app = Application.start(name="twice", instance="multiple")
+            try:
+                Application.start(name="twice", instance="multiple")
+            except StartupError as error:
+                print("REFUSED", error, flush=True)
+            app.open_html("<p>x</p>")
+            app.rpc.call_async("app.request_quit")
+            app.run()
+            ''')
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        self.assertIn("REFUSED Application.start() was already called", result.stdout.decode())
+        self.assertLess(time.monotonic() - started, 30)
+
+    def test_quit_requested_during_startup_is_orderly(self):
+        result = self.run_script('''
+            from ui4me_core import Application
+            app = Application.start(name="early quit", instance="multiple")
+            app.open_html("<p>x</p>")
+            app.request_quit()
+            app.run()
+            print("RETURNED", flush=True)
+            ''')
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        self.assertIn("RETURNED", result.stdout.decode())
+
+    def test_failed_first_page_can_fall_back(self):
+        result = self.run_script('''
+            from ui4me_core import Application, RpcError
+            app = Application.start(name="fallback", instance="multiple")
+            try:
+                app.open_html("<p onclick='x'>scripted</p>")
+            except RpcError as error:
+                print("FIRST FAILED", error.code, flush=True)
+                window = app.open_html("<p id='f'>fallback</p>")
+            print("TEXT", window.document.get_text("f"), flush=True)
+            app.ready()
+            print("WINDOWS", len(app.rpc.call("window.list")), flush=True)
+            app.request_quit()
+            app.run()
+            ''')
+        out = result.stdout.decode()
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        self.assertIn("FIRST FAILED -32602", out)
+        self.assertIn("TEXT fallback", out)
+
+    def test_sys_exit_in_a_close_policy_quits_instead_of_hanging(self):
+        result = self.run_script('''
+            import sys
+            from ui4me_core import Application
+            app = Application.start(name="policy exit", instance="multiple")
+            window = app.open_html("<p>x</p>")
+            window.on_before_close(lambda: sys.exit(0))
+            app.ready()
+            window.request_close()
+            app.run()
+            print("ORDERLY", flush=True)
+            ''', timeout=40)
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        self.assertIn("ORDERLY", result.stdout.decode())
+        self.assertIn("requesting application quit", result.stderr.decode())
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "POSIX signal status")
+    def test_host_killed_by_signal_gives_status_137_and_a_message(self):
+        result = self.run_script('''
+            import os, signal, time
+            from ui4me_core import Application
+            app = Application.start(name="killed", instance="multiple")
+            app.open_html("<p>x</p>")
+            app.ready()
+            host = os.getppid()
+            with open(f"/proc/{host}/comm") as comm:
+                assert comm.read().strip() == "ui4me-host", "the backend's parent is not the host"
+            os.kill(host, signal.SIGKILL)
+            time.sleep(30)
+            ''')
+        self.assertEqual(result.returncode, 137, result.stderr.decode())
+        self.assertIn("terminated by SIGKILL", result.stderr.decode())
 
     def test_temporary_manifest_is_removed(self):
         self.assertEqual(self.run_app().returncode, 0)

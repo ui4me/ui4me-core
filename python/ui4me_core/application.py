@@ -99,13 +99,15 @@ class Application:
         from the script path. ``instance="single"`` forwards a second launch
         of the same app to the running one; ``"multiple"`` allows several.
         Already inside a host-launched backend (``ui4me-host run --app``),
-        the options are validated and the call simply connects.
+        the options are validated and the call simply connects. Call it once
+        per process: a second call raises ``StartupError``.
         """
         from . import _bootstrap
 
         _bootstrap.validate_options(name=name, app_id=app_id, version=version, instance=instance,
                                     startup_timeout_ms=startup_timeout_ms,
                                     shutdown_timeout_ms=shutdown_timeout_ms, max_windows=max_windows)
+        _bootstrap.claim_start()
         if _bootstrap.managed():
             app = cls.from_environment()
             _bootstrap.forget_host_environment()

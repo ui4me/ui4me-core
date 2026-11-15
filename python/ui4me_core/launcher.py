@@ -21,12 +21,33 @@ def host_binary() -> Path:
     binary = Path(os.fspath(entry))
     if binary.is_file():
         return binary
-    fallback = shutil.which(name)
-    if fallback:
-        return Path(fallback)
+    for folder in os.environ.get("PATH", "").split(os.pathsep):
+        found = shutil.which(name, path=folder) if folder else None
+        # The ui4me-host console script of this package is on PATH too; never
+        # resolve to it (that would run this wrapper again, forever).
+        if found and _is_native_host(Path(found)):
+            return Path(found)
     raise FileNotFoundError(
         "UI4ME native host is missing. Install the platform wheel or set UI4ME_HOST_BINARY."
+        " (A 'ui4me-host' on PATH that is only the Python wrapper script is not used.)"
     )
+
+
+def _is_native_host(path: Path) -> bool:
+    """True for a native executable, False for a script or a pip/uv
+    console-script launcher (a small .exe with a zip archive appended)."""
+    try:
+        with path.open("rb") as file:
+            magic = file.read(4)
+            if os.name != "nt":
+                return magic == b"\x7fELF"
+            if magic[:2] != b"MZ":
+                return False
+            size = file.seek(0, os.SEEK_END)
+            file.seek(max(0, size - 65_557))  # The zip end record is in the last 64 KiB + 22 bytes.
+            return b"PK\x05\x06" not in file.read()
+    except OSError:
+        return False
 
 
 def main() -> int:
