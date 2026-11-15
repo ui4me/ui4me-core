@@ -68,7 +68,7 @@ LICENSES = 'x86_64-pc-windows-msvc stylo MPL-2.0 windows-sys Apache-2.0'
 MODULES = ['ui4me_core/skills.py', 'ui4me_core/scaffold.py', 'ui4me_core/_skills/ui4me-python/SKILL.md',
            'ui4me_core/_skills/ui4me-python/references/python-api.md', 'ui4me_core/application.py',
            'ui4me_core/client.py', 'ui4me_core/live_bitmap.py', 'ui4me_core/launcher.py',
-           'ui4me_core/_bootstrap.py']
+           'ui4me_core/_bootstrap.py', 'ui4me_core/py.typed']
 
 
 def wheel(folder: Path, host_name: str, host: bytes, tag: str) -> Path:

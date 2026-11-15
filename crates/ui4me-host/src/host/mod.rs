@@ -1967,7 +1967,9 @@ mod tests {
             protocol::write_frame(&mut peer, &protocol::notification("test.noop", json!({})))
                 .unwrap();
         }
-        // Wait until the reader thread has queued everything (Connected + messages).
+        // Let the reader thread queue everything (Connected + messages) before the first
+        // pump; a pump racing the reader drains fewer than PUMP_MESSAGES and never yields.
+        std::thread::sleep(Duration::from_millis(500));
         let deadline = Instant::now() + Duration::from_secs(10);
         let mut pumps = 0;
         let mut seen = 0;
