@@ -396,11 +396,13 @@ document.prevent_default("editor", "keydown", key="s", ctrl=True)  # Ctrl+S no l
 
 
 def on_key(event):
-    if event["ctrl"] and event["key"].lower() == "s":
+    if event["ctrl"] and event["code"] == "KeyS":
         document.set_text("status", "Saved")
 
 document.on("keydown", on_key, element="editor")
 ```
+
+`key` is the character of the active keyboard layout (on a Russian layout Ctrl+S reports `key` "ы"); test `code` (the physical key, `"KeyS"`) for shortcuts so they work on every layout. A `prevent_default` rule with `key="s"` already matches by physical key when Ctrl or Meta is held.
 
 **Errors.** `doc.on("error", callback)` receives asynchronous failures for this document (for example a failed clipboard transfer) as `{"type": "error", "message", "fatal"}`. The message is also printed to stderr. `fatal=True` means the host unloaded the document after a rendering failure; the window stays open, and you may load a replacement from the callback.
 

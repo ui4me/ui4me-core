@@ -462,11 +462,13 @@ Set-UI4MEPreventDefault -Document $doc -Element editor -EventType keydown -Key s
 
 $null = Register-UI4MEDocumentEvent -Document $doc -Type keydown -Element editor -Callback {
     param($e)
-    if ($e.ctrl -and $e.key -eq 's') {
+    if ($e.ctrl -and $e.code -eq 'KeyS') {
         Set-UI4MEDocumentText -Document $doc -Element status -Text 'Saved'
     }
 }
 ```
+
+`key` is the character of the active keyboard layout (on a Russian layout Ctrl+S reports `key` "ы"); test `code` (the physical key, `KeyS`) for shortcuts so they work on every layout. A prevent-default rule with `-Key s` already matches by physical key when Ctrl or Meta is held.
 
 **Errors.** `Register-UI4MEDocumentEvent -Type error` receives asynchronous failures for this
 document (for example a failed clipboard transfer) as `{ type = 'error'; message; fatal }`.

@@ -712,7 +712,7 @@ Set-UI4MEPreventDefault -Document $doc -Element editor -EventType keydown -Key s
 
 $null = Register-UI4MEDocumentEvent -Document $doc -Type keydown -Element editor -Callback {
     param($e)
-    if ($e.ctrl -and $e.key -eq 's') {
+    if ($e.ctrl -and $e.code -eq 'KeyS') {
         Set-UI4MEDocumentText -Document $doc -Element status -Text 'Saved'
     }
 }

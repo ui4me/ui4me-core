@@ -751,7 +751,7 @@ def main():
         document.prevent_default("editor", "keydown", key="s", ctrl=True)
 
         def handle_key(event):
-            if event.get("ctrl") and event.get("key", "").lower() == "s":
+            if event.get("ctrl") and event.get("code") == "KeyS":
                 document.set_text("status", "Saved")
 
         document.on("keydown", handle_key, element="editor")

@@ -11,8 +11,8 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | F-03 | High | runtime | B | FIXED_VERIFIED | crates/ui4me-assets/tests/svg_depth.rs, fuzz_resources::harness_svg_depth | svg_depth tests; svgdepth 700 and 2,000 clip-path chain refused cleanly windowed (baseline abort) | Windows Server 2022 interactive RDP, release host b2a31a4: see docs/stabilization/evidence/lead/windows-integration-b2a31a4.md: svgdepth 500/700 pass; svg_depth passes natively | c8b9832 8806f21 | Conservative model may reject unusual valid SVGs (reference hop = one level; cycles rejected). |
 | F-04 | High | runtime | C | FIXED_VERIFIED | text::fonts::environment::font_identity_tests, tests/font_identity_soak.rs (R4a) | soak +78.3 MiB baseline -> +95 KiB fixed; windowed nested kwin 900 s: baseline 58->296 MiB, fixed flat 44-55 MiB | native unit+soak pass; windowed replay: scenario does not reproduce on Windows baseline (flat), fixed flat (evidence/lead/windows-f04-a02d21a.md) | 7c111c8 | One heap copy per system font file remains (FontBlob/FontTable take bytes); content-number map never shrinks (one entry per distinct file). 30-min windowed soak R4b not yet automated. |
 | F-06 | Medium | runtime | B | FIXED_VERIFIED | move_element_rejects_depth_over_limit, move_chains_cannot_exceed_the_limit, insert_html_counts_insertion_depth, a_rejected_move_rolls_back_its_batch | 6 unit tests (fail on baseline) | n/a | 7587eb3 | set_text under an element at depth 256 now refused (small behaviour change, documented). |
-| F-07 | High | runtime | D | IN_PROGRESS | document::geometry_tests (T5 incl. proptest) | Linux headless: cargo test renderer/host + verify.py (ws D); integration Python suite | pending | c712525 136a214 | Selection extents exact only for translations under scale/rotate. |
-| F-08 | High | runtime | D | IN_PROGRESS | document::interact_tests (focus reveal) | Linux headless: cargo test renderer/host + verify.py (ws D); integration Python suite | Native Windows (SendInput scan codes + UIA, interactive session): fails on 1.0.1, passes on integration (evidence/lead/windows-native-interaction.md) | c4ba3ad 0d1f6d0 |  |
+| F-07 | High | runtime | D | FIXED_VERIFIED | document::geometry_tests (T5 incl. proptest) | Native KDE Plasma 6.6 Wayland on linuxDEV (ydotool input, AT-SPI, screenshots): PASS (evidence/n-native-linux/README.md): AT-SPI extents within 2 px of pixels for position:fixed, translate and scale(1.5) ancestors; caret hit-testing; fcitx5 candidate window at the caret | Renderer geometry tests pass on winDEV (553/553); caret click placement exercised natively only on Linux. Windows IME candidate placement and UIA caret bounds NOT exercised natively. | c712525 136a214 | Selection extents exact only for translations under scale/rotate. Windows IME/UIA caret bounds and rotation/non-1.0 scale factors not verified natively; ibus not tested. |
+| F-08 | High | runtime | D | FIXED_VERIFIED | document::interact_tests (focus reveal) | Native KDE Plasma 6.6 Wayland on linuxDEV (ydotool input, AT-SPI, screenshots): PASS (evidence/n-native-linux/README.md): Tab/AT-SPI grabFocus/backend focus scroll off-screen targets into view, extents inside viewport | Native Windows (SendInput scan codes + UIA, interactive session): fails on 1.0.1, passes on integration (evidence/lead/windows-native-interaction.md) | c4ba3ad 0d1f6d0 | Focus reveal inside a position:fixed scroll container not exercised natively. |
 | F-09 | Medium | process | F | FIXED_VERIFIED | tools/test_ci_signal.py, test_workflows.py::test_lint_runs_even_when_the_verifier_fails | verify.py default stages green on non-release tree (ws F and integration python suite) | n/a | 099f238 026d68f |  |
 | F-10 | High | process | F | FIXED_VERIFIED | tools/test_ci_gate.py (recorded API: d053e09 refused, c6fd71d accepted, missing refused) | unit tests + live read-only API run | n/a | 9240d35 126075e | Workflow wiring unrun on GitHub. |
 | F-11 | Medium | process | F | IN_PROGRESS | test_release_artifacts.py | pending | pending | 5d1dc25 8aa7f4a 126075e |  |
@@ -23,19 +23,19 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | F-18 | Medium | runtime | G | FIXED_VERIFIED | platform::linux::tests::supervised_environment_skips_what_systemd_rejects, test_host_lifecycle::test_t15_supervised_start_with_rejected_environment | real systemd-run; baseline: Cannot assign environment variable BASH_FUNC_x%% | n/a | 3dc57a7 |  |
 | F-19 | Medium | runtime | E | FIXED_VERIFIED | Unit.Tests.ps1 BIND-PS-11 (PosixOnly), evidence/e-bindings/ps-f19-allusers-container.sh | Docker mcr.microsoft.com/powershell: AllUsers install as root, run as unprivileged user: baseline throws, fixed runs headless app (evidence/e-bindings/ps-f19-allusers-container.md) | n/a (Not applicable on Windows (no execute bit); verified the chmod/cache path is unreachable on Windows (Get-UI4MEHostPath guard) and the test is excluded there) | 9827c3d | Cache under XDG_CACHE_HOME grows one copy per version/hash. |
 | F-20 | Medium | process | F | NOT_REPRODUCED |  | gh api: visibility=public; PublicEvent 2026-11-12 by owner; 18/19 metadata URLs 200 (CHANGELOG 404 until on main) | pending | 37c0399 |  |
-| F-21 | Medium | process | F | IN_PROGRESS | tools/test_version_source.py | pending | pending | d24fbe0 805e59e |  |
-| F-22 | Medium | process | F | IN_PROGRESS | T11, T14 | pending | pending | 026d68f |  |
+| F-21 | Medium | process | F | FIXED_VERIFIED | tools/test_version_source.py, tools/test_release_metadata.py | bump_version.py 1.0.2 rewrote the 8 forced locations; version.py --check --strict PASS; test_version_source PASS | RC wheel built from the 1.0.2 sdist on winDEV (see F-11) | d24fbe0 805e59e bba9e6d |  |
+| F-22 | Medium | process | F | BLOCKED | T11, T14 | local equivalents PASS | local equivalents PASS (evidence/lead/windows-bindings-29f9f8d.md) | 026d68f 73e99d6 |  |
 | F-23 | Medium | process | F | FIXED_VERIFIED | test_workflows.py, zizmor 0 / actionlint 0, cargo deny check | local zizmor, actionlint, cargo deny | n/a | 14b1ae3 026d68f 126075e | Windows binary unsigned (owner: certificate needed); attestations unrun. |
 | F-24 | Medium | process | F | FIXED_VERIFIED | test_release_metadata.py | python suite | n/a | 37c0399 61c381b | Changelog 1.0.2 section to finalise; qualification records not yet generated from tools. |
 | F-25 | Low-Medium | runtime | G | FIXED_VERIFIED | AcceptLoopTests, TerminationSignalTests, RelaunchTests, PolicyAnswerTests, host::tests::error_answers_to_policy_requests_are_no_decision | all T15 tests pass; each fails on baseline; launcher SIGINT/SIGTERM exit 130/143 with on_shutdown | host lifecycle tests pass; Ctrl+Break direct start: Python exit 130 + on_shutdown; PowerShell 5.1/7 exit 130, UntilShutdown returns, no debugger prompt (evidence/lead/windows-bindings-29f9f8d.md) | 7813ef8 92977d2 1d2753a 2c1233a 0adab8c f5b3fb7 92a7ea1 334ede8 | WM_ENDSESSION (logoff/shutdown) not exercised natively; KillMode=mixed and HOST-12 SID check deferred (G). Ctrl+C typed in a real console not exercised (CTRL_BREAK via API only). |
 | F-26 | Low-Medium | runtime | E | FIXED_VERIFIED | tools/test_bootstrap.py, tools/test_launcher.py, tools/test_application.py | Linux: verify.py all stages PASS at 29f9f8d (verify-integ6); Pester 72/72 real host on pwsh 7.7; Python suites on 3.10/3.13/3.14/3.14t | BIND-04 on Windows: real host True, pip shims False; bootstrap/launcher tests pass on 3.10 and 3.13 (evidence/lead/windows-bindings-29f9f8d.md) | c3e1cca 0922dcf | BIND-05 (lossy print relay through the 512-line log ring) DEFERRED: needs a host option (stdio=inherit) or a lossless relay. |
-| F-27 | Low-Medium | runtime | F | IN_PROGRESS |  | pending | pending |  |  |
+| F-27 | Low-Medium | runtime | F | DEFERRED |  | pending | pending | 14b1ae3 |  |
 | F-28 | Medium | runtime | E | FIXED_VERIFIED | powershell/tests/Callbacks.Tests.ps1, Unit.Tests.ps1, DirectStart.Tests.ps1 | Linux: verify.py all stages PASS at 29f9f8d (verify-integ6); Pester 72/72 real host on pwsh 7.7; Python suites on 3.10/3.13/3.14/3.14t | Pester real host 70/70 on 5.1 and 7.4.6 (evidence/lead/windows-bindings-29f9f8d.md) | 916b1d7 df14e52 334ede8 | PS-09 strict [bool] policy is a documented behaviour change from 1.0.1. Launcher ends with [Environment]::Exit (skips PowerShell exit handlers such as transcripts). |
 | F-29 | High | runtime | E | FIXED_VERIFIED | tools/test_binding_robustness.py ControlNotificationTests (T16), powershell/tests/Delivery.Tests.ps1 | Linux: verify.py all stages PASS at 29f9f8d (verify-integ6); Pester 72/72 real host on pwsh 7.7; Python suites on 3.10/3.13/3.14/3.14t; e6 overflow probe: 191 dropped + closed lost -> 0 control dropped, window retired (evidence/e-bindings/py-e6-overflow.md) | PS 5.1 and 7 windowed burst N=100 x 6 rounds: PROBE_PASS, droppedControl=0, droppedDiscrete=0; Delivery.Tests pass on both; Python suites pass (evidence/lead/windows-bindings-29f9f8d.md) | 0922dcf b6b2d86 df14e52 | Control messages unbounded by design (thousands of document.error possible). Interest filtering drops events that arrive before their handler is registered; replacing the document.event handler via rpc.on_notification disables the filter. PowerShell delivers only ~8-20% of a 10,800-event transition burst to callbacks (coalescible, counted). |
 | F-16a | High | runtime | C | FIXED_VERIFIED | regression::append_cliff::append_after_twenty_unrelated_updates_shapes_at_most_two_paragraphs (T13) | 2,000 rows append after 20 updates: 691-750 ms -> 54-55 ms; shaped 2,001 -> 1 | append_cliff test passes natively | 3335e26 |  |
-| F-16b | Medium | runtime | C+D | IN_PROGRESS | family_resolution_tests, truncated_generic_expansion_selects_the_same_fonts, a11y T13 counters (ws D) | cold render 828-930 ms -> 273-334 ms; a11y builds/100 ticks no AT 100 -> 0 | pending | c955e44 98bc678 |  |
-| F-17 | High | runtime | D | IN_PROGRESS | document::interact_tests (link Enter, T10 matrix) | Linux headless: cargo test renderer/host + verify.py (ws D); integration Python suite | Native Windows (SendInput scan codes + UIA, interactive session): fails on 1.0.1, passes on integration (evidence/lead/windows-native-interaction.md) | 4b186e7 |  |
-| F-17b | Medium | runtime | D | IN_PROGRESS | keyboard::shortcut_key tests, click common-ancestor tests | Linux headless: cargo test renderer/host + verify.py (ws D); integration Python suite | Native Windows (SendInput scan codes + UIA, interactive session): fails on 1.0.1, passes on integration (evidence/lead/windows-native-interaction.md) | efee6a2 a25f757 |  |
+| F-16b | Medium | runtime | C+D | FIXED_VERIFIED | family_resolution_tests, truncated_generic_expansion_selects_the_same_fonts, a11y T13 counters (ws D) | cold render 828-930 ms -> 273-334 ms; a11y builds/100 ticks no AT 100 -> 0 | renderer lib 553/553 and host tests on winDEV; UIA tree correct in the engine-thread smoke (evidence/lead/windows-engine-thread-smoke.md) | c955e44 98bc678 | RENDER-07: O(document) set_text (~27 ms at 2,000 rows) remains; RENDER-09 insert_html validation O(n) (deferred). |
+| F-17 | High | runtime | D | FIXED_VERIFIED | document::interact_tests (link Enter, T10 matrix) | Native KDE Plasma 6.6 Wayland on linuxDEV (ydotool input, AT-SPI, screenshots): PASS (evidence/n-native-linux/README.md): Enter on link gives keydown, click, link_activated | Native Windows (SendInput scan codes + UIA, interactive session): fails on 1.0.1, passes on integration (evidence/lead/windows-native-interaction.md) | 4b186e7 |  |
+| F-17b | Medium | runtime | D | FIXED_VERIFIED | keyboard::shortcut_key tests, click common-ancestor tests | Native KDE Plasma 6.6 Wayland on linuxDEV (ydotool input, AT-SPI, screenshots): PASS (evidence/n-native-linux/README.md): Russian layout Ctrl+A/C/V/Z by physical key; icon-press/padding-release clicks; found and fixed prevent_default physical-key mismatch (658d8f7) | Native Windows (SendInput scan codes + UIA, interactive session): fails on 1.0.1, passes on integration (evidence/lead/windows-native-interaction.md) | efee6a2 a25f757 658d8f7 | Docs examples now test event code (KeyS); apps that match event key for shortcuts still fail on non-Latin layouts, as in browsers. |
 
 ## Specialist findings
 
@@ -47,12 +47,12 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | HOST-04 | Low-Med | F-25 | G | FIXED_VERIFIED | 7813ef8 0adab8c |  |
 | HOST-05 | Low-Med |  | G | FIXED_VERIFIED | eb4bb24 |  |
 | HOST-06 | Low | F-14 | H | FIXED_VERIFIED | c30e1e0 ( 268de65 | request_submit linear in release (24/31/44 ms at 1k/2k/4k fields). Superlinear cost is first layout of many inline inputs (0.52/2.33/17.3 s) - handed to ws H. |
-| HOST-07 | Low-Med | F-25 | G | IN_PROGRESS | 92977d2 f5b3fb7 |  |
+| HOST-07 | Low-Med | F-25 | G | FIXED_VERIFIED | 92977d2 f5b3fb7 |  |
 | HOST-08 | Low | F-25 | G | FIXED_VERIFIED | 8c8cab3 |  |
 | HOST-09 | Low | F-02 | A | FIXED_VERIFIED | c90062f 78df633 8c8cab3 eae0ad9 |  |
 | HOST-10 | Low | F-25 | G | FIXED_VERIFIED | 1d2753a |  |
 | HOST-11 | Low |  | G | FIXED_VERIFIED | 203a8fb |  |
-| HOST-12 | Low |  | G | IN_PROGRESS | 203a8fb | SQOS identification + session check done; server SID check deferred (false refusal risk, needs elevated/non-elevated Windows pairs). |
+| HOST-12 | Low |  | G | DEFERRED | 203a8fb | SQOS identification + session check done (203a8fb); server SID ownership check deferred: false-refusal risk across elevated/non-elevated pairs needs a dedicated Windows test matrix. |
 | HOST-13 | Low |  | G | FIXED_VERIFIED | 203a8fb |  |
 | HOST-14 | Low |  | G | FIXED_VERIFIED | eb210dc |  |
 | HOST-15 | Low-Med | F-25 | G | FIXED_VERIFIED | 2c1233a |  |
@@ -68,24 +68,24 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | RENDER-08 | Low-Med |  | C | DEFERRED |  | Full frame 8 ms @1280x800, ~20 ms @4K; damage-limited present is roadmap 8.3 (optional). |
 | RENDER-09 | Low |  | C | DEFERRED |  | insert_html validation is ~95% of cost on 40k-node docs (3.85 ms/insert). Exact fragment-only check needs an id index and reachable-node counter in ui4me-document; plan in evidence/h-stalls/inputsec-10-11-render-09.md. |
 | RENDER-10 | Low (test gap) |  | C | FIXED_VERIFIED | 8806f21 | Fuzz workers on half production stack + depth/SVG generators; nightly scheduled by ws F. |
-| RENDER-11 | Low |  | C | OPEN |  |  |
-| RENDER-12 | Low-Med | F-27 | F | OPEN |  |  |
-| RENDER-13 | Low |  | C | OPEN |  |  |
-| INTERACT-01 | High | F-08 | D | IN_PROGRESS |  |  |
-| INTERACT-02 | High | F-07 | D | IN_PROGRESS |  |  |
-| INTERACT-03 | High | F-07 | D | IN_PROGRESS |  |  |
-| INTERACT-04 | Medium | F-16b | C+D | IN_PROGRESS |  |  |
-| INTERACT-05 | Medium→High (F-17) | F-17 | D | IN_PROGRESS |  |  |
-| INTERACT-06 | Medium | F-17b | D | IN_PROGRESS |  |  |
-| INTERACT-07 | Medium | F-17b | D | IN_PROGRESS |  |  |
-| INTERACT-08 | Medium | F-02 | A | OPEN |  |  |
+| RENDER-11 | Low |  | C | DEFERRED |  | crate-wide allow(dead_code) cleanup; maintenance, post-1.0.2. |
+| RENDER-12 | Low-Med | F-27 | F | DEFERRED | 14b1ae3 | verify_patches.sh (Stylo/Taffy patch-stack drift) scheduled nightly (14b1ae3); reducing/upstreaming the Taffy delta postponed per 08-non-recommendations (large rebase risk for a stabilization release). |
+| RENDER-13 | Low |  | C | DEFERRED |  | raw text_ptr aliasing in HostTree: sound today; refactor post-1.0.2. |
+| INTERACT-01 | High | F-08 | D | FIXED_VERIFIED | see F-08 |  |
+| INTERACT-02 | High | F-07 | D | FIXED_VERIFIED | see F-07 |  |
+| INTERACT-03 | High | F-07 | D | FIXED_VERIFIED | see F-07 |  |
+| INTERACT-04 | Medium | F-16b | C+D | FIXED_VERIFIED | 98bc678 |  |
+| INTERACT-05 | Medium→High (F-17) | F-17 | D | FIXED_VERIFIED | see F-17 |  |
+| INTERACT-06 | Medium | F-17b | D | FIXED_VERIFIED | see F-17b 658d8f7 |  |
+| INTERACT-07 | Medium | F-17b | D | FIXED_VERIFIED | see F-17b |  |
+| INTERACT-08 | Medium | F-02 | A | DEFERRED |  | Host-side pointermove coalescing per frame not implemented. Mitigated: F-02 (8 MiB byte-bounded queue, no message cap) and F-29 (bindings evict coalescible events first). Post-1.0.2. |
 | INTERACT-09 | Low (Windows IME in password fields, not run) |  | D | DEFERRED |  | Deferred: patched winit-win32 ImeRequest::Disable semantics unverified; needs native Windows IME test (proposal: disable IME when ime.password on cfg(windows)). |
-| INTERACT-10 | Low |  | D | IN_PROGRESS | 4738155 |  |
-| INTERACT-11 | Low |  | D | OPEN |  |  |
+| INTERACT-10 | Low |  | D | FIXED_VERIFIED | 4738155 |  |
+| INTERACT-11 | Low |  | D | DEFERRED |  | drag-region tag list and fixed double-click timing; low, post-1.0.2. |
 | INTERACT-12 | Low |  | D | DEFERRED |  | Deferred: depends on native IM event ordering (Wayland text-input, IMM32); removing quiet window could reintroduce stale-commit bug. |
 | INTERACT-13 | Low |  | D | DEFERRED |  | Deferred: SPI_GETWHEELSCROLLLINES changes Windows scroll speed; needs native verification. |
-| INTERACT-14 | Low |  | D | OPEN |  |  |
-| INTERACT-15 | Low |  | D | OPEN |  |  |
+| INTERACT-14 | Low |  | D | DEFERRED |  | vendored patch maintenance notes; low, post-1.0.2. |
+| INTERACT-15 | Low |  | D | DEFERRED |  | platform divergence disclosure: partially addressed in docs/concepts; remaining items post-1.0.2. |
 | BIND-01 | Medium | F-13 | E | FIXED_VERIFIED | 0922dcf |  |
 | BIND-02 | Medium→High (F-29) | F-29 | E | FIXED_VERIFIED | 0922dcf |  |
 | BIND-03 | Medium | F-13 | E | FIXED_VERIFIED | 0922dcf |  |
@@ -131,29 +131,29 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | INPUTSEC-05 | Low-Med | F-14 | H | FIXED_VERIFIED | b20efc5 ec4a764 |  |
 | INPUTSEC-06 | Medium | F-14 | H | FIXED_VERIFIED | 467bb7d |  |
 | INPUTSEC-07 | High (=F-01) | F-01 | B | FIXED_VERIFIED | 554b58d c8b9832 |  |
-| INPUTSEC-08 | Low | F-23, F-27 | F | IN_PROGRESS |  |  |
-| INPUTSEC-09 | Low-Med | F-27 | F | IN_PROGRESS |  |  |
+| INPUTSEC-08 | Low | F-23, F-27 | F | FIXED_VERIFIED | 14b1ae3 |  |
+| INPUTSEC-09 | Low-Med | F-27 | F | DEFERRED | 14b1ae3 | verify_patches.sh (Stylo/Taffy patch-stack drift) scheduled nightly (14b1ae3); reducing/upstreaming the Taffy delta postponed per 08-non-recommendations (large rebase risk for a stabilization release). |
 | INPUTSEC-10 | Low |  | H | DEFERRED |  | Windows DLL search-order hardening (+crt-static, /DEPENDENTLOADFLAG:0x800, SetDefaultDllDirectories) belongs in host build/main; recommendations in evidence/h-stalls/inputsec-10-11-render-09.md. Not a regression; post-1.0.2. |
 | INPUTSEC-11 | Low |  | H | FIXED_VERIFIED | 79b9bec | checked_add in Reader::need and command length; unit test fails on baseline |
-| RELEASE-01 | High | F-10 | F | IN_PROGRESS |  |  |
-| RELEASE-02 | High→Medium (F-09) | F-09 | F | IN_PROGRESS |  |  |
+| RELEASE-01 | High | F-10 | F | FIXED_VERIFIED | 9240d35 |  |
+| RELEASE-02 | High→Medium (F-09) | F-09 | F | FIXED_VERIFIED | 099f238 |  |
 | RELEASE-03 | Medium | F-11 | F | IN_PROGRESS |  |  |
 | RELEASE-04 | Medium | F-11 | F | IN_PROGRESS |  |  |
 | RELEASE-05 | Medium | F-20 | F | NOT_REPRODUCED |  | Repository public since 2026-11-12; links resolve (see F-20). |
-| RELEASE-06 | Medium | F-19 | E | OPEN |  |  |
+| RELEASE-06 | Medium | F-19 | E | FIXED_VERIFIED | 9827c3d |  |
 | RELEASE-07 | Medium | F-21 | F | IN_PROGRESS |  |  |
 | RELEASE-08 | Medium | F-22 | F | IN_PROGRESS |  |  |
-| RELEASE-09 | Medium | F-23 | F | IN_PROGRESS |  |  |
-| RELEASE-10 | Medium | F-24 | F | IN_PROGRESS |  |  |
-| RELEASE-11 | Medium | F-24 | F | IN_PROGRESS |  |  |
-| RELEASE-12 | Low-Med | F-10 | F | IN_PROGRESS |  |  |
-| RELEASE-13 | Low |  | F | IN_PROGRESS |  |  |
-| RELEASE-14 | Low |  | F | IN_PROGRESS |  |  |
-| RELEASE-15 | Low |  | F | IN_PROGRESS |  |  |
-| RELEASE-16 | Low |  | F | IN_PROGRESS |  |  |
-| RELEASE-17 | Low |  | F | IN_PROGRESS |  |  |
-| RELEASE-18 | Low |  | F | IN_PROGRESS |  |  |
-| RELEASE-19 | Low-Med |  | F | IN_PROGRESS |  |  |
+| RELEASE-09 | Medium | F-23 | F | FIXED_VERIFIED | 14b1ae3 |  |
+| RELEASE-10 | Medium | F-24 | F | FIXED_VERIFIED | 37c0399 |  |
+| RELEASE-11 | Medium | F-24 | F | FIXED_VERIFIED | 37c0399 |  |
+| RELEASE-12 | Low-Med | F-10 | F | BLOCKED |  | Owner decision: branch protection / PR-only main / CODEOWNERS are repository settings outside the code; needs the owner and push access. Recommendations unchanged from the audit. |
+| RELEASE-13 | Low |  | F | FIXED_VERIFIED | 126075e |  |
+| RELEASE-14 | Low |  | F | BLOCKED | 026d68f | Workflow change verified statically (tools/test_workflows.py, actionlint-equivalent checks, ci_gate tests); NOT executed on GitHub Actions: pushing the branch is not authorized. Concurrency/cancellation, caching and timeouts wired in ci.yml. |
+| RELEASE-15 | Low |  | F | FIXED_VERIFIED | 37c0399 126075e d24fbe0 |  |
+| RELEASE-16 | Low |  | F | FIXED_VERIFIED | 824353c |  |
+| RELEASE-17 | Low |  | F | FIXED_VERIFIED | 5d1dc25 |  |
+| RELEASE-18 | Low |  | F | FIXED_VERIFIED | 126075e |  |
+| RELEASE-19 | Low-Med |  | F | BLOCKED | 026d68f | Workflow change verified statically (tools/test_workflows.py, actionlint-equivalent checks, ci_gate tests); NOT executed on GitHub Actions: pushing the branch is not authorized. nightly.yml added with schedule, concurrency and timeouts. |
 
 ## Tests T1–T16
 
@@ -163,16 +163,16 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | T2 | FIXED_VERIFIED | crates/ui4me-host/src/transport.rs tests | cargo test (default) | Fails on baseline (message 236 refused). |
 | T3 | FIXED_VERIFIED | tools/test_headless_clock.py | python stage | Linux + Windows |
 | T4 | FIXED_VERIFIED | renderer font_identity_tests, tests/font_identity_soak.rs | cargo test (default) | Baseline: +78.3 MiB; fixed +95 KiB; native Windows pass |
-| T5 | IN_PROGRESS | renderer document::geometry_tests |  |  |
+| T5 | FIXED_VERIFIED | renderer document::geometry_tests |  | Unit tests pass Linux+Windows; native checks: evidence/n-native-linux (Linux) and evidence/lead/windows-native-interaction.md (Windows) |
 | T6 | FIXED_VERIFIED | fuzz_gate.rs, fuzz_resources.rs (#[ignore]) | nightly (ws F) | Small-stack workers; depth (incl. inline-block/button/multicol units), SVG depth and SVG filter-cost generators. Linux: depth 120 s/151 cases, svg_filters 90 s/1,476 cases, 0 findings. Nightly via ws F. |
 | T7 | IN_PROGRESS | tools/test_ci_signal.py, test_workflows.py |  |  |
 | T8 | IN_PROGRESS | tools/test_ci_gate.py |  |  |
 | T9 | FIXED_VERIFIED | tools/test_binding_robustness.py CallbackRobustnessTests; Callbacks.Tests.ps1 | python stage; Pester | Fails on baseline; Windows 3.10/3.13 and 5.1/7 pass |
-| T10 | IN_PROGRESS | renderer document::interact_tests |  |  |
+| T10 | FIXED_VERIFIED | renderer document::interact_tests |  | Unit tests pass Linux+Windows; native checks: evidence/n-native-linux (Linux) and evidence/lead/windows-native-interaction.md (Windows) |
 | T11 | IN_PROGRESS | ci.yml python matrix 3.10-3.14 + Pester (unrun on GitHub) |  |  |
 | T12 | IN_PROGRESS | ci.yml clean-wheel + allusers jobs, verify-published.yml |  |  |
 | T13 | FIXED_VERIFIED | regression::append_cliff, a11y presence counters | cargo test (default) | append shapes 1 paragraph; 0 a11y builds per 100 ticks without AT |
-| T14 | IN_PROGRESS | tools/windowed_smoke.py + nightly |  |  |
+| T14 | IN_PROGRESS | tools/windowed_smoke.py + nightly |  | tools/windowed_smoke.py 4/4 on the live KDE Wayland session (linuxDEV) and under nested kwin --virtual; nightly job not yet run on GitHub |
 | T15 | FIXED_VERIFIED | tools/test_host_lifecycle.py, host unit tests | python stage | Linux full; Windows: host lifecycle subset + Ctrl+Break direct start (Python, PS 5.1, PS 7) |
 | T16 | FIXED_VERIFIED | tools/test_binding_robustness.py ControlNotificationTests; powershell/tests/Delivery.Tests.ps1 | python stage; Pester | Fails on baseline; Windows pass incl. windowed N=100 burst probe |
 
@@ -209,4 +209,4 @@ Generated from [tracker.json](tracker.json) by `python3 tools/stabilization_trac
 | P17 | Vendored dependencies verifiably equal upstream plus patches | MET manually | MET manually |  |
 | P18 | Secrets least-privilege | MET | MET |  |
 
-Consolidated status counts: FIXED_VERIFIED 20, IN_PROGRESS 9, NOT_REPRODUCED 1
+Consolidated status counts: BLOCKED 1, DEFERRED 1, FIXED_VERIFIED 26, IN_PROGRESS 1, NOT_REPRODUCED 1
