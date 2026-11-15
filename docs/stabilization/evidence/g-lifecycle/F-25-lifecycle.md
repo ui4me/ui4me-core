@@ -30,3 +30,13 @@ Unit: `host::tests::termination_request_starts_an_orderly_shutdown_and_a_second_
 
 Windows console control + WM_QUERYENDSESSION/WM_ENDSESSION: implemented
 (`platform/windows.rs`), type/lint-checked with `tools/windows_source_check.py` only.
+
+## HOST-10 relaunch during primary shutdown (`RelaunchTests`)
+
+Primary (single instance) requests its quit 0.5 s after ready and its backend takes 1.5 s to
+exit after `app.shutdown`; a second launch of the same app starts 0.8 s after ready.
+
+| Host | Observed |
+| --- | --- |
+| baseline | second launch exits 1 at once: `Primary instance is shutting down (RPC -32004)` |
+| this branch | second launch logs `primary instance is shutting down; waiting to take over`, acquires the lock when the primary exits (primary exit 0), starts its own backend on the same endpoint, later exits 143 on SIGTERM |

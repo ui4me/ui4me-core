@@ -56,7 +56,7 @@ class WaitingHost:
         deadline = time.monotonic() + 60
         while not ready.is_file():
             if self.process.poll() is not None or time.monotonic() > deadline:
-                raise AssertionError(f"backend never became ready:\n{self.host_log()}")
+                raise AssertionError(f"backend never became ready (exit {self.process.poll()}):\n{self.host_log()}")
             time.sleep(0.02)
         time.sleep(0.05)
         self.ready = json.loads(ready.read_text(encoding="utf-8"))
@@ -167,6 +167,29 @@ class TerminationSignalTests(unittest.TestCase):
 
     def test_t15_sighup_delivers_app_shutdown(self):
         self.check_signal(signal.SIGHUP)
+
+
+
+@unittest.skipUnless(built_host(), "build the host first: cargo build -p ui4me-host")
+@unittest.skipUnless(os.name == "posix", "uses SIGTERM to end the primary")
+class RelaunchTests(unittest.TestCase):
+    def test_t15_relaunch_during_primary_shutdown_becomes_the_primary(self):
+        """HOST-10: a second launch while the primary shuts down waits and takes over."""
+        app_id = "org.ui4me.test.Relaunch"
+        # The primary's backend quits 0.5 s after ready and then takes 1.5 s to exit.
+        first = WaitingHost(self, "quit-soon", "linger", app_id=app_id)
+        runtime = Path(first.env["XDG_RUNTIME_DIR"])
+        time.sleep(0.8)
+        self.assertIsNone(first.process.poll(), "the primary is still shutting down")
+        started = time.monotonic()
+        second = WaitingHost(self, app_id=app_id, runtime=runtime)   # raises if it exits early
+        self.assertEqual(first.wait(10), 0, first.host_log())
+        self.assertGreater(time.monotonic() - started, 0.8, "the relaunch waited for the lock")
+        self.assertIn("waiting to take over", second.host_log())
+        self.assertEqual(second.ready["endpoint"], first.ready["endpoint"], "same single instance")
+        second.process.send_signal(signal.SIGTERM)
+        self.assertEqual(second.wait(10), 143, second.host_log())
+        self.assertTrue(second.report()["ok"])
 
 
 if __name__ == "__main__":

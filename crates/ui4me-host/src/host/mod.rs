@@ -230,16 +230,13 @@ pub struct Host {
 pub fn run(config: AppConfig, headless: bool) -> Result<i32> {
     platform::initialize_application(&config.app.id)?;
     let instance = if config.host.instance == InstancePolicy::Single {
-        Some(InstanceLock::acquire(&config.app.id)?)
+        match primary_or_forward(&config)? {
+            Some(lock) => Some(lock),
+            None => return Ok(0),
+        }
     } else {
         None
     };
-    if let Some(lock) = &instance {
-        if !lock.primary {
-            forward_activation(&lock.endpoint, &config)?;
-            return Ok(0);
-        }
-    }
     let result = Arc::new(AtomicI32::new(0));
     let termination = crate::termination::Termination::global();
     if headless {
@@ -285,21 +282,74 @@ fn event_loop() -> Result<EventLoop, winit::error::EventLoopError> {
     builder.build()
 }
 
+/// The primary instance lock, or `None` once this launch was delivered to the running primary.
+///
+/// HOST-10: a primary that is shutting down answers `-32004`, and one that has already closed
+/// its endpoint cannot be reached; either is about to release the lock. This launch then waits
+/// for the lock (bounded by the primary's shutdown deadline plus a margin) and becomes the new
+/// primary, instead of failing the user's relaunch. If another launch became the primary in the
+/// meantime, this one is forwarded to it.
+fn primary_or_forward(config: &AppConfig) -> Result<Option<InstanceLock>> {
+    let lock = InstanceLock::acquire(&config.app.id)?;
+    if lock.primary {
+        return Ok(Some(lock));
+    }
+    let error = match forward_activation(&lock.endpoint, config, None) {
+        Ok(()) => return Ok(None),
+        Err(error) if primary_is_ending(&error) => error,
+        Err(error) => return Err(error),
+    };
+    drop(lock);
+    tracing::info!(
+        reason = format!("{error:#}"),
+        "primary instance is shutting down; waiting to take over"
+    );
+    let deadline = Instant::now()
+        + Duration::from_millis(config.host.shutdown_timeout_ms)
+        + Duration::from_secs(2);
+    loop {
+        std::thread::sleep(Duration::from_millis(50));
+        let lock = InstanceLock::acquire(&config.app.id)?;
+        if lock.primary {
+            tracing::info!("previous primary instance has exited; this launch is the primary");
+            return Ok(Some(lock));
+        }
+        // Still held: by the ending primary, or by a launch that took over first.
+        match forward_activation(&lock.endpoint, config, Some(Duration::from_millis(250))) {
+            Ok(()) => return Ok(None),
+            Err(error) if primary_is_ending(&error) && Instant::now() < deadline => {}
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+/// The primary answered "shutting down", or could not be reached or answer at all: it closes
+/// its endpoint, and then its connections, before it exits and releases the lock. Any other
+/// answer from a live primary (for example invalid parameters) is final.
+fn primary_is_ending(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<RpcError>()
+        .is_none_or(|rpc| rpc.code == protocol::code::CLOSED)
+}
+
 /// Deliver this launch to the primary instance. A primary that is still
 /// starting (for example two simultaneous launches) cannot yet deliver the
 /// activation to a ready backend, so retry within the manifest's bounded
 /// startup deadline instead of losing the user's launch.
-fn forward_activation(endpoint: &str, config: &AppConfig) -> Result<()> {
+/// `attempt` caps the time of each connection attempt (default 5 s).
+fn forward_activation(endpoint: &str, config: &AppConfig, attempt: Option<Duration>) -> Result<()> {
     let request = json!({"jsonrpc":"2.0","id":"activation","method":"app.activate",
         "params":{"args":std::env::args().collect::<Vec<_>>(),"cwd":std::env::current_dir()?,
             "activation_token":std::env::var("XDG_ACTIVATION_TOKEN").ok()}});
     let deadline = Instant::now()
         + Duration::from_millis(config.host.startup_timeout_ms)
         + Duration::from_secs(5);
+    let attempt = attempt.unwrap_or(Duration::from_secs(5));
     loop {
-        let timeout = deadline
-            .saturating_duration_since(Instant::now())
-            .clamp(Duration::from_millis(100), Duration::from_secs(5));
+        let timeout = deadline.saturating_duration_since(Instant::now()).clamp(
+            Duration::from_millis(100),
+            attempt.max(Duration::from_millis(100)),
+        );
         let response = transport::request(endpoint, request.clone(), timeout)?;
         match protocol::parse_response(response)?.outcome {
             Ok(_) => return Ok(()),

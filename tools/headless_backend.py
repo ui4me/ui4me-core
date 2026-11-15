@@ -183,7 +183,8 @@ def scenario_soak(peer, report, count="10000"):
 
 def scenario_wait(peer, report, *options):
     """Ready with one window, announce it (`REPORT.ready`), then serve the host until it sends
-    `app.shutdown`. Options: `decline-quit` answers app.before_quit with allow=false,
+    `app.shutdown`. Options: `quit-soon` requests the quit 0.5 s after ready, `linger` waits 1.5 s
+    after `app.shutdown`, `decline-quit` answers app.before_quit with allow=false,
     `busy-close`/`error-close` answer window.before_close with -32005/-32603 the first N=2
     times."""
     answers = {"before_close": 0}
@@ -206,8 +207,13 @@ def scenario_wait(peer, report, *options):
     ready = Path(str(report["_path"]) + ".ready")
     ready.write_text(json.dumps({"endpoint": os.environ["UI4ME_ENDPOINT"], "pid": diagnostics["pid"],
                                  "window_id": window["window_id"]}), encoding="utf-8")
+    if "quit-soon" in options:
+        time.sleep(0.5)
+        peer.call("app.request_quit")
     shutdown = peer.wait_for(lambda m: m.get("method") == "app.shutdown", timeout=120)
     report["shutdown"] = shutdown["params"]
+    if "linger" in options:
+        time.sleep(1.5)     # a backend that takes a while to save and exit
     report["log"] = [m.get("method") or m for m in peer.log]
     report["policy_requests"] = [[m["method"], m.get("params")] for m in peer.log
                                  if m.get("method") in ("window.before_close", "app.before_quit")]
