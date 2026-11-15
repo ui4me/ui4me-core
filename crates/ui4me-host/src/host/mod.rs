@@ -303,11 +303,8 @@ pub fn run(config: AppConfig, headless: bool) -> Result<i32> {
         let wake: Wake = Arc::new(move || proxy.wake_up());
         let mut host = Host::new(config, false, false, instance, wake, result.clone())?;
         host.watch_termination(termination.clone());
-        let outcome = event_loop.run_app(host);
-        termination.finished();
-        outcome?;
+        event_loop.run_app(host)?;
     }
-    termination.finished();
     Ok(result.load(Ordering::Relaxed))
 }
 
@@ -332,11 +329,21 @@ fn event_loop() -> Result<EventLoop, winit::error::EventLoopError> {
 /// primary, instead of failing the user's relaunch. If another launch became the primary in the
 /// meantime, this one is forwarded to it.
 fn primary_or_forward(config: &AppConfig) -> Result<Option<InstanceLock>> {
+    primary_or_forward_within(config, FORWARD_ATTEMPT)
+}
+
+/// How long the first delivery attempt to a running primary may take.
+const FORWARD_ATTEMPT: Duration = Duration::from_secs(5);
+
+fn primary_or_forward_within(
+    config: &AppConfig,
+    first_attempt: Duration,
+) -> Result<Option<InstanceLock>> {
     let lock = InstanceLock::acquire(&config.app.id)?;
     if lock.primary {
         return Ok(Some(lock));
     }
-    let error = match forward_activation(&lock.endpoint, config, None) {
+    let error = match forward_activation(&lock.endpoint, config, Some(first_attempt)) {
         Ok(()) => return Ok(None),
         Err(error) if primary_is_ending(&error) => error,
         Err(error) => return Err(error),
@@ -365,13 +372,32 @@ fn primary_or_forward(config: &AppConfig) -> Result<Option<InstanceLock>> {
     }
 }
 
-/// The primary answered "shutting down", or could not be reached or answer at all: it closes
-/// its endpoint, and then its connections, before it exits and releases the lock. Any other
-/// answer from a live primary (for example invalid parameters) is final.
+/// The primary answered "shutting down" (`-32004`), its endpoint cannot be connected to (it was
+/// removed, refuses connections, or stays busy for the whole attempt), or it closed the
+/// connection before answering: it closes its endpoint, and then its connections, before it
+/// exits and releases the lock. Any other outcome from a live primary is final — an error
+/// answer (for example invalid parameters), and also a request that was sent but not answered
+/// in time: the primary has queued it and may still deliver it, so retrying would turn one
+/// launch into many `app.activated` notifications (F-25 review #2).
 fn primary_is_ending(error: &anyhow::Error) -> bool {
-    error
-        .downcast_ref::<RpcError>()
-        .is_none_or(|rpc| rpc.code == protocol::code::CLOSED)
+    use crate::transport::EndpointLost;
+    use std::io::ErrorKind;
+    if let Some(rpc) = error.downcast_ref::<RpcError>() {
+        return rpc.code == protocol::code::CLOSED;
+    }
+    match error.downcast_ref::<EndpointLost>() {
+        Some(EndpointLost::Disconnected(_)) => true,
+        // `NativeStream::connect` retries a missing or refusing endpoint (Linux) and a missing or
+        // busy pipe (Windows ERROR_FILE_NOT_FOUND / ERROR_PIPE_BUSY) until its timeout.
+        Some(EndpointLost::Connect(error)) => matches!(
+            error.kind(),
+            ErrorKind::NotFound
+                | ErrorKind::ConnectionRefused
+                | ErrorKind::TimedOut
+                | ErrorKind::WouldBlock
+        ),
+        None => false,
+    }
 }
 
 /// Deliver this launch to the primary instance. A primary that is still
@@ -439,10 +465,8 @@ pub fn run_probe() -> Result<i32> {
         result.clone(),
     )?;
     let termination = crate::termination::Termination::global();
-    host.watch_termination(termination.clone());
-    let outcome = event_loop.run_app(host);
-    termination.finished();
-    outcome?;
+    host.watch_termination(termination);
+    event_loop.run_app(host)?;
     Ok(result.load(Ordering::Relaxed))
 }
 
@@ -1348,6 +1372,7 @@ impl Host {
     /// Receive this process's termination requests (signals, console control, session end).
     fn watch_termination(&mut self, termination: Arc<crate::termination::Termination>) {
         termination.set_wake(self.wake.clone());
+        termination.set_exit_status(self.exit_code.clone());
         if let Err(error) = platform::install_termination_handlers(termination.clone()) {
             tracing::warn!(
                 error = format!("{error:#}"),
@@ -1359,29 +1384,58 @@ impl Host {
 
     /// HOST-07: an external termination request (signal, console control, session end) is not
     /// an answer to a pending decision: it cancels them and starts the orderly shutdown with a
-    /// deadline short enough for process managers and session ends. A second request while
-    /// already shutting down forces the quit.
+    /// deadline short enough for process managers and session ends. A second termination
+    /// request while already shutting down forces the quit.
     fn terminate(&mut self, request: crate::termination::Request) {
-        let first = *self.termination_started.get_or_insert_with(Instant::now);
-        match self.lifecycle.phase() {
-            Phase::Stopped => {}
+        // Test hook (headless test mode only): an engine thread that hangs while handling the
+        // request, so the termination watchdog can be qualified against a real process.
+        if self.headless
+            && std::env::var_os("UI4ME_TEST_MODE").is_some()
+            && std::env::var_os("UI4ME_TEST_HANG_ENGINE_ON_TERMINATION").is_some()
+        {
+            tracing::warn!("test hook: the engine thread hangs on the termination request");
+            loop {
+                std::thread::sleep(Duration::from_secs(3600));
+            }
+        }
+        let first = self.termination_started;
+        if first.is_none() {
+            self.termination_started = Some(Instant::now());
+        }
+        match (self.lifecycle.phase(), first) {
+            (Phase::Stopped, _) => {}
+            // The first termination request while an allowed quit is already running: it is
+            // not a repeat, but it must still bound the (possibly long) configured deadline.
+            (Phase::Quitting, None) => {
+                tracing::warn!(
+                    source = request.source,
+                    "termination requested during shutdown; shortening the deadline"
+                );
+                let bound = Instant::now() + crate::termination::DEADLINE;
+                self.quit_deadline = Some(self.quit_deadline.map_or(bound, |d| d.min(bound)));
+                if !self.force_quit {
+                    self.exit_code.store(request.exit_code, Ordering::Relaxed);
+                }
+            }
             // One Ctrl+C often arrives twice: the terminal signals the host's process group and
             // a direct-start launcher forwards its own SIGINT as SIGTERM a moment later. Only a
             // request after this grace period is the user insisting.
-            Phase::Quitting if first.elapsed() < crate::termination::REPEAT_GRACE => {
+            (Phase::Quitting, Some(first))
+                if first.elapsed() < crate::termination::REPEAT_GRACE =>
+            {
                 tracing::debug!(
                     source = request.source,
                     "repeated termination request ignored"
                 );
             }
-            Phase::Quitting => {
+            (Phase::Quitting, Some(_)) => {
                 tracing::warn!(
                     source = request.source,
                     "termination requested again; forcing shutdown"
                 );
                 self.force_shutdown();
             }
-            phase => {
+            (phase, _) => {
                 tracing::warn!(
                     source = request.source,
                     "termination requested; shutting down"
@@ -1432,9 +1486,9 @@ impl Host {
         if let Some(server) = &mut self.server {
             server.close();
         }
-        if let Some(termination) = &self.termination {
-            termination.finished();
-        }
+        // Not `termination.finished()` here: a Windows session-end watcher returns on it and the
+        // process may be ended at once, before the windows are destroyed (clipboard flush) and
+        // the final logs are written. `main` signals it once `run`/`run_probe` returned.
         self.cancel_native_jobs("Host stopped");
         self.native_ids.clear();
         self.windows.clear();
@@ -1855,6 +1909,129 @@ mod tests {
         host.termination_started = Some(Instant::now() - crate::termination::REPEAT_GRACE);
         host.terminate(request);
         assert!(host.force_quit, "a later second request forces the quit");
+    }
+
+    /// F-25 review #4: stopping the controller does not release the watchers that hold the
+    /// process for a Windows session end (`termination.finished()`): windows are destroyed and
+    /// `run_app` returns only after `stop()`. The release happens when `main`'s
+    /// [`crate::termination::FinishOnDrop`] guard is dropped, after the run returned.
+    #[test]
+    fn stopping_the_host_does_not_signal_termination_finished() {
+        let mut host = controller(true);
+        let termination = Arc::new(crate::termination::Termination::default());
+        host.termination = Some(termination.clone());
+        let guard = crate::termination::FinishOnDrop::new(termination.clone());
+        termination.request(crate::termination::Request {
+            source: "CTRL_CLOSE_EVENT",
+            exit_code: 0,
+        });
+        host.pump(None);
+        assert_eq!(host.lifecycle.phase(), Phase::Stopped);
+        assert!(
+            !termination.wait_finished(Duration::ZERO),
+            "finished() before the event loop returned"
+        );
+        drop(host);
+        drop(guard);
+        assert!(termination.wait_finished(Duration::ZERO));
+    }
+
+    /// F-25 review #1: the first termination request while an allowed quit is already running
+    /// (with a long `shutdown_timeout_ms`) is not an "immediate repeat": it clamps the deadline
+    /// to the termination deadline and records its exit status. A repeat of that termination
+    /// request within the grace period is still not a force quit.
+    #[test]
+    fn first_termination_request_during_a_long_shutdown_clamps_the_deadline() {
+        let mut host = controller(true);
+        host.config.host.shutdown_timeout_ms = 60_000;
+        let termination = Arc::new(crate::termination::Termination::default());
+        host.termination = Some(termination.clone());
+        host.begin_shutdown();
+        assert_eq!(host.lifecycle.phase(), Phase::Quitting);
+        assert!(host.quit_deadline.unwrap() > Instant::now() + Duration::from_secs(50));
+        let request = crate::termination::Request {
+            source: "SIGTERM",
+            exit_code: 143,
+        };
+        let before = Instant::now();
+        host.terminate(request.clone());
+        let deadline = host.quit_deadline.unwrap();
+        assert!(
+            deadline <= before + crate::termination::DEADLINE + Duration::from_millis(100),
+            "deadline clamped to the termination deadline"
+        );
+        assert_eq!(host.exit_code.load(Ordering::Relaxed), 143);
+        assert!(!host.force_quit);
+        host.terminate(request);
+        assert!(!host.force_quit, "an immediate repeat is the same request");
+        assert_eq!(host.quit_deadline.unwrap(), deadline);
+        assert_eq!(host.exit_code.load(Ordering::Relaxed), 143);
+    }
+
+    /// F-25 review #2: a primary that accepts the connection but does not answer in time (its
+    /// GUI thread stalls) is not "ending". Retrying would queue one `app.activate` per attempt
+    /// in the primary, so the backend would get a burst of `app.activated` for one launch. The
+    /// launch fails instead, and the primary has received exactly one request.
+    #[test]
+    fn an_unanswering_primary_receives_one_activation_per_launch() {
+        let app = format!("org.ui4me.forward.stalled.{}", std::process::id());
+        let lock = crate::platform::InstanceLock::acquire(&app).unwrap();
+        assert!(lock.primary);
+        let server = Server::bind(&app, &lock.instance_key, Arc::new(|| {})).unwrap();
+        let mut config = controller(true).config.clone();
+        config.app.id = app;
+        config.host.instance = InstancePolicy::Single;
+        config.host.startup_timeout_ms = 1_000;
+        config.host.shutdown_timeout_ms = 1_000;
+        let result = primary_or_forward_within(&config, Duration::from_millis(300));
+        assert!(result.is_err(), "an unanswered launch fails");
+        let mut activations = 0;
+        while let Ok(event) = server.incoming.recv_timeout(Duration::from_millis(300)) {
+            if let TransportEvent::Message(_, value) = event {
+                if value["method"] == "app.activate" {
+                    activations += 1;
+                }
+            }
+        }
+        assert_eq!(activations, 1, "one launch, one activation request");
+        drop(server);
+        drop(lock);
+    }
+
+    /// F-25 review #2: what counts as "the primary is ending" (HOST-10): its `-32004` answer,
+    /// an endpoint that cannot be connected to, or a connection it closed before answering.
+    #[test]
+    fn only_closed_answers_and_lost_endpoints_mean_the_primary_is_ending() {
+        use crate::transport::EndpointLost;
+        use std::io::{Error, ErrorKind};
+        let ending = |e: anyhow::Error| primary_is_ending(&e);
+        assert!(ending(
+            RpcError::new(protocol::code::CLOSED, "closing").into()
+        ));
+        assert!(!ending(RpcError::invalid_params("bad").into()));
+        for kind in [
+            ErrorKind::NotFound,
+            ErrorKind::ConnectionRefused,
+            ErrorKind::TimedOut,
+        ] {
+            let lost = EndpointLost::Connect(Error::from(kind));
+            assert!(
+                ending(anyhow::Error::new(lost).context("connect")),
+                "{kind:?}"
+            );
+        }
+        let denied = EndpointLost::Connect(Error::from(ErrorKind::PermissionDenied));
+        assert!(!ending(anyhow::Error::new(denied)));
+        assert!(ending(anyhow::Error::new(EndpointLost::Disconnected(
+            "reset".into()
+        ))));
+        // A response timeout on an established connection.
+        assert!(!ending(anyhow::Error::new(Error::from(
+            ErrorKind::WouldBlock
+        ))));
+        assert!(!ending(anyhow::anyhow!(
+            "existing instance response timed out"
+        )));
     }
 
     /// HOST-15 (T15): an error answer to a policy request is no decision, never a veto and

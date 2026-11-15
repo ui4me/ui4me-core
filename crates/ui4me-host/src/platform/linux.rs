@@ -646,11 +646,24 @@ extern "C" fn on_termination_signal(signal: libc::c_int) {
     }
 }
 
+/// The termination watchdog's exit: no destructors, atexit handlers or locks that a hung engine
+/// thread may hold. The backend is ended by its containment (systemd scope, `PR_SET_PDEATHSIG`).
+fn exit_now(code: i32) {
+    const MESSAGE: &[u8] = b"ui4me-host: shutdown did not finish; process ended\n";
+    // SAFETY: write(2) from a static buffer and _exit(2) are always safe to call.
+    unsafe {
+        libc::write(2, MESSAGE.as_ptr().cast(), MESSAGE.len());
+        libc::_exit(code);
+    }
+}
+
 /// HOST-07: route `SIGTERM`, `SIGINT` and `SIGHUP` to `termination` instead of the default
 /// disposition (immediate death without `app.shutdown`). The handler writes the signal number
 /// to a self-pipe; a watcher thread turns it into a [`crate::termination::Request`] with exit
 /// status 128 + signal. Handlers are process-wide and reset to the default by `exec`, so
-/// backends and other children are unaffected. Installed once per process.
+/// backends and other children are unaffected. Installed once per process, together with the
+/// termination watchdog ([`crate::termination::Termination::watch`]), which ends the process
+/// with `_exit` when the engine thread does not finish the shutdown.
 pub fn install_termination_handlers(
     termination: std::sync::Arc<crate::termination::Termination>,
 ) -> Result<()> {
@@ -672,6 +685,10 @@ pub fn install_termination_handlers(
         libc::fcntl(write.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK);
     }
     let mut reader = File::from(read);
+    // F-25 review #3: escalation must not depend on the engine thread, which may be hung.
+    termination
+        .spawn_watchdog(exit_now)
+        .context("start termination watchdog")?;
     std::thread::Builder::new()
         .name("ui4me-signals".into())
         .spawn(move || {

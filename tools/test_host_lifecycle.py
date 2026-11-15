@@ -168,6 +168,36 @@ class TerminationSignalTests(unittest.TestCase):
     def test_t15_sighup_delivers_app_shutdown(self):
         self.check_signal(signal.SIGHUP)
 
+    def hung_engine(self, app_id):
+        return WaitingHost(self, app_id=app_id,
+                           extra_env={"UI4ME_TEST_HANG_ENGINE_ON_TERMINATION": "1"})
+
+    def test_f25_hung_engine_is_ended_after_the_termination_deadline(self):
+        """F-25 review #3: one SIGTERM ends a host whose engine thread hangs, about 2 s after
+        the 3 s termination deadline, with the recorded exit status."""
+        host = self.hung_engine("org.ui4me.test.HungEngineDeadline")
+        started = time.monotonic()
+        host.process.send_signal(signal.SIGTERM)
+        code = host.wait(15)
+        elapsed = time.monotonic() - started
+        self.assertEqual(code, 143, host.host_log())
+        self.assertGreater(elapsed, 4.0, host.host_log())
+        self.assertIn("engine thread hangs", host.host_log())
+        self.assertIn("process ended", host.host_log())
+
+    def test_f25_third_ctrl_c_ends_a_hung_engine(self):
+        """F-25 review #3: the third distinct Ctrl+C ends a hung host without waiting."""
+        host = self.hung_engine("org.ui4me.test.HungEngineThird")
+        started = time.monotonic()
+        for press in range(3):
+            if press:
+                time.sleep(1.1)   # beyond the 1 s repeat grace: a distinct request
+            host.process.send_signal(signal.SIGINT)
+        code = host.wait(15)
+        elapsed = time.monotonic() - started
+        self.assertEqual(code, 130, host.host_log())
+        self.assertLess(elapsed, 4.5, host.host_log())
+
 
 
 @unittest.skipUnless(built_host(), "build the host first: cargo build -p ui4me-host")

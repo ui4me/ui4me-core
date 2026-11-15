@@ -82,6 +82,11 @@ fn prepare() -> Command {
 
 /// Everything after argument parsing, on the engine thread.
 fn execute(command: Command) -> Result<i32> {
+    // HOST-07 / F-25 review #4: watchers that hold the process for a Windows console close or
+    // session end are released only when this guard drops: after the host, its windows and the
+    // event loop are gone and after the log guard below has flushed, on every exit path.
+    let _finished =
+        ui4me_host::termination::FinishOnDrop::new(ui4me_host::termination::Termination::global());
     let _logging = ui4me_host::logging::init()?;
     if matches!(command, Command::Doctor) {
         println!("{}", serde_json::to_string_pretty(&host::doctor())?);
@@ -140,8 +145,9 @@ fn execute(command: Command) -> Result<i32> {
 /// * Console and environment: `detach_owned_console` and every `set_var` stay on the main thread,
 ///   before any other thread is started. Signal and console-control handlers (HOST-07) are
 ///   process-wide; `host::run` installs them from this thread, after `bootstrap_supervised`, so
-///   the supervising launcher keeps the default disposition. They only record the request and
-///   wake this thread (`termination.rs`); the shutdown itself runs here.
+///   the supervising launcher keeps the default disposition. They record the request and wake
+///   this thread (`termination.rs`); the shutdown itself runs here. Only the escalation for a
+///   hung engine (the termination watchdog) ends the process from another thread.
 /// * Linux supervision: `bootstrap_supervised` waits on `systemd-run` from this thread; the
 ///   backend child's `PR_SET_PDEATHSIG` follows the thread that forked it, which is this thread,
 ///   and that thread lives exactly as long as the host (the process exits when it ends).
