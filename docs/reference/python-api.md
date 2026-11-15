@@ -565,7 +565,7 @@ A result that would exceed the message limit is an error, never silently truncat
 | `ui4me-host --version` | Host version. |
 | `ui4me-skill install\|status\|uninstall [--agents all\|claude,codex,...] [--scope user\|project] [--project PATH] [--dry-run] [--force]` | Install the bundled `ui4me-python` coding-agent skill. See [agent skills](../guides/agent-skills.md). |
 
-`ui4me_core.host_binary()` returns the path of the native host that `start()` and `ui4me-host` use (`UI4ME_HOST_BINARY` if set, otherwise the packaged binary, otherwise the first native `ui4me-host` executable on `PATH`; the package's own `ui4me-host` console script is skipped, so a source checkout or editable install without a built host fails with `FileNotFoundError` instead of running that script in a loop).
+`ui4me_core.host_binary()` returns the path of the native host that `start()` and `ui4me-host` use (`UI4ME_HOST_BINARY` if set, otherwise the packaged binary, otherwise the first `ui4me-host` executable on `PATH` that is not a Python console script: a native binary or a shell wrapper such as a distribution's or Nix's `#!/bin/sh` `exec` script is used, while the package's own `ui4me-host` console script (any script run by a Python interpreter) is skipped, so a source checkout or editable install without a built host fails with `FileNotFoundError` instead of running that script in a loop).
 
 ## Parity with the PowerShell API
 

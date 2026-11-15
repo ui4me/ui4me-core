@@ -86,6 +86,36 @@ class HostDiscoveryTests(unittest.TestCase):
         native = self.put("native", self.native())
         self.assertEqual(self.discover("scripts", "native"), native)
 
+    @unittest.skipIf(os.name == "nt", "POSIX executables")
+    def test_non_python_wrapper_scripts_on_path_are_accepted(self):
+        """binding review #7: distro/Nix wrappers (#!/bin/sh exec ...) and
+        non-ELF native hosts are legitimate; only Python shims are skipped."""
+        for index, content in enumerate((
+                b'#!/bin/sh\nexec /nix/store/abc-ui4me-host/bin/.ui4me-host-wrapped "$@"\n',
+                b'#! /usr/bin/env bash\nexec -a "$0" /opt/ui4me/ui4me-host "$@"\n',
+                b"\xcf\xfa\xed\xfe" + b"\0" * 256)):  # a Mach-O host
+            with self.subTest(content=content[:24]):
+                wrapper = self.put(f"wrapper{index}", content)
+                self.assertEqual(self.discover(f"wrapper{index}"), wrapper)
+
+    @unittest.skipIf(os.name == "nt", "POSIX executables")
+    def test_every_python_console_script_form_is_skipped(self):
+        shims = (
+            b"#!/usr/bin/env python3\nimport sys\nfrom ui4me_core.launcher import main\n",
+            b"#!/home/me/.venv/bin/python3.12 -I\nimport sys\n",
+            b"#!/usr/bin/pypy3\nimport sys\n",
+            # pip/uv when the interpreter path is long or contains spaces:
+            b"#!/bin/sh\n'''exec' \"/home/me/my venv/bin/python\" \"$0\" \"$@\"\n' '''\nimport sys\n",
+            # Any interpreter running this package's launcher:
+            b'#!/bin/sh\nexec /usr/bin/env -S python3 -m ui4me_core.launcher "$@"\n')
+        native = self.put("native", self.native())
+        for index, content in enumerate(shims):
+            with self.subTest(content=content[:40]):
+                self.put(f"shim{index}", content)
+                self.assertEqual(self.discover(f"shim{index}", "native"), native)
+                with self.assertRaisesRegex(FileNotFoundError, "Python wrapper"):
+                    self.discover(f"shim{index}")
+
 
 if __name__ == "__main__":
     unittest.main()
