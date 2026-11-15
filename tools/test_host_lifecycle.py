@@ -209,5 +209,19 @@ class PolicyAnswerTests(unittest.TestCase):
         self.assertIn("asking the close/quit decision again", host.host_log())
 
 
+
+@unittest.skipUnless(built_host(), "build the host first: cargo build -p ui4me-host")
+class BackendEnvironmentTests(unittest.TestCase):
+    def test_host_private_variables_are_not_inherited_by_the_backend(self):
+        """HOST-14: a backend (and any UI4ME app it starts) does not see this host's unit,
+        launcher or desktop realm."""
+        private = {"UI4ME_SYSTEMD_UNIT": "ui4me-host-1-2.service", "UI4ME_LAUNCHER": "1:2",
+                   "UI4ME_DESKTOP_REALM": "uid=0;test"}
+        host = WaitingHost(self, "quit-soon", app_id="org.ui4me.test.PrivateEnv",
+                           extra_env=private)
+        self.assertEqual(host.wait(15), 0, host.host_log())
+        self.assertEqual(host.report()["inherited_host_private_env"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

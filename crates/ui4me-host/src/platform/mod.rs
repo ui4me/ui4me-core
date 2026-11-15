@@ -20,6 +20,16 @@ pub use windows::*;
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
 compile_error!("ui4me-host 0.1 implements Linux and Windows; this target is not qualified");
 
+/// HOST-14: variables that describe *this* host process (its systemd unit, its launcher and the
+/// desktop realm it arbitrates in). A backend never inherits them: a UI4ME application that the
+/// backend starts must be supervised, watched and arbitrated as its own instance, not as a part
+/// of this one. A manifest cannot set them either (`config.rs`).
+pub const HOST_PRIVATE_ENV: [&str; 3] = [
+    "UI4ME_SYSTEMD_UNIT",
+    "UI4ME_LAUNCHER",
+    "UI4ME_DESKTOP_REALM",
+];
+
 /// Stable, non-secret namespace hash. This is not an authentication primitive.
 pub(crate) fn namespace_hash(value: &[u8]) -> String {
     let mut hash = 0xcbf29ce484222325_u64;

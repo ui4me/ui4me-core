@@ -291,6 +291,7 @@ fn reserved_env(key: &str) -> bool {
             key.as_str(),
             "UI4ME_ENDPOINT" | "UI4ME_TOKEN" | "UI4ME_APP_ID" | "UI4ME_PROTOCOL_VERSION"
         )
+        || crate::platform::HOST_PRIVATE_ENV.contains(&key.as_str())
 }
 
 /// `\\?\C:\dir` -> `C:\dir`; `\\?\UNC\server\share` -> `\\server\share`.
@@ -430,6 +431,14 @@ mod tests {
     fn transport_environment_cannot_be_overridden() {
         let text = format!("{}\n[backend.env]\nui4me_host_token='bad'", manifest());
         assert!(AppConfig::from_toml(&text, &std::env::temp_dir()).is_err());
+        // HOST-14: host-private process variables are reserved too.
+        for name in crate::platform::HOST_PRIVATE_ENV {
+            let text = format!("{}\n[backend.env]\n{}='x'", manifest(), name.to_lowercase());
+            assert!(
+                AppConfig::from_toml(&text, &std::env::temp_dir()).is_err(),
+                "{name}"
+            );
+        }
     }
 
     #[cfg(windows)]

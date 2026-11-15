@@ -980,6 +980,9 @@ pub fn spawn_backend(
     for (key, value) in std::env::vars_os() {
         environment.insert(key.to_string_lossy().to_uppercase(), (key, value));
     }
+    for name in super::HOST_PRIVATE_ENV {
+        environment.remove(name);
+    }
     for (key, value) in &config.env {
         environment.insert(key.to_uppercase(), (key.into(), value.into()));
     }

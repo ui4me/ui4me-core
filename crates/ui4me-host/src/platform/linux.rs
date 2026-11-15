@@ -753,6 +753,9 @@ pub fn spawn_backend(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    for name in super::HOST_PRIVATE_ENV {
+        command.env_remove(name);
+    }
     let parent = unsafe { libc::getpid() };
     unsafe {
         command.pre_exec(move || {

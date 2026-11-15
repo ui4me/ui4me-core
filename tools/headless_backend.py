@@ -271,6 +271,9 @@ def scenario_wait(peer, report, *options):
     report["policy_requests"] = [[m["method"], m.get("params")] for m in peer.log
                                  if m.get("method") in ("window.before_close", "app.before_quit")]
     report["activated"] = [m["params"] for m in peer.log if m.get("method") == "app.activated"]
+    report["inherited_host_private_env"] = sorted(
+        name for name in ("UI4ME_SYSTEMD_UNIT", "UI4ME_LAUNCHER", "UI4ME_DESKTOP_REALM")
+        if name in os.environ)
     report["ok"] = True
     return None
 

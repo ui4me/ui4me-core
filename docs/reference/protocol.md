@@ -79,7 +79,7 @@ The host starts the backend with its own environment plus `[backend.env]`, and t
 | `UI4ME_APP_ID` | `[app].id` from the manifest |
 | `UI4ME_PROTOCOL_VERSION` | `1` |
 
-These four names, and any name beginning with `UI4ME_HOST_`, are reserved: a manifest that sets them in `[backend.env]` is rejected (case-insensitively). The token is never written to a manifest, a command line or the log. A binding should remove these variables from its own process environment after connecting, so that child processes started by the application cannot reuse them (both bindings do). A binding that finds only one of `UI4ME_ENDPOINT`/`UI4ME_TOKEN` should fail rather than guess.
+The host's own process variables `UI4ME_SYSTEMD_UNIT`, `UI4ME_LAUNCHER` and `UI4ME_DESKTOP_REALM` are removed from the backend's environment, so a UI4ME application that the backend starts is supervised, watched and single-instance-arbitrated as an independent application. These seven names, and any name beginning with `UI4ME_HOST_`, are reserved: a manifest that sets them in `[backend.env]` is rejected (case-insensitively). The token is never written to a manifest, a command line or the log. A binding should remove these variables from its own process environment after connecting, so that child processes started by the application cannot reuse them (both bindings do). A binding that finds only one of `UI4ME_ENDPOINT`/`UI4ME_TOKEN` should fail rather than guess.
 
 ## Handshake: `host.hello`
 
