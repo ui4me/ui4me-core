@@ -259,6 +259,35 @@ fn stall_measure() {
         for n in [5_000, 10_000, 20_000, 40_000] {
             add(format!("unclosed div x{n}"), unclosed_divs(n));
         }
+        // CSS filters (the engine's own raster), on a 400x400 box.
+        let boxed = |f: &str| {
+            format!(
+                "<!doctype html><body style='margin:0'><div style='width:400px;height:400px;background:teal;filter:{f}'>x</div>"
+            )
+        };
+        for (name, f) in [
+            ("css blur(4px)", "blur(4px)".to_string()),
+            ("css blur(1000px)", "blur(1000px)".to_string()),
+            ("css 64 x blur(50px)", vec!["blur(50px)"; 64].join(" ")),
+            (
+                "css 64 x drop-shadow(0 0 50px red)",
+                vec!["drop-shadow(0 0 50px red)"; 64].join(" "),
+            ),
+            (
+                "css 64 x hue-rotate",
+                vec!["hue-rotate(10deg)"; 64].join(" "),
+            ),
+        ] {
+            add(name.into(), boxed(&f));
+        }
+        add(
+            "css backdrop-filter blur(128px)".into(),
+            "<!doctype html><body style='margin:0;background:red'><div style='width:400px;height:400px;backdrop-filter:blur(128px)'>x</div>".into(),
+        );
+        add(
+            "css 64 nested blur(50px)".into(),
+            nested("<div style='filter:blur(50px);padding:1px'>", "</div>", 64),
+        );
         v
     };
     println!("| case | ms | result |");
@@ -483,4 +512,44 @@ fn many_inline_inputs_lay_out_in_linear_time() {
     let a = inline_inputs(small);
     let b = inline_inputs(large);
     assert!(b < a * 8, "{small} inputs {a:?}, {large} inputs {b:?}");
+}
+
+// ---- INPUTSEC-03: SVG filter work is bounded per rasterisation (inline `<svg>` and images).
+
+#[test]
+fn pathological_svg_filters_render_in_bounded_time() {
+    let kernel = vec!["1"; 40 * 40].join(" ");
+    for (name, p) in [
+        ("turbulence numOctaves=10000", turbulence(10_000)),
+        ("morphology radius=1000", morphology(1000)),
+        (
+            "convolve order=40",
+            format!("<feConvolveMatrix order='40' kernelMatrix='{kernel}'/>"),
+        ),
+        ("1500 chained blurs", blur_chain(1500)),
+    ] {
+        for inline in [true, false] {
+            let what = format!("{name} inline={inline}");
+            let page = svg_page(&svg_filter(&p, 300), inline);
+            let markup = body_of(&page);
+            let r = bounded(move || {
+                let mut d = warm_document();
+                let t0 = Instant::now();
+                d.replace_children_html("host", &markup).unwrap();
+                let end = Instant::now() + Duration::from_secs(30);
+                let mut px = d.render(400, 400, 1.0).unwrap();
+                while d.has_pending_resources() && Instant::now() < end {
+                    std::thread::sleep(Duration::from_millis(1));
+                    px = d.render(400, 400, 1.0).unwrap();
+                }
+                (t0.elapsed(), px[400 * 150 + 150])
+            });
+            let Some((_, (t, centre))) = r else {
+                panic!("{what}: no result after {:?}", budget() * 4);
+            };
+            assert!(t < budget(), "{what}: {t:?}");
+            // Drawn without the filter: the teal rectangle (0x008080).
+            assert_eq!(centre, 0x008080, "{what}");
+        }
+    }
 }

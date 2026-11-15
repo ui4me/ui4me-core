@@ -136,6 +136,19 @@ pub trait SvgRenderer: Send + Sync {
         width_px: u32,
         height_px: u32,
     ) -> Result<DecodedImage, Status>;
+    /// [`SvgRenderer::rasterize`] within the filter work budget (F-14): `true` when the image was
+    /// drawn without its filters because they would cost more than
+    /// [`crate::policy::SVG_FILTER_WORK_BUDGET`] at this size. Adapters without filters keep the
+    /// default.
+    fn rasterize_bounded(
+        &self,
+        tree: &SvgTree,
+        width_px: u32,
+        height_px: u32,
+    ) -> Result<(DecodedImage, bool), Status> {
+        self.rasterize(tree, width_px, height_px)
+            .map(|d| (d, false))
+    }
 }
 
 /// The default raster decoder: the `image` crate adapter (T030, X-ACQ = PASS).
