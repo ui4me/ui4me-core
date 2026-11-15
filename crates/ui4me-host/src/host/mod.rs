@@ -1359,29 +1359,47 @@ impl Host {
 
     /// HOST-07: an external termination request (signal, console control, session end) is not
     /// an answer to a pending decision: it cancels them and starts the orderly shutdown with a
-    /// deadline short enough for process managers and session ends. A second request while
-    /// already shutting down forces the quit.
+    /// deadline short enough for process managers and session ends. A second termination
+    /// request while already shutting down forces the quit.
     fn terminate(&mut self, request: crate::termination::Request) {
-        let first = *self.termination_started.get_or_insert_with(Instant::now);
-        match self.lifecycle.phase() {
-            Phase::Stopped => {}
+        let first = self.termination_started;
+        if first.is_none() {
+            self.termination_started = Some(Instant::now());
+        }
+        match (self.lifecycle.phase(), first) {
+            (Phase::Stopped, _) => {}
+            // The first termination request while an allowed quit is already running: it is
+            // not a repeat, but it must still bound the (possibly long) configured deadline.
+            (Phase::Quitting, None) => {
+                tracing::warn!(
+                    source = request.source,
+                    "termination requested during shutdown; shortening the deadline"
+                );
+                let bound = Instant::now() + crate::termination::DEADLINE;
+                self.quit_deadline = Some(self.quit_deadline.map_or(bound, |d| d.min(bound)));
+                if !self.force_quit {
+                    self.exit_code.store(request.exit_code, Ordering::Relaxed);
+                }
+            }
             // One Ctrl+C often arrives twice: the terminal signals the host's process group and
             // a direct-start launcher forwards its own SIGINT as SIGTERM a moment later. Only a
             // request after this grace period is the user insisting.
-            Phase::Quitting if first.elapsed() < crate::termination::REPEAT_GRACE => {
+            (Phase::Quitting, Some(first))
+                if first.elapsed() < crate::termination::REPEAT_GRACE =>
+            {
                 tracing::debug!(
                     source = request.source,
                     "repeated termination request ignored"
                 );
             }
-            Phase::Quitting => {
+            (Phase::Quitting, Some(_)) => {
                 tracing::warn!(
                     source = request.source,
                     "termination requested again; forcing shutdown"
                 );
                 self.force_shutdown();
             }
-            phase => {
+            (phase, _) => {
                 tracing::warn!(
                     source = request.source,
                     "termination requested; shutting down"
@@ -1855,6 +1873,38 @@ mod tests {
         host.termination_started = Some(Instant::now() - crate::termination::REPEAT_GRACE);
         host.terminate(request);
         assert!(host.force_quit, "a later second request forces the quit");
+    }
+
+    /// F-25 review #1: the first termination request while an allowed quit is already running
+    /// (with a long `shutdown_timeout_ms`) is not an "immediate repeat": it clamps the deadline
+    /// to the termination deadline and records its exit status. A repeat of that termination
+    /// request within the grace period is still not a force quit.
+    #[test]
+    fn first_termination_request_during_a_long_shutdown_clamps_the_deadline() {
+        let mut host = controller(true);
+        host.config.host.shutdown_timeout_ms = 60_000;
+        let termination = Arc::new(crate::termination::Termination::default());
+        host.termination = Some(termination.clone());
+        host.begin_shutdown();
+        assert_eq!(host.lifecycle.phase(), Phase::Quitting);
+        assert!(host.quit_deadline.unwrap() > Instant::now() + Duration::from_secs(50));
+        let request = crate::termination::Request {
+            source: "SIGTERM",
+            exit_code: 143,
+        };
+        let before = Instant::now();
+        host.terminate(request.clone());
+        let deadline = host.quit_deadline.unwrap();
+        assert!(
+            deadline <= before + crate::termination::DEADLINE + Duration::from_millis(100),
+            "deadline clamped to the termination deadline"
+        );
+        assert_eq!(host.exit_code.load(Ordering::Relaxed), 143);
+        assert!(!host.force_quit);
+        host.terminate(request);
+        assert!(!host.force_quit, "an immediate repeat is the same request");
+        assert_eq!(host.quit_deadline.unwrap(), deadline);
+        assert_eq!(host.exit_code.load(Ordering::Relaxed), 143);
     }
 
     /// HOST-15 (T15): an error answer to a policy request is no decision, never a veto and
