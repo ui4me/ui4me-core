@@ -38,7 +38,7 @@ if CSS == "custom":
 if CSS in ("full", "nohas", "custom") or CSS.startswith("slice:"):
     d.add_stylesheet(theme)
 def rss(pid):
-    """Host resident set in KiB: VmRSS on Linux, the working set on Windows."""
+    """Host memory in KiB: VmRSS on Linux, private commit (PagefileUsage) on Windows."""
     if os.name == "nt":
         import ctypes
         from ctypes import wintypes
@@ -52,7 +52,7 @@ def rss(pid):
         try:
             pmc = PMC(); pmc.cb = ctypes.sizeof(PMC)
             if not k32.K32GetProcessMemoryInfo(h, ctypes.byref(pmc), pmc.cb): return -1
-            return pmc.WorkingSetSize // 1024
+            return pmc.PagefileUsage // 1024  # private commit; the working set is trimmed by Windows
         finally:
             k32.CloseHandle(h)
     for line in open(f"/proc/{pid}/status"):
