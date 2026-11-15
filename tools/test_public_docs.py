@@ -79,7 +79,10 @@ class LinkTests(unittest.TestCase):
     def test_no_references_to_retired_documents(self):
         retired = re.compile(r'CORE_1\.0_|PROTOCOL_DOCUMENTS|CAPABILITY_SCOPE\.md|docs/STATUS\.md|RC2_|BASELINE_|'
                              r'guides/quickstart\.md|guides/powershell\.md|PUBLISHING\.md|RELEASE_NOTES_1\.0\.0')
-        hits = [(name, m.group(0)) for name in PUBLIC for m in retired.finditer(text(name))
+        # Audit and stabilization records describe the history, including retired documents, on purpose.
+        records = ('docs/audit/', 'docs/stabilization/')
+        hits = [(name, m.group(0)) for name in PUBLIC if not name.startswith(records)
+                for m in retired.finditer(text(name))
                 if 'git show v1.0.0:' not in text(name)[max(0, m.start() - 40):m.start()]]
         self.assertEqual(hits, [])
 
