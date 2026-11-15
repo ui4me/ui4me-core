@@ -459,6 +459,34 @@ class FacadeContractTests(unittest.TestCase):
         self.assertNotIn("w1", app._windows)
         self.assertIs(app._closing.get("w1"), window)
 
+    def test_ready_survives_a_closed_event_while_it_scans_windows(self):
+        """binding review #4: ready() iterated app._windows while the reader
+        thread can pop it (RuntimeError: dictionary changed size)."""
+        peer = Peer(self)
+        peer.answers["app.ready"] = {}
+        app = peer.app
+        abandoned = Window(app, "w0")
+        app._windows["w0"] = abandoned
+        app._abandoned.append(abandoned)
+
+        class ClosingWhileScanned(Window):
+            """Reading .closed delivers another window's closed event."""
+
+            @property
+            def closed(self):
+                app._window_event_received({"window_id": "w2", "type": "closed"})
+                return True
+
+            @closed.setter
+            def closed(self, value):
+                pass
+
+        app._windows["w1"] = ClosingWhileScanned(app, "w1")
+        app._windows["w2"] = Window(app, "w2")
+        app.ready()
+        self.assertTrue(app._ready)
+        self.assertNotIn("w2", app._windows)
+
     def test_other_rpc_errors_are_unchanged(self):
         peer = Peer(self)
         window = peer.window("w1", "d1")

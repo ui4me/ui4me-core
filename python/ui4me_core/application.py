@@ -201,7 +201,7 @@ class Application:
                 # A first load failed before readiness and the window was never
                 # reused; close it now that closing no longer cancels startup.
                 with self._lock:
-                    others = any(w is not window and not w.closed for w in self._windows.values())
+                    others = any(w is not window and not w.closed for w in list(self._windows.values()))
                 if others and not window.closed and window.document is None:
                     try:
                         window.request_close()
