@@ -78,7 +78,7 @@ Start-UI4MEScript [-Name] [-AppId] [-Version] [-Icon] [-Instance single|multiple
 | `-ShutdownTimeoutMilliseconds` | 100-120000. How long an orderly shutdown may take before the host stops the backend. |
 | `-MaxWindows` | 1-64. Maximum number of windows this application may open. |
 | `-ArgumentList` | Arguments for the backend run (default: see below). |
-| `-ScriptPath` | The `.ps1` file the host runs again as the backend. Default: the script this PowerShell process was started with (`pwsh -File app.ps1`), also when `Start-UI4MEScript` is called from a function in a dot-sourced helper or in your own module; for a script started from an open prompt, the outermost `.ps1` on the call stack. |
+| `-ScriptPath` | The `.ps1` file the host runs again as the backend. Default: the script that calls `Start-UI4MEScript` (`app.ps1` in `pwsh -File app.ps1`, `./app.ps1` or `& ./app.ps1`), also when the call is in a function of a dot-sourced helper or of your own module: the nearest `.ps1` on the call stack that was run as a script. A script that ran it (`menu.ps1` running `& ./app.ps1`) is not used. |
 
 Invalid values throw before anything starts.
 

@@ -1637,23 +1637,30 @@ function Test-UI4MEProcessRunsScript {
 }
 
 function Get-UI4MEEntryScript {
-    # The script this PowerShell process runs (pwsh -File app.ps1), not the
-    # file that happens to contain the Start-UI4MEScript call (a dot-sourced
-    # helper or a module function). Falls back to the outermost .ps1 on the
-    # call stack (a script started from a prompt), then to the caller.
+    # The app script that called Start-UI4MEScript. Walking outward from the
+    # caller, frames of functions (from a dot-sourced helper, a module, or the
+    # script itself), script blocks and dot-sourced files are passed over; the
+    # first .ps1 invoked as a script (-File, &, ./app.ps1) is the app
+    # (BIND-PS-06). Scripts further out (pwsh -File menu.ps1 running
+    # & ./app.ps1) are never chosen: they are not the app (binding review #2).
+    # Without such a frame: the innermost dot-sourced .ps1 (. ./app.ps1 at a
+    # prompt), then the caller's file.
     param([string]$Caller)
-    $comparison = if ($script:UI4MEIsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
-    $scripts = New-Object 'System.Collections.Generic.List[string]'
+    $module = $ExecutionContext.SessionState.Module
+    $dotted = $null
     foreach ($frame in @(Get-PSCallStack)) {
-        if ($frame.ScriptName -and [IO.Path]::GetExtension($frame.ScriptName) -ieq '.ps1') { $scripts.Add($frame.ScriptName) }
+        $info = $frame.InvocationInfo
+        $command = if ($null -ne $info) { $info.MyCommand } else { $null }
+        if ($null -ne $command -and $null -ne $module -and $command.Module -eq $module) { continue }  # this module
+        if ($command -isnot [Management.Automation.ExternalScriptInfo]) { continue }
+        if (-not $frame.ScriptName -or [IO.Path]::GetExtension($frame.ScriptName) -ne '.ps1') { continue }
+        if ($info.InvocationName -eq '.') {
+            if ($null -eq $dotted) { $dotted = $frame.ScriptName }
+            continue
+        }
+        return $frame.ScriptName
     }
-    $all = [Environment]::GetCommandLineArgs()
-    for ($i = 1; $i -lt $all.Count; $i++) {
-        if (-not $all[$i].EndsWith('.ps1', [StringComparison]::OrdinalIgnoreCase)) { continue }
-        try { $full = [IO.Path]::GetFullPath([IO.Path]::Combine([Environment]::CurrentDirectory, $all[$i])) } catch { continue }
-        foreach ($candidate in $scripts) { if ([string]::Equals($candidate, $full, $comparison)) { return $candidate } }
-    }
-    if ($scripts.Count -gt 0) { return $scripts[$scripts.Count - 1] }
+    if ($null -ne $dotted) { return $dotted }
     return $Caller
 }
 
@@ -1697,9 +1704,10 @@ function Start-UI4MEScript {
     Arguments for the backend run. By default, the arguments that followed the script on the
     pwsh/powershell.exe command line are reused.
     .PARAMETER ScriptPath
-    The .ps1 file the host runs again as the backend. Default: the script this PowerShell process
-    was started with (pwsh -File app.ps1), even when Start-UI4MEScript is called from a dot-sourced
-    helper or a module function; otherwise the outermost .ps1 on the call stack.
+    The .ps1 file the host runs again as the backend. Default: the script that calls
+    Start-UI4MEScript (app.ps1 in pwsh -File app.ps1, ./app.ps1 or & ./app.ps1), also when the call
+    is in a function of a dot-sourced helper or a module: the nearest .ps1 on the call stack that
+    was run as a script. A script that ran app.ps1 (menu.ps1 running & ./app.ps1) is not used.
     .EXAMPLE
     $app = Start-UI4MEScript -Name 'Hello UI4ME'
     #>

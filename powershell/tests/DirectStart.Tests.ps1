@@ -277,6 +277,36 @@ Close-UI4ME -Application $app
         }
     }
 
+    It 'runs the called app.ps1, not the calling menu script, as the backend (binding review #2)' {
+        $menu = @'
+$ErrorActionPreference = 'Stop'
+[Console]::Out.WriteLine("MENU $(if ($env:UI4ME_ENDPOINT) { 'backend' } else { 'launcher' })")
+& (Join-Path $PSScriptRoot 'app.ps1')
+[Console]::Out.WriteLine("MENU AFTER APP $LASTEXITCODE")
+'@
+        $body = @'
+$ErrorActionPreference = 'Stop'
+Import-Module '__MODULE__'
+$app = Start-UI4MEScript -Name 'Menu app' -Instance multiple
+$window = New-UI4MEWindow -Application $app
+$null = Open-UI4MEHtml -Window $window -Html '<p>x</p>'
+[Console]::Out.WriteLine("BACKEND $([IO.Path]::GetFileName($MyInvocation.MyCommand.Path))")
+Set-UI4MEReady -Application $app
+$null = Request-UI4MEQuit -Application $app
+Wait-UI4ME -Application $app -UntilShutdown
+Close-UI4ME -Application $app
+'@
+        foreach ($launch in @(@('-File', 'menu.ps1'), @('-Command', "& './menu.ps1'"))) {
+            $r = Invoke-DirectScript -Body $body -Files @{ 'menu.ps1' = $menu } -Launch $launch
+            $lines = @($r.Out -split "\r?\n" | Where-Object { $_ })
+            $r.ExitCode | Should -Be 0 -Because "$($launch -join ' '): $($r.Err)"
+            $lines | Should -Not -Contain 'MENU backend' -Because ($launch -join ' ')
+            @($lines | Where-Object { $_ -eq 'MENU launcher' }).Count | Should -Be 1 -Because ($launch -join ' ')
+            $lines | Should -Contain 'BACKEND app.ps1' -Because ($launch -join ' ')
+            $lines | Should -Contain 'MENU AFTER APP 0' -Because ($launch -join ' ')
+        }
+    }
+
     It 'leaves the calling PowerShell session running after the app (binding review #1)' {
         $body = @'
 $ErrorActionPreference = 'Stop'
