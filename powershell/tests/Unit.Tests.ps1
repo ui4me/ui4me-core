@@ -174,6 +174,23 @@ Describe 'Install-UI4MESkill' {
 
 Describe 'Get-UI4MEHostPath' {
     AfterEach { Remove-Item Env:UI4ME_HOST_BINARY -ErrorAction SilentlyContinue }
+    It 'runs a hash-verified private copy when the installed host cannot be made executable (BIND-PS-11)' -Skip:$script:TestIsWindows {
+        $source = Join-Path $TestDrive 'installed-host'
+        [IO.File]::WriteAllText($source, "#!/bin/sh`necho cached-host-ran`n")
+        $saved = $env:XDG_CACHE_HOME
+        $env:XDG_CACHE_HOME = Join-Path $TestDrive 'cache'
+        try {
+            $copy = & (Get-Module UI4ME.Core) { param($s) Copy-UI4MEHostToCache $s } $source
+            $copy | Should -BeLike (Join-Path $env:XDG_CACHE_HOME 'ui4me/powershell/*/ui4me-host')
+            & $copy | Should -Be 'cached-host-ran'
+            # Reused while it matches; replaced when it does not.
+            [IO.File]::WriteAllText($copy, "#!/bin/sh`necho tampered`n")
+            $again = & (Get-Module UI4ME.Core) { param($s) Copy-UI4MEHostToCache $s } $source
+            $again | Should -Be $copy
+            & $again | Should -Be 'cached-host-ran'
+            @(Get-ChildItem -LiteralPath (Split-Path $copy) -Force).Count | Should -Be 1   # no temporary files left
+        } finally { $env:XDG_CACHE_HOME = $saved }
+    }
     It 'honors UI4ME_HOST_BINARY and reports a missing override' {
         $fake = Join-Path $TestDrive 'host-bin'
         Set-Content -LiteralPath $fake -Value 'x'

@@ -46,8 +46,10 @@ Get-UI4MEHostPath
 ```
 
 `Get-UI4MEHostPath` prints the bundled native host. On Linux it also restores the execute
-permission that package extraction drops; if that fails (for example in a read-only,
-all-users module folder) run `chmod +x` on the printed path. `doctor` prints facts about the
+permission that package extraction drops. In a module installed for all users, which an
+ordinary user cannot change, it uses a private copy of the host in
+`~/.cache/ui4me/powershell/<version>/` instead (checked against the installed host's SHA-256);
+an administrator can avoid the copy with `sudo chmod a+rx` on the installed host. `doctor` prints facts about the
 installation and desktop session as JSON; it does not open a window. Over SSH, or in a
 terminal without a desktop session, windows cannot open; run your apps from a terminal
 inside the desktop.

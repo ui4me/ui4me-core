@@ -661,6 +661,7 @@ The wire protocol is described in [protocol](protocol.md); normal applications d
 | `UI4ME_ENDPOINT`, `UI4ME_TOKEN` | Set by the host for its backend only. Never set them yourself. |
 | `UI4ME_HOST_BINARY` | Use this native host instead of the bundled one (for example a source build). Point it only at a trusted file. |
 | `UI4ME_VERBOSE` | `1` makes the `Start-UI4MEScript` launcher print every host log record, not only warnings and errors. |
+| `XDG_CACHE_HOME` | Linux: where a private, hash-verified copy of the bundled host is kept (`ui4me/powershell/<version>/`, default `~/.cache`) when the module was installed for all users and the installed host is not executable by this user (see `Get-UI4MEHostPath`). |
 | `UI4ME_TEST_MODE` | `1` runs the host headless (no windows on screen), for protocol tests without a desktop. A headless app does not quit on its own; your test must call `Request-UI4MEQuit`. Testing aid only. |
 
 ## Limits
@@ -694,7 +695,7 @@ paging (`-Offset`/`-Limit`) instead.
 | --- | --- |
 | `New-UI4MEProject -Path [-Name 'UI4ME PowerShell App'] [-AppId org.example.PowerShellApp] [-WindowsPowerShell] [-Force]` | Generate `app.ps1` (uses `Start-UI4MEScript`; run it directly), `index.html`, `style.css` and an optional `app.toml` whose backend runs `app.ps1` with `pwsh`, or `powershell.exe` with `-WindowsPowerShell`. `app.ps1` is saved as UTF-8 with a BOM. Refuses to overwrite these files without `-Force`. Returns the folder. |
 | `Start-UI4MEHost -Manifest [-NoWait]` | Run an `app.toml` through the native host and wait for it to exit (throws on a nonzero exit code). `-NoWait` returns the host process object instead. |
-| `Get-UI4MEHostPath` | Path of the bundled native host for this platform (`UI4ME_HOST_BINARY` overrides it). Restores the Linux execute bit if package extraction dropped it. x64 only. Run `& (Get-UI4MEHostPath) doctor` to check the runtime and desktop session, or `--version` for the host version. |
+| `Get-UI4MEHostPath` | Path of the bundled native host for this platform (`UI4ME_HOST_BINARY` overrides it). Restores the Linux execute bit (for all users) if package extraction dropped it; when it cannot, because the module was installed for all users and this user does not own the file, it returns a private copy in `$XDG_CACHE_HOME/ui4me/powershell/<version>/` (default `~/.cache`), used only while its SHA-256 equals the installed host's. x64 only. Run `& (Get-UI4MEHostPath) doctor` to check the runtime and desktop session, or `--version` for the host version. |
 | `Install-UI4MESkill [-Action install\|status\|uninstall] [-Agents all] [-Scope user\|project] [-ProjectPath] [-Force] [-DryRun]` | Install, inspect or remove the bundled `ui4me-powershell` coding-agent skill. `-Agents` takes `all` or any of `claude`, `codex`, `opencode`, `copilot`, `cursor`, `gemini` (array or comma list). `-ProjectPath` (an existing folder) is required with `-Scope project`. Never replaces or removes a folder it did not install, or that was edited since, without `-Force`. `-DryRun` reports what it would do. Returns one object per agent (`Agent`, `Scope`, `State`, `Path`, `Action`). See [agent skills](../guides/agent-skills.md). |
 
 Skill locations: user scope `~/.claude/skills`, `~/.agents/skills` (Codex),

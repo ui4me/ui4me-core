@@ -1469,11 +1469,58 @@ function Get-UI4MEHostPath {
         throw 'The native UI4ME host is missing. Install UI4ME.Core from the PowerShell Gallery, or set UI4ME_HOST_BINARY.'
     }
     if (-not $script:UI4MEIsWindows) {
-        # NuGet package extraction drops Unix execute permissions.
-        & /bin/sh -c 'test -x "$1" || chmod u+x -- "$1"' ui4me-host-check $found
-        if ($LASTEXITCODE -ne 0) { throw "The native host is not executable and could not be made executable: $found" }
+        # NuGet package extraction drops Unix execute permissions. The owner
+        # (for example root after an AllUsers install) makes it executable for
+        # everyone; other users run a verified private copy instead.
+        & /bin/sh -c 'test -x "$1" || chmod a+rx -- "$1" 2>/dev/null' ui4me-host-check $found
+        if ($LASTEXITCODE -ne 0) { $found = Copy-UI4MEHostToCache $found }
     }
     return $found
+}
+
+function Get-UI4MEFileSha256 {
+    param([string]$Path)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $stream = [IO.File]::OpenRead($Path)
+    try { $bytes = $sha.ComputeHash($stream) } finally { $stream.Dispose(); $sha.Dispose() }
+    return (-join ($bytes | ForEach-Object { $_.ToString('x2') }))
+}
+
+function Copy-UI4MEHostToCache {
+    # Linux, host not executable by this user and not ours to chmod (a module
+    # installed for all users by root): run a private copy from the user's
+    # cache. The copy is used only while its SHA-256 equals the installed host's.
+    param([string]$Source)
+    $hint = "The native host was installed without execute permission and this user cannot change it: $Source. Ask an administrator to run: sudo chmod a+rx '$Source' (or install UI4ME.Core with -Scope CurrentUser)."
+    try { $hash = Get-UI4MEFileSha256 $Source } catch { throw "$hint ($($_.Exception.Message))" }
+    $base = $env:XDG_CACHE_HOME
+    if (-not $base -or -not [IO.Path]::IsPathRooted($base)) { $base = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.cache' }
+    $folder = [IO.Path]::Combine($base, 'ui4me', 'powershell', $script:UI4MEVersion, $hash.Substring(0, 16))
+    $target = Join-Path $folder 'ui4me-host'
+    try {
+        if ((Test-Path -LiteralPath $target -PathType Leaf) -and (Get-UI4MEFileSha256 $target) -eq $hash) {
+            & /bin/sh -c 'test -x "$1" || chmod 0755 -- "$1"' ui4me-host-cache $target
+            if ($LASTEXITCODE -eq 0) { return $target }
+        }
+        & /bin/sh -c 'umask 077 && mkdir -p -- "$1"' ui4me-host-cache $folder
+        if ($LASTEXITCODE -ne 0) { throw "cannot create $folder" }
+        $temporary = Join-Path $folder ('.ui4me-host-' + [guid]::NewGuid().ToString('N'))
+        try {
+            [IO.File]::Copy($Source, $temporary)
+            & /bin/sh -c 'chmod 0755 -- "$1"' ui4me-host-cache $temporary
+            if ($LASTEXITCODE -ne 0) { throw "cannot make $temporary executable" }
+            if ((Get-UI4MEFileSha256 $temporary) -ne $hash) { throw 'the copied host does not match the installed one' }
+            # Same folder: an atomic rename, also over a stale or partial copy.
+            & /bin/sh -c 'mv -f -- "$1" "$2"' ui4me-host-cache $temporary $target
+            if ($LASTEXITCODE -ne 0) { throw "cannot move the copy to $target" }
+        } finally {
+            if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
+        }
+        if ((Get-UI4MEFileSha256 $target) -ne $hash) { throw 'the cached host does not match the installed one' }
+        return $target
+    } catch {
+        throw "$hint A private copy in $folder could not be used either: $($_.Exception.Message)"
+    }
 }
 
 function Start-UI4MEHost {
