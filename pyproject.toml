@@ -15,7 +15,8 @@ license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "crates/ui4me-host/assets/
 authors = [{name="UI4ME Contributors"}]
 keywords = ["desktop", "gui", "html", "css", "native", "wayland", "windows", "linux", "rust"]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    # Beta until the stable-release gates pass (docs/release/versioning.md, audit 05-release-readiness).
+    "Development Status :: 4 - Beta",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
@@ -35,7 +36,7 @@ Homepage = "https://github.com/ui4me/ui4me-core"
 Documentation = "https://github.com/ui4me/ui4me-core/blob/main/docs/index.md"
 Source = "https://github.com/ui4me/ui4me-core"
 Issues = "https://github.com/ui4me/ui4me-core/issues"
-Changelog = "https://github.com/ui4me/ui4me-core/blob/main/docs/release/RELEASE_NOTES_1.0.1.md"
+Changelog = "https://github.com/ui4me/ui4me-core/blob/main/CHANGELOG.md"
 
 [project.scripts]
 ui4me-host = "ui4me_core.launcher:main"
@@ -54,3 +55,27 @@ include = ["ui4me_core*"]
 
 [tool.setuptools.package-data]
 ui4me_core = ["_bin/*", "_skills/ui4me-python/*", "_skills/ui4me-python/references/*", "_skills/ui4me-python/examples/*"]
+
+# The manylinux wheel build (RELEASE-18: one definition instead of copies in
+# three workflows and the docs). `python -m cibuildwheel --platform linux
+# dist/ui4me_core-X.Y.Z.tar.gz` builds the published wheel FROM the sdist.
+# rustup-init is pinned by version and SHA-256 instead of `curl | sh`.
+[tool.cibuildwheel]
+build = "cp312-manylinux_x86_64"
+build-verbosity = 1
+test-command = "python {project}/tools/release/smoke_installed_wheel.py"
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64"]
+manylinux-x86_64-image = "manylinux_2_34"
+before-all = [
+    "dnf install -y wayland-devel libxkbcommon-devel dbus-devel pkgconf-pkg-config curl",
+    "curl -fsSL --retry 3 -o /tmp/rustup-init https://static.rust-lang.org/rustup/archive/1.29.3/x86_64-unknown-linux-gnu/rustup-init",
+    "echo 'b1c8cb14e30889e7e2999e6b69e62d9e9b9ffc0f4df8180564d306d9680e6c55  /tmp/rustup-init' | sha256sum -c -",
+    "chmod 0755 /tmp/rustup-init",
+    "/tmp/rustup-init -y --profile minimal --default-toolchain 1.99.1",
+    ". $HOME/.cargo/env",
+    "rustup component add clippy rustfmt",
+]
+environment = { PATH = "$HOME/.cargo/bin:$PATH", CARGO_BUILD_JOBS = "2" }
+repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"

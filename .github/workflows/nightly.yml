@@ -1,0 +1,133 @@
+# Heavy and periodic verification (RELEASE-19, T6, gates P8 and P17). Linux only.
+# Never publishes. A failed scheduled run opens (or comments on) one tracking
+# issue titled "Nightly verification failed".
+name: Nightly verification
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+env:
+  CARGO_BUILD_JOBS: '2'
+  RUST_TEST_THREADS: '2'
+  CARGO_TERM_COLOR: never
+jobs:
+  ignored-tests:
+    # The #[ignore]d evidence tests and fuzz harnesses (1M-op misuse, 1,000
+    # shutdown iterations, decompression bombs, fuzz_gate/fuzz_resources),
+    # release profile. Workstream B makes the fuzz harnesses run with small
+    # worker stacks so they exercise the depth limits (T6).
+    name: ignored and fuzz tests (release)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Linux build prerequisites
+        run: sudo apt-get update && sudo apt-get install -y libwayland-dev libxkbcommon-dev libdbus-1-dev
+      - name: Install pinned Rust toolchain
+        run: rustup show active-toolchain
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: nightly-release
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: cargo test --release -- --ignored
+        run: cargo test --release --locked --workspace -- --ignored
+
+  patch-stacks:
+    name: vendored patch stacks equal upstream
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: patches/*/verify.sh against fresh upstream clones
+        run: bash tools/release/verify_patches.sh
+
+  advisories:
+    name: cargo deny (advisories and policy)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned cargo-deny
+        run: tools/release/install_cargo_deny.sh "$RUNNER_TEMP/cargo-deny"
+      - name: Full dependency policy including today's RustSec database
+        run: |
+          rustup show active-toolchain
+          "$RUNNER_TEMP/cargo-deny/cargo-deny" --locked check advisories bans licenses sources
+
+  windowed-smoke:
+    # T14 first step (and placeholder for the 30-minute windowed soak, R4b):
+    # real windows under a private weston --backend=headless on a private D-Bus
+    # session; first frame, burst (F-02), depth (F-01) and image-SVG depth
+    # (F-03) probes against a RELEASE host (the debug host is too slow to
+    # produce the F-02 burst).
+    name: windowed smoke (weston headless)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and compositor prerequisites
+        run: sudo apt-get update && sudo apt-get install -y libwayland-dev libxkbcommon-dev libdbus-1-dev weston dbus
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Install pinned Rust toolchain
+        run: rustup show active-toolchain
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: nightly-release
+          save-if: false
+      - name: Build the release host
+        run: cargo build --locked --release -p ui4me-host
+      - name: Windowed probes under a private compositor and session bus
+        run: |
+          dbus-run-session -- python tools/windowed_smoke.py --compositor weston \
+            --host target/release/ui4me-host --output verification/windowed-smoke
+      - name: Preserve the smoke report and compositor log
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nightly-windowed-smoke
+          path: verification/windowed-smoke/
+          if-no-files-found: warn
+
+  report-failure:
+    needs: [ignored-tests, patch-stacks, advisories, windowed-smoke]
+    if: ${{ failure() && github.event_name == 'schedule' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write   # open or comment on the nightly failure issue
+    steps:
+      - name: Open or update the nightly failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RESULTS: >-
+            ignored-tests=${{ needs.ignored-tests.result }}
+            patch-stacks=${{ needs.patch-stacks.result }}
+            advisories=${{ needs.advisories.result }}
+            windowed-smoke=${{ needs.windowed-smoke.result }}
+        run: |
+          set -euo pipefail
+          title='Nightly verification failed'
+          body="$(printf 'Nightly run failed: %s\n\nJob results: %s\n' "$RUN_URL" "$RESULTS")"
+          number="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" \
+            --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)"
+          if [[ -n "$number" ]]; then
+            gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi

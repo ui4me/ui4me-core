@@ -13,6 +13,9 @@ from pathlib import Path
 import subprocess
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from version import source_version  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / 'tools' / 'release' / 'SOURCE_FILES.sha256'
 EXCLUDED_DIRS = {'.git', '.venv', '__pycache__', '.pytest_cache',
@@ -71,7 +74,7 @@ def included_source_files(root: Path = ROOT):
 
 
 def build_manifest(root: Path = ROOT):
-    rows = ['# UI4ME Core 1.0.1 public release source. This manifest excludes itself.']
+    rows = [f'# UI4ME Core {source_version(root)} public release source. This manifest excludes itself.']
     for file in included_source_files(root):
         rows.append(f'{hashlib.sha256(file.read_bytes()).hexdigest()}  {file.relative_to(root).as_posix()}')
     return '\n'.join(rows) + '\n'

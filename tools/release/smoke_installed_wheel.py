@@ -1,5 +1,12 @@
-"""Verify the installed wheel's native executable and direct startup without opening a desktop."""
+"""Verify the installed wheel's native executable and direct startup without opening a desktop.
+
+The expected version comes from the source tree this script belongs to
+(``tools/release/version.py``), or from ``--expect-version`` when the script runs
+without a checkout. Comparing with the installed metadata alone would be
+tautological.
+"""
 from __future__ import annotations
+import argparse
 from importlib import metadata
 import os
 from pathlib import Path
@@ -11,12 +18,23 @@ from ui4me_core import scaffold, skills
 import ui4me_core
 from ui4me_core.launcher import host_binary
 
-assert metadata.version('ui4me-core')=='1.0.1'
-assert ui4me_core.__version__=='1.0.1'
+_parser = argparse.ArgumentParser(description=__doc__.split('\n\n', 1)[0])
+_parser.add_argument('--expect-version')
+_args = _parser.parse_args()
+if _args.expect_version:
+    EXPECTED = _args.expect_version
+else:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from version import source_version
+    EXPECTED = source_version()
+    sys.path.pop(0)
+
+assert metadata.version('ui4me-core')==EXPECTED,(metadata.version('ui4me-core'),EXPECTED)
+assert ui4me_core.__version__==EXPECTED,(ui4me_core.__version__,EXPECTED)
 binary=host_binary()
 assert binary.is_file() and binary.stat().st_size>1024*1024
 value=subprocess.check_output([str(binary),'--version'],timeout=15,text=True)
-assert '1.0.1' in value,(value,binary)
+assert EXPECTED in value.split(),(value,binary,EXPECTED)
 skill=importlib.resources.files('ui4me_core').joinpath('_skills','ui4me-python','SKILL.md')
 assert skill.is_file(), 'Installed wheel lacks UI4ME coding-agent skill'
 assert 'name: ui4me-python' in skill.read_text(encoding='utf-8')

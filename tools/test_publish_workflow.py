@@ -1,5 +1,9 @@
-"""Validate the publication guard and canonical release artifact inventory."""
-import importlib.util
+"""Validate the canonical release artifact inventory.
+
+The publication guard itself (manual dispatch only, main only, trusted
+publishing, job ordering, CI gate) is asserted structurally on the parsed
+workflows in test_workflows.py (RELEASE-15); the former substring checks lived here.
+"""
 import sys
 import tempfile
 from pathlib import Path
@@ -12,27 +16,6 @@ import verify_publish_dist as publishing
 
 
 class PublishWorkflowTests(unittest.TestCase):
-    def test_publishing_never_runs_on_push_or_tag(self):
-        workflow=(ROOT/'.github/workflows/publish.yaml').read_text()
-        header=workflow.split('\npermissions:',1)[0]
-        self.assertIn('workflow_dispatch:',header)
-        self.assertNotIn('  push:',header)
-        self.assertNotIn('  release:',header)
-        self.assertIn("github.ref == 'refs/heads/main'",workflow)
-        self.assertIn("'publish-' + version",workflow)
-        self.assertIn('environment:\n      name: pypi',workflow)
-        self.assertIn('pypa/gh-action-pypi-publish@release/v1',workflow)
-        self.assertNotIn('secrets.PYPI_TOKEN',workflow)
-        self.assertIn('id-token: write',workflow)
-        self.assertIn('needs: [preflight, source, linux-wheel, windows-wheel]',workflow)
-        self.assertIn('needs: [preflight, pypi]',workflow)
-        self.assertIn('SOURCE_COMMIT.txt',workflow)
-        self.assertIn('sha256sum -c SHA256SUMS',workflow)
-        for p in ('.github/workflows/release-linux.yml','.github/workflows/release-windows.yml'):
-            head=(ROOT/p).read_text().split('permissions:',1)[0]
-            self.assertNotIn('  push:',head)
-            self.assertIn('  workflow_dispatch:',head)
-
     def test_exact_release_triple_and_hash_list(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory=Path(tmp)

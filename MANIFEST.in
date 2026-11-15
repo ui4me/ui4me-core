@@ -1,4 +1,4 @@
-include LICENSE README.md THIRD_PARTY_NOTICES.md Cargo.toml Cargo.lock rust-toolchain.toml .gitignore
+include LICENSE README.md THIRD_PARTY_NOTICES.md CHANGELOG.md SECURITY.md deny.toml Cargo.toml Cargo.lock rust-toolchain.toml .gitignore
 # Build inputs include extensionless files (e.g. pinned SHA256SUMS manifests,
 # generated-code inputs, vendored crate metadata): take whole trees.
 graft crates

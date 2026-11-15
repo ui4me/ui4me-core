@@ -10,6 +10,8 @@ import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from verify_linux_artifact import check_distributable, validate_sdist  # noqa: E402
+from version import artifact_names, source_version  # noqa: E402
+from host_checks import WINDOWS_HOST_STACK_RESERVE, debug_build_markers, pe_stack_reserve  # noqa: E402
 
 IMAGE_FILE_MACHINE_AMD64 = 0x8664
 IMAGE_SUBSYSTEM_WINDOWS_CUI = 3
@@ -28,7 +30,7 @@ def pe_header(data: bytes) -> dict:
     if machine != IMAGE_FILE_MACHINE_AMD64 or magic != 0x20B:
         raise ValueError(f'Windows release requires a PE32+ x86-64 host (machine {machine:#x}, magic {magic:#x})')
     subsystem = struct.unpack_from('<H', data, optional + 68)[0]
-    return {'machine': 'x86_64', 'subsystem': subsystem}
+    return {'machine': 'x86_64', 'subsystem': subsystem, 'stack_reserve': pe_stack_reserve(data)}
 
 
 def validate_wheel(path: Path) -> dict:
@@ -47,6 +49,14 @@ def validate_wheel(path: Path) -> dict:
             # print in a terminal; a GUI launch releases its own console at
             # startup (platform::windows::detach_owned_console).
             raise ValueError(f'Unexpected host subsystem {header["subsystem"]}')
+        if header['stack_reserve'] != WINDOWS_HOST_STACK_RESERVE:
+            # F-01: with the 1 MiB default the host aborted (stack overflow)
+            # on content nested ~40 deep. The release host links /STACK:.
+            raise ValueError(f'Windows host SizeOfStackReserve is {header["stack_reserve"]}, '
+                             f'expected {WINDOWS_HOST_STACK_RESERVE} (/STACK: link argument missing?)')
+        markers = debug_build_markers(data)
+        if markers:
+            raise ValueError('Wheel contains a development (non-release) host: ' + '; '.join(markers))
         wheel_files = [x for x in entries if x.endswith('.dist-info/WHEEL')]
         if len(wheel_files) != 1:
             raise ValueError('Missing wheel metadata')
@@ -89,12 +99,13 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('dist_dir', type=Path, nargs='?', default=Path('dist'))
     args = ap.parse_args()
-    sdists = sorted(args.dist_dir.glob('ui4me_core-1.0.1.tar.gz'))
-    wheels = sorted(args.dist_dir.glob('ui4me_core-1.0.1-*win*.whl'))
+    version = source_version()
+    sdists = sorted(args.dist_dir.glob(artifact_names(version)['sdist']))
+    wheels = sorted(args.dist_dir.glob(f'ui4me_core-{version}-*win*.whl'))
     if not sdists or not wheels:
         raise SystemExit('Both the source distribution and a Windows wheel must exist')
     reports = [validate_sdist(x) for x in sdists] + [validate_wheel(x) for x in wheels]
-    print(json.dumps({'version': '1.0.1', 'artifacts': reports, 'status': 'PASS'}, indent=2))
+    print(json.dumps({'version': version, 'artifacts': reports, 'status': 'PASS'}, indent=2))
 
 
 if __name__ == '__main__':

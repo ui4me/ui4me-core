@@ -1,0 +1,270 @@
+# Build the release distributions once, from one source distribution. Never publishes.
+#
+# Called by publish.yaml (workflow_call) for the commit it is publishing, and
+# dispatchable on its own for a non-publishing build of any ref (this replaces
+# the former release-linux.yml and release-windows.yml, RELEASE-18). Outputs,
+# as artifacts of the calling run:
+#   ui4me-publishable-dist  exactly the sdist and the two wheels (built FROM the sdist)
+#   ui4me-provenance        SHA256SUMS, SOURCE_COMMIT.txt and the host CycloneDX SBOMs
+name: Build release distributions
+on:
+  workflow_call:
+    inputs:
+      source_sha:
+        description: 'Commit to build (40 hex)'
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: 'Commit to build; empty for the dispatched ref'
+        required: false
+        default: ''
+        type: string
+permissions:
+  contents: read
+env:
+  CARGO_TERM_COLOR: never
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.names.outputs.version }}
+      sdist: ${{ steps.names.outputs.sdist }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Artifact names from the single version source
+        id: names
+        run: |
+          set -euo pipefail
+          python tools/release/version.py --check
+          version="$(python tools/release/version.py)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sdist=ui4me_core-$version.tar.gz" >> "$GITHUB_OUTPUT"
+      - name: Create and validate the canonical source distribution
+        env:
+          SDIST: ${{ steps.names.outputs.sdist }}
+        run: |
+          set -euo pipefail
+          python -m pip install --require-hashes -r tools/release/requirements-release.txt
+          python -m build --sdist --outdir dist
+          python -m twine check "dist/$SDIST"
+          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 1
+          python -c 'import sys; sys.path.insert(0, "tools/release"); from verify_linux_artifact import validate_sdist; from pathlib import Path; print(validate_sdist(Path(sys.argv[1])))' "dist/$SDIST"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui4me-sdist
+          path: dist/${{ steps.names.outputs.sdist }}
+          if-no-files-found: error
+
+  linux-wheel:
+    needs: source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ui4me-sdist
+          path: source-dist
+      - name: Build the manylinux wheel FROM the canonical source distribution
+        # Configuration: [tool.cibuildwheel] in the sdist's pyproject.toml.
+        env:
+          SDIST: ${{ needs.source.outputs.sdist }}
+          VERSION: ${{ needs.source.outputs.version }}
+        run: |
+          set -euo pipefail
+          python -m pip install --require-hashes -r tools/release/requirements-release.txt
+          python -m cibuildwheel --platform linux --output-dir dist "source-dist/$SDIST"
+          wheel="dist/ui4me_core-$VERSION-py3-none-manylinux_2_34_x86_64.whl"
+          test "$(find dist -maxdepth 1 -type f -name '*.whl' | wc -l)" -eq 1
+          python -m twine check "$wheel"
+          python -c 'import sys; sys.path.insert(0, "tools/release"); from verify_linux_artifact import validate_wheel; from pathlib import Path; print(validate_wheel(Path(sys.argv[1])))' "$wheel"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui4me-linux-wheel
+          path: dist/*.whl
+          if-no-files-found: error
+
+  windows-wheel:
+    needs: source
+    runs-on: windows-2022
+    timeout-minutes: 90
+    env:
+      CARGO_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ui4me-sdist
+          path: source-dist
+      - name: Build the Windows wheel FROM the same source distribution
+        shell: pwsh
+        env:
+          SDIST: ${{ needs.source.outputs.sdist }}
+          VERSION: ${{ needs.source.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m pip install --require-hashes -r tools/release/requirements-release.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Installing the pinned release tools failed' }
+          New-Item -ItemType Directory -Force source-tree | Out-Null
+          tar -xzf "source-dist/$env:SDIST" -C source-tree
+          $source = (Get-ChildItem source-tree -Directory -Filter "ui4me_core-$env:VERSION").FullName
+          if (-not $source) { throw 'Source distribution did not extract correctly' }
+          # Avoid Cargo reusing build-script products from a previous sdist path.
+          $env:CARGO_TARGET_DIR = Join-Path $env:RUNNER_TEMP 'ui4me-cargo-publish'
+          python -m build --wheel --outdir dist $source
+          if ($LASTEXITCODE -ne 0) { throw 'Windows wheel build failed' }
+          $files = @(Get-ChildItem dist -Filter "ui4me_core-$env:VERSION-py3-none-win_amd64.whl")
+          if ($files.Count -ne 1) { throw 'Expected exactly one Windows wheel' }
+          python -m twine check $files[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Twine check failed' }
+          # Includes the stack reserve (F-01) and the debug-host refusal (RELEASE-17).
+          python -c 'import pathlib,sys;sys.path.insert(0,"tools/release");from verify_windows_artifact import validate_wheel;print(validate_wheel(pathlib.Path(sys.argv[1])))' $files[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Windows artifact verification failed' }
+      - name: Smoke install the Windows wheel without Rust
+        shell: pwsh
+        run: |
+          python -m venv smoke
+          $wheel = (Get-ChildItem dist -Filter '*win_amd64.whl').FullName
+          & smoke/Scripts/python -m pip install --no-index --no-deps --only-binary :all: $wheel
+          if ($LASTEXITCODE -ne 0) { throw 'Wheel install failed' }
+          & smoke/Scripts/python tools/release/smoke_installed_wheel.py
+          if ($LASTEXITCODE -ne 0) { throw 'Installed wheel smoke failed' }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui4me-windows-wheel
+          path: dist/*.whl
+          if-no-files-found: error
+
+  clean-wheel:
+    # The exact Linux wheel in fresh interpreter images (T12, gate P16).
+    name: clean wheel (${{ matrix.image }})
+    needs: linux-wheel
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: python:3.10-slim
+            ref: python:3.10-slim@sha256:6ff506466f8b1e981719b468cc0023b8ef000b983cdec0eafe119d01f379e31d
+          - image: python:3.14-slim
+            ref: python:3.14-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container:
+      image: ${{ matrix.ref }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ui4me-linux-wheel
+          path: wheel
+      - name: Install the release wheel offline and smoke-test it
+        run: |
+          set -eu
+          python -VV
+          python -m pip install --no-index --no-deps --disable-pip-version-check --root-user-action=ignore wheel/*.whl
+          cd /tmp
+          python "$GITHUB_WORKSPACE/tools/release/smoke_installed_wheel.py"
+
+  sbom:
+    # CycloneDX SBOM of the native host for both shipped targets (F-23, gate P10).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: source
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - name: Generate the host SBOMs
+        env:
+          VERSION: ${{ needs.source.outputs.version }}
+        run: |
+          set -euo pipefail
+          rustup show active-toolchain
+          cargo install --locked cargo-cyclonedx --version 0.5.9 --root "$RUNNER_TEMP/cyclonedx"
+          mkdir -p sbom
+          for target in x86_64-unknown-linux-gnu x86_64-pc-windows-msvc; do
+            "$RUNNER_TEMP/cyclonedx/bin/cargo-cyclonedx" cyclonedx --manifest-path crates/ui4me-host/Cargo.toml \
+              --format json --describe binaries --target "$target" --target-in-filename --no-build-deps -q
+            mv "crates/ui4me-host/ui4me-host_bin_${target}.cdx.json" "sbom/ui4me-host-${VERSION}-${target}.cdx.json"
+          done
+          python3 -c 'import json,sys; [print(p, len(json.load(open(p))["components"]), "components") for p in sys.argv[1:]]' sbom/*.cdx.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui4me-sbom
+          path: sbom/*.cdx.json
+          if-no-files-found: error
+
+  assemble:
+    needs: [source, linux-wheel, windows-wheel, clean-wheel, sbom]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ui4me-sdist
+          path: dist
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ui4me-linux-wheel
+          path: dist
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ui4me-windows-wheel
+          path: dist
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ui4me-sbom
+          path: provenance
+      - name: Verify the exact distribution set and write the SHA-256 manifest
+        env:
+          EXPECTED_SHA: ${{ inputs.source_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          python -m pip install --require-hashes -r tools/release/requirements-release.txt
+          python tools/release/verify_publish_dist.py dist --write-hashes provenance/SHA256SUMS
+          python -m twine check dist/*
+          git rev-parse HEAD > provenance/SOURCE_COMMIT.txt
+          test "$(cat provenance/SOURCE_COMMIT.txt)" = "$EXPECTED_SHA"
+          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 3
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui4me-publishable-dist
+          path: dist/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui4me-provenance
+          path: provenance/
+          if-no-files-found: error

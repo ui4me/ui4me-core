@@ -30,11 +30,27 @@ class BuildWithHost(build_py):
         if sys.platform not in ("linux", "win32"):
             raise RuntimeError("The v1.0 wheel build supports Linux and Windows only.")
         exe = "ui4me-host.exe" if sys.platform == "win32" else "ui4me-host"
-        custom = os.environ.get("UI4ME_HOST_BINARY")
+        # A prebuilt host for the wheel. This is deliberately NOT the runtime
+        # override UI4ME_HOST_BINARY, which developers export pointing at a
+        # debug build (RELEASE-17): that variable is ignored here.
+        custom = os.environ.get("UI4ME_WHEEL_HOST_BINARY")
+        if os.environ.get("UI4ME_HOST_BINARY") and not custom:
+            print("setup.py: ignoring UI4ME_HOST_BINARY (a runtime override); building the release host. "
+                  "Set UI4ME_WHEEL_HOST_BINARY to package a prebuilt release host.", file=sys.stderr)
         if custom:
             host = Path(custom).expanduser().resolve()
             if not host.is_file():
-                raise RuntimeError("UI4ME_HOST_BINARY must identify an existing executable")
+                raise RuntimeError("UI4ME_WHEEL_HOST_BINARY must identify an existing executable")
+            sys.path.insert(0, str(ROOT / "tools" / "release"))
+            try:
+                from host_checks import debug_build_markers
+            finally:
+                sys.path.pop(0)
+            markers = debug_build_markers(host.read_bytes())
+            if markers and os.environ.get("UI4ME_WHEEL_ALLOW_DEBUG_HOST") != "1":
+                raise RuntimeError("UI4ME_WHEEL_HOST_BINARY is a development host (" + "; ".join(markers)
+                                   + "). Use a release build, or set UI4ME_WHEEL_ALLOW_DEBUG_HOST=1 for a "
+                                   "throwaway test wheel that must never be published.")
         else:
             command = ["cargo", "build", "--locked", "--release", "-p", "ui4me-host"]
             env = os.environ.copy()

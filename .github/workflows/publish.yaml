@@ -1,20 +1,46 @@
 # One intentional click/gh workflow run. Never triggered by push or tags.
 # PyPI trusted publisher: owner ui4me, repository ui4me-core,
-# workflow publish.yaml, environment pypi.
+# workflow publish.yaml, environment pypi. The pypi job must stay in this file.
+#
+# Order (RELEASE-13): preflight (typed confirmation, CI gate for the exact SHA,
+# release-freeze source checks) -> build once from one sdist (build-dist.yml)
+# or promote the artifacts of an earlier dry run (candidate_run_id) -> stage and
+# re-verify the exact files -> provenance attestations -> DRAFT GitHub release
+# with every asset -> PyPI upload of those same files -> publish the draft
+# (which creates the tag at the source commit). See docs/release/publishing.md.
 name: Publish UI4ME Core to PyPI and GitHub
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version already qualified in Cargo and pyproject.toml'
+        description: 'Version to publish; must equal Cargo.toml [workspace.package].version'
         required: true
         type: string
-        default: '1.0.1'
       confirmation:
-        description: 'Type publish-1.0.1 (adjust for the chosen version)'
+        description: 'Type publish-<version>, e.g. publish-1.2.3'
         required: true
         type: string
+      dry_run:
+        description: 'Gate, build and verify only; publish nothing (keeps the artifacts for qualification)'
+        required: false
+        default: false
+        type: boolean
+      candidate_run_id:
+        description: 'Promote the artifacts of this earlier dry run instead of rebuilding (run id)'
+        required: false
+        default: ''
+        type: string
+      expected_windows_wheel_sha256:
+        description: 'Required with candidate_run_id: the Windows wheel SHA-256 recorded by qualify_windows_rc.py'
+        required: false
+        default: ''
+        type: string
+      check_metadata_urls:
+        description: 'Also require every package metadata URL to resolve without credentials (F-20)'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -28,292 +54,294 @@ jobs:
     # This workflow will not publish from another branch or unconfirmed input.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read   # tools/release/ci_gate.py reads the CI runs for the commit
     outputs:
       source_sha: ${{ steps.source.outputs.sha }}
+      version: ${{ steps.source.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Validate version and explicit operator confirmation
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Validate version, explicit operator confirmation and promotion inputs
         id: source
         env:
           REQUESTED_VERSION: ${{ inputs.version }}
           CONFIRMATION: ${{ inputs.confirmation }}
-        shell: bash
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          EXPECTED_WINDOWS_SHA256: ${{ inputs.expected_windows_wheel_sha256 }}
         run: |
           set -euo pipefail
-          python - <<'PY'
-          import os, tomllib
-          from pathlib import Path
-          version=os.environ['REQUESTED_VERSION']
-          assert version == '1.0.1', 'This workflow is the reviewed UI4ME 1.0.1 release; update it for future releases'
-          assert os.environ['CONFIRMATION'] == 'publish-' + version, 'Confirmation phrase does not match'
-          assert tomllib.loads(Path('pyproject.toml').read_text())['project']['version'] == version
-          assert tomllib.loads(Path('Cargo.toml').read_text())['workspace']['package']['version'] == version
-          PY
+          python tools/release/version.py --expect "$REQUESTED_VERSION"
+          python tools/release/version.py --check
+          if [[ "$CONFIRMATION" != "publish-$REQUESTED_VERSION" ]]; then
+            echo "Confirmation phrase does not match: type publish-$REQUESTED_VERSION" >&2
+            exit 1
+          fi
+          if [[ -n "$CANDIDATE_RUN_ID" ]]; then
+            [[ "$CANDIDATE_RUN_ID" =~ ^[0-9]+$ ]] || { echo 'candidate_run_id must be a run id' >&2; exit 1; }
+            [[ "$EXPECTED_WINDOWS_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+              echo 'Promoting a candidate requires expected_windows_wheel_sha256 (64 lower-case hex) from the Windows qualification record' >&2
+              exit 1; }
+          elif [[ -n "$EXPECTED_WINDOWS_SHA256" && ! "$EXPECTED_WINDOWS_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo 'expected_windows_wheel_sha256 must be 64 lower-case hex' >&2
+            exit 1
+          fi
+          test -z "$(git status --porcelain)"
+          test -f "docs/release/RELEASE_NOTES_$REQUESTED_VERSION.md" || {
+            echo "docs/release/RELEASE_NOTES_$REQUESTED_VERSION.md is required for the GitHub release" >&2; exit 1; }
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      - name: Validate source and prevent duplicate version upload
+          echo "version=$REQUESTED_VERSION" >> "$GITHUB_OUTPUT"
+      - name: Refuse unless the required CI passed for this exact commit (F-10)
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ inputs.version }}
-        shell: bash
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: python tools/release/ci_gate.py --sha "$SOURCE_SHA"
+      - name: Release-freeze source checks (manifest, versions)
+        env:
+          UI4ME_RELEASE_MANIFEST_CHECK: '1'
         run: |
           set -euo pipefail
           python tools/release/verify_source.py
           python tools/verify_package.py
+          python tools/release/refresh_source_manifest.py --check
+          cd tools && python -m unittest -v test_source_manifest
+      - name: Package metadata URLs resolve without credentials (opt-in, F-20)
+        if: ${{ inputs.check_metadata_urls }}
+        run: python tools/release/check_metadata_urls.py --network
+      - name: Prevent a duplicate version upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.source.outputs.version }}
+        run: |
+          set -euo pipefail
           if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "GitHub release v$VERSION already exists; do not republish" >&2
             exit 1
           fi
-          python - <<'PY'
-          import os, urllib.error, urllib.request
-          version=os.environ['VERSION']
-          url=f'https://pypi.org/pypi/ui4me-core/{version}/json'
-          try:
-              with urllib.request.urlopen(url,timeout=20):
-                  raise SystemExit(f'PyPI already has ui4me-core {version}; refusing duplicate upload')
-          except urllib.error.HTTPError as exc:
-              if exc.code != 404: raise
-          PY
+          python tools/release/check_pypi_absent.py "$VERSION"
 
-  source:
+  build:
     needs: preflight
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Create and validate the canonical source distribution
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m pip install 'build>=1.2' 'twine>=6'
-          python -m build --sdist --outdir dist
-          python -m twine check dist/*.tar.gz
-          python - <<'PY'
-          from pathlib import Path
-          from tools.release.verify_linux_artifact import validate_sdist
-          files=list(Path('dist').glob('ui4me_core-1.0.1.tar.gz'))
-          assert len(files)==1
-          print(validate_sdist(files[0]))
-          PY
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ui4me-sdist
-          path: dist/ui4me_core-1.0.1.tar.gz
-          if-no-files-found: error
-
-  linux-wheel:
-    needs: [preflight, source]
-    runs-on: ubuntu-24.04
-    env:
-      CIBW_BUILD: 'cp312-manylinux_x86_64'
-      CIBW_ARCHS_LINUX: 'x86_64'
-      CIBW_MANYLINUX_X86_64_IMAGE: 'manylinux_2_34'
-      CIBW_BEFORE_ALL_LINUX: >-
-        dnf install -y wayland-devel libxkbcommon-devel dbus-devel pkgconf-pkg-config curl
-        && curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.99.1
-        && . $HOME/.cargo/env
-        && rustup component add clippy rustfmt
-      CIBW_ENVIRONMENT_LINUX: 'PATH="$HOME/.cargo/bin:$PATH" CARGO_BUILD_JOBS=2'
-      CIBW_REPAIR_WHEEL_COMMAND_LINUX: 'auditwheel repair -w {dest_dir} {wheel}'
-      CIBW_TEST_COMMAND_LINUX: 'python {project}/tools/release/smoke_installed_wheel.py'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - uses: actions/download-artifact@v4
-        with:
-          name: ui4me-sdist
-          path: source-dist
-      - name: Build manylinux wheel FROM the canonical source distribution
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m pip install 'cibuildwheel>=2.21' 'twine>=6'
-          python -m cibuildwheel --platform linux --output-dir dist source-dist/ui4me_core-1.0.1.tar.gz
-          python -m twine check dist/*.whl
-          python - <<'PY'
-          from pathlib import Path
-          from tools.release.verify_linux_artifact import validate_wheel
-          files=list(Path('dist').glob('ui4me_core-1.0.1-py3-none-manylinux_2_34_x86_64.whl'))
-          assert len(files)==1,files
-          print(validate_wheel(files[0]))
-          PY
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ui4me-linux-wheel
-          path: dist/*.whl
-          if-no-files-found: error
-
-  windows-wheel:
-    needs: [preflight, source]
-    runs-on: windows-2022
-    env:
-      CARGO_BUILD_JOBS: '2'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - uses: actions/download-artifact@v4
-        with:
-          name: ui4me-sdist
-          path: source-dist
-      - name: Build Windows wheel FROM the same source distribution
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          python -m pip install 'build>=1.2' 'twine>=6' 'wheel>=0.44'
-          New-Item -ItemType Directory -Force source-tree | Out-Null
-          tar -xzf source-dist/ui4me_core-1.0.1.tar.gz -C source-tree
-          $source = (Get-ChildItem source-tree -Directory -Filter 'ui4me_core-1.0.1').FullName
-          if (-not $source) { throw 'Source distribution did not extract correctly' }
-          # Avoid Cargo reusing build-script products from a previous sdist path.
-          $env:CARGO_TARGET_DIR = Join-Path $env:RUNNER_TEMP 'ui4me-cargo-publish'
-          python -m build --wheel --outdir dist $source
-          if ($LASTEXITCODE -ne 0) { throw 'Windows wheel build failed' }
-          $files = @(Get-ChildItem dist -Filter 'ui4me_core-1.0.1-py3-none-win_amd64.whl')
-          if ($files.Count -ne 1) { throw 'Expected exactly one Windows wheel' }
-          python -m twine check $files[0].FullName
-          if ($LASTEXITCODE -ne 0) { throw 'Twine check failed' }
-          python -c 'import pathlib,sys;sys.path.insert(0,"tools/release");from verify_windows_artifact import validate_wheel;print(validate_wheel(pathlib.Path(sys.argv[1])))' $files[0].FullName
-          if ($LASTEXITCODE -ne 0) { throw 'Windows artifact verification failed' }
-      - name: Smoke install Windows wheel without Rust
-        shell: pwsh
-        run: |
-          python -m venv smoke
-          $wheel = (Get-ChildItem dist -Filter '*win_amd64.whl').FullName
-          & smoke/Scripts/python -m pip install --no-index --only-binary :all: $wheel
-          if ($LASTEXITCODE -ne 0) { throw 'Wheel install failed' }
-          & smoke/Scripts/python tools/release/smoke_installed_wheel.py
-          if ($LASTEXITCODE -ne 0) { throw 'Installed wheel smoke failed' }
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ui4me-windows-wheel
-          path: dist/*.whl
-          if-no-files-found: error
-
-  assemble:
-    needs: [preflight, source, linux-wheel, windows-wheel]
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - uses: actions/download-artifact@v4
-        with:
-          name: ui4me-sdist
-          path: dist
-      - uses: actions/download-artifact@v4
-        with:
-          name: ui4me-linux-wheel
-          path: dist
-      - uses: actions/download-artifact@v4
-        with:
-          name: ui4me-windows-wheel
-          path: dist
-      - name: Verify exact distribution set and write SHA-256 manifest
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m pip install 'twine>=6'
-          python tools/release/verify_publish_dist.py dist --write-hashes dist/SHA256SUMS
-          python -m twine check dist/*.whl dist/*.tar.gz
-          git rev-parse HEAD > dist/SOURCE_COMMIT.txt
-          test "$(cat dist/SOURCE_COMMIT.txt)" = '${{ needs.preflight.outputs.source_sha }}'
-          mkdir publish
-          cp dist/*.whl dist/*.tar.gz publish/
-          test "$(find publish -maxdepth 1 -type f | wc -l)" -eq 3
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ui4me-publishable-dist
-          path: publish/
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ui4me-provenance
-          path: |
-            dist/SHA256SUMS
-            dist/SOURCE_COMMIT.txt
-          if-no-files-found: error
-
-  pypi:
-    # The PyPI pending publisher requires exactly publish.yaml and pypi.
-    needs: assemble
-    runs-on: ubuntu-24.04
-    environment:
-      name: pypi
-      url: https://pypi.org/project/ui4me-core/${{ inputs.version }}/
+    if: ${{ inputs.candidate_run_id == '' }}
+    uses: ./.github/workflows/build-dist.yml
+    with:
+      source_sha: ${{ needs.preflight.outputs.source_sha }}
     permissions:
-      id-token: write
       contents: read
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: ui4me-publishable-dist
-          path: dist
-      - name: Publish using PyPI Trusted Publishing (no API key)
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist/
-          attestations: true
 
-  github-release:
-    needs: [preflight, pypi]
+  stage:
+    # The single place that decides which files will be published.
+    needs: [preflight, build]
+    if: >-
+      ${{ !cancelled() && needs.preflight.result == 'success' &&
+      (needs.build.result == 'success' || (needs.build.result == 'skipped' && inputs.candidate_run_id != '')) }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
-      contents: write
+      contents: read
+      actions: read   # read the candidate run and its artifacts
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.preflight.outputs.source_sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: The candidate is a successful dry run of this workflow for the same commit
+        if: ${{ inputs.candidate_run_id != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CANDIDATE_RUN_ID")"
+          test "$(jq -r .path <<<"$run")" = .github/workflows/publish.yaml
+          test "$(jq -r .event <<<"$run")" = workflow_dispatch
+          test "$(jq -r .head_sha <<<"$run")" = "$SOURCE_SHA"
+          test "$(jq -r .conclusion <<<"$run")" = success
+          echo "Promoting the artifacts of run $CANDIDATE_RUN_ID ($(jq -r .html_url <<<"$run"))"
+      - name: Artifacts built in this run
+        if: ${{ inputs.candidate_run_id == '' }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ui4me-publishable-dist
           path: dist
-      - uses: actions/download-artifact@v4
+      - name: Provenance built in this run
+        if: ${{ inputs.candidate_run_id == '' }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ui4me-provenance
+          path: provenance
+      - name: Artifacts of the qualified candidate run
+        if: ${{ inputs.candidate_run_id != '' }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ui4me-release-files
           path: dist
-      - name: Verify source ref and create GitHub release
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ github.token }}
+      - name: Provenance of the qualified candidate run
+        if: ${{ inputs.candidate_run_id != '' }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ui4me-release-provenance
+          path: provenance
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ github.token }}
+      - name: Re-verify the exact files to publish
+        env:
+          SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+          EXPECTED_WINDOWS_SHA256: ${{ inputs.expected_windows_wheel_sha256 }}
+        run: |
+          set -euo pipefail
+          python -m pip install --require-hashes -r tools/release/requirements-release.txt
+          python tools/release/verify_publish_dist.py dist --write-hashes recomputed.sha256
+          diff -u provenance/SHA256SUMS recomputed.sha256
+          python -m twine check dist/*
+          test "$(cat provenance/SOURCE_COMMIT.txt)" = "$SOURCE_SHA"
+          if [[ -n "$EXPECTED_WINDOWS_SHA256" ]]; then
+            actual="$(sha256sum "dist/ui4me_core-$VERSION-py3-none-win_amd64.whl" | cut -d' ' -f1)"
+            if [[ "$actual" != "$EXPECTED_WINDOWS_SHA256" ]]; then
+              echo "The Windows wheel ($actual) is not the qualified one ($EXPECTED_WINDOWS_SHA256)" >&2
+              exit 1
+            fi
+            echo "Windows wheel equals the qualified wheel $actual"
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui4me-release-files
+          path: dist/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui4me-release-provenance
+          path: provenance/
+          if-no-files-found: error
+
+  attest:
+    # Build-provenance attestations for every published file (F-23, gate P10).
+    needs: [preflight, stage]
+    if: ${{ !cancelled() && !failure() && needs.stage.result == 'success' && !inputs.dry_run }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write       # sign the attestations (Sigstore)
+      attestations: write   # store the attestations
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ui4me-release-files
+          path: dist
+      - name: Attest build provenance
+        # GitHub artifact attestations need a public repository (or Enterprise
+        # Cloud) on the current plan; skipped, with a warning, while private (F-20).
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*
+      - name: Attestations unavailable for a private repository
+        if: ${{ github.event.repository.private }}
+        run: echo "::warning::Build-provenance attestations were not created (private repository); PyPI PEP 740 attestations still apply."
+
+  draft-release:
+    needs: [preflight, stage, attest]
+    if: ${{ !cancelled() && !failure() && needs.attest.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write   # create the draft release and upload its assets
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.preflight.outputs.source_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ui4me-release-files
+          path: dist
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ui4me-release-provenance
+          path: dist
+      - name: Create a draft release with every asset before the irreversible upload
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
-          RELEASE_VERSION: ${{ inputs.version }}
-        shell: bash
+          RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           test "$(cat dist/SOURCE_COMMIT.txt)" = "$SOURCE_SHA"
           (cd dist && sha256sum -c SHA256SUMS)
           tag="v$RELEASE_VERSION"
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $tag already exists, refusing to overwrite it" >&2
+          existing="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$tag\") | .id")"
+          if [[ -n "$existing" ]]; then
+            echo "A release or draft for $tag already exists (id $existing); delete a stale draft before retrying" >&2
             exit 1
           fi
-          existing=$(git ls-remote --tags origin "refs/tags/$tag" | awk '{print $1}')
-          if [[ -n "$existing" && "$existing" != "$SOURCE_SHA" ]]; then
-            # An annotated tag may point to a tag object; compare peeled ref.
-            peeled=$(git ls-remote --tags origin "refs/tags/$tag^{}" | awk '{print $1}')
-            if [[ "$peeled" != "$SOURCE_SHA" ]]; then
-              echo "Tag $tag exists at another commit" >&2
-              exit 1
-            fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists; refusing to publish" >&2
+            exit 1
           fi
-          gh release create "$tag" \
-            dist/*.whl dist/*.tar.gz dist/SHA256SUMS dist/SOURCE_COMMIT.txt \
-            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" \
+          gh release create "$tag" dist/* \
+            --repo "$GITHUB_REPOSITORY" --target "$SOURCE_SHA" --draft \
             --title "UI4ME Core $RELEASE_VERSION" \
-            --notes-file docs/release/RELEASE_NOTES_1.0.1.md --latest
+            --notes-file "docs/release/RELEASE_NOTES_$RELEASE_VERSION.md"
+
+  pypi:
+    # The PyPI trusted publisher requires exactly publish.yaml and environment pypi.
+    needs: [preflight, draft-release]
+    if: ${{ !cancelled() && !failure() && needs.draft-release.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: pypi
+      url: https://pypi.org/project/ui4me-core/${{ needs.preflight.outputs.version }}/
+    permissions:
+      id-token: write   # PyPI trusted publishing (OIDC)
+      contents: read
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ui4me-release-files
+          path: dist
+      - name: Publish using PyPI Trusted Publishing (no API key)
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          packages-dir: dist/
+          attestations: true
+
+  publish-release:
+    needs: [preflight, pypi]
+    if: ${{ !cancelled() && !failure() && needs.pypi.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write   # publish the draft release (creates the tag)
+    steps:
+      - name: Publish the draft release (creates the tag at the source commit)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.preflight.outputs.source_sha }}
+          RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="v$RELEASE_VERSION"
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          ref="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag")"
+          object="$(jq -r .object.sha <<<"$ref")"
+          if [[ "$(jq -r .object.type <<<"$ref")" == tag ]]; then
+            object="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$object" --jq .object.sha)"
+          fi
+          test "$object" = "$SOURCE_SHA"
+          echo "Published $tag at $SOURCE_SHA"

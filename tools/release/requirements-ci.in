@@ -1,0 +1,3 @@
+# Tools for CI self-tests (structural workflow tests).
+# Regenerate: uv pip compile --universal --generate-hashes --python-version 3.10 requirements-ci.in -o requirements-ci.txt
+pyyaml==6.0.2

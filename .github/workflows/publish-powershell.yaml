@@ -1,16 +1,19 @@
 # Only manual dispatch. Independent from the Python/PyPI publish.yaml workflow.
 # PSGallery uses a Gallery API key (NOT the PyPI OIDC trusted publisher).
+#
+# The module promotes, it does not rebuild: it bundles the exact native hosts
+# of the published GitHub release v<version>, and it is built from the commit
+# that tag points to (RELEASE-04), after the CI gate for that commit (F-10).
 name: Publish UI4ME.Core to PowerShell Gallery
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'PowerShell module and Python release version (1.0.1)'
+        description: 'Module and Python release version; the GitHub release v<version> must be published'
         required: true
-        default: '1.0.1'
         type: string
       confirmation:
-        description: 'Type publish-powershell-1.0.1'
+        description: 'Type publish-powershell-<version>'
         required: true
         type: string
 permissions:
@@ -22,30 +25,62 @@ jobs:
   build-and-check:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read   # tools/release/ci_gate.py
+    outputs:
+      version: ${{ steps.verify.outputs.version }}
+      source_sha: ${{ steps.verify.outputs.source_sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Verify explicit confirmation, version and source manifest
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Verify explicit confirmation, version, tag and source manifest
+        id: verify
         shell: bash
-        env:
-          VERSION: ${{ inputs.version }}
-          CONFIRMATION: ${{ inputs.confirmation }}
-        run: |
-          set -euo pipefail
-          test "$VERSION" = 1.0.1
-          test "$CONFIRMATION" = "publish-powershell-$VERSION"
-          grep -Fq "ModuleVersion = '$VERSION'" powershell/UI4ME.Core/UI4ME.Core.psd1
-          python tools/release/verify_source.py
-          python tools/verify_package.py
-      - name: Download canonical Python release wheels (same qualified Rust hosts)
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          UI4ME_RELEASE_MANIFEST_CHECK: '1'
+        run: |
+          set -euo pipefail
+          python tools/release/version.py --expect "$VERSION"
+          python tools/release/version.py --check
+          test "$CONFIRMATION" = "publish-powershell-$VERSION"
+          # RELEASE-04: the module is built from exactly the commit of tag v$VERSION.
+          ref="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$VERSION")"
+          tag_sha="$(jq -r .object.sha <<<"$ref")"
+          if [[ "$(jq -r .object.type <<<"$ref")" == tag ]]; then
+            tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_sha" --jq .object.sha)"
+          fi
+          head_sha="$(git rev-parse HEAD)"
+          if [[ "$tag_sha" != "$head_sha" ]]; then
+            echo "main ($head_sha) is not the commit of v$VERSION ($tag_sha); a module-only fix needs a new patch release" >&2
+            exit 1
+          fi
+          test "$(gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = false
+          python tools/release/verify_source.py
+          python tools/verify_package.py
+          python tools/release/refresh_source_manifest.py --check
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$head_sha" >> "$GITHUB_OUTPUT"
+      - name: Refuse unless the required CI passed for this exact commit (F-10)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.verify.outputs.source_sha }}
+        run: python tools/release/ci_gate.py --sha "$SOURCE_SHA"
+      - name: Download canonical Python release wheels (same qualified Rust hosts)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.verify.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null
           mkdir -p wheels
           gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" --dir wheels \
             --pattern '*manylinux_2_34_x86_64.whl' --pattern '*win_amd64.whl' --pattern SHA256SUMS
@@ -62,70 +97,67 @@ jobs:
           PYWHEELS
           (cd wheels && sha256sum -c SHA256SUMS --ignore-missing)
       - name: Stage complete cross-platform module from released wheels
+        env:
+          SOURCE_SHA: ${{ steps.verify.outputs.source_sha }}
         shell: bash
         run: |
           set -euo pipefail
           python tools/release/build_psgallery.py \
             --linux-wheel "$(find wheels -name '*manylinux_2_34_x86_64.whl' -print -quit)" \
             --windows-wheel "$(find wheels -name '*win_amd64.whl' -print -quit)" \
-            --source-identity "$(git rev-parse HEAD)" \
+            --source-identity "$SOURCE_SHA" \
             --out dist/psgallery
           python tools/release/verify_psgallery.py dist/psgallery/UI4ME.Core
-      - name: PowerShell module and static unit verification
+      - name: PowerShell 7 module and Pester against the staged package
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
           Test-ModuleManifest dist/psgallery/UI4ME.Core/UI4ME.Core.psd1 | Out-Null
           Import-Module ./dist/psgallery/UI4ME.Core/UI4ME.Core.psd1 -Force
-          $hostExe=Get-UI4MEHostPath
-          & $hostExe --version
+          & (Get-UI4MEHostPath) --version
           if($LASTEXITCODE -ne 0){throw 'Host executable failed --version'}
-          if (-not (Get-Module -ListAvailable Pester | Where-Object Version -GE ([version]'5.5.0'))) {
-            Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
-          }
-          Import-Module Pester -MinimumVersion 5.5.0
-          # Test the exact staged package, not the source tree.
-          $env:UI4ME_TEST_MODULE = (Resolve-Path dist/psgallery/UI4ME.Core/UI4ME.Core.psd1).Path
-          $config = New-PesterConfiguration
-          $config.Run.Path = 'powershell/tests'
-          $config.Run.Exit = $true
-          Invoke-Pester -Configuration $config
-      - uses: actions/upload-artifact@v4
+          # Test the exact staged package, not the source tree; no test may skip.
+          ./tools/release/run_pester.ps1 -TestModule dist/psgallery/UI4ME.Core/UI4ME.Core.psd1
+      - name: AllUsers install as root, used by a non-root user (RELEASE-06)
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          docker run --rm --name "ui4me-psg-allusers-$RUN_ID" \
+            -v "$PWD/tools/release:/tools:ro" -v "$PWD/dist/psgallery:/module:ro" \
+            mcr.microsoft.com/powershell:7.4-ubuntu-22.04@sha256:62300a213a9293916333df2b014cd3a8f22fb0b0b65f2bb446aaf436bcf8c868 \
+            sh /tools/smoke_psmodule_allusers.sh /module/UI4ME.Core
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ui4me-powershell-staged-${{ inputs.version }}
-          path: dist/psgallery/UI4ME.Core-1.0.1.zip
+          name: ui4me-powershell-staged-${{ steps.verify.outputs.version }}
+          path: dist/psgallery/UI4ME.Core-${{ steps.verify.outputs.version }}.zip
           if-no-files-found: error
 
   windows-check:
     needs: build-and-check
     runs-on: windows-2022
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.build-and-check.outputs.source_sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: ui4me-powershell-staged-${{ inputs.version }}
+          name: ui4me-powershell-staged-${{ needs.build-and-check.outputs.version }}
           path: staged
       - name: Validate the staged module on PowerShell 7
         shell: pwsh
+        env:
+          VERSION: ${{ needs.build-and-check.outputs.version }}
         run: |
           $ErrorActionPreference = 'Stop'
-          Expand-Archive staged/UI4ME.Core-1.0.1.zip -DestinationPath expanded
+          Expand-Archive "staged/UI4ME.Core-$env:VERSION.zip" -DestinationPath expanded
           $module = Join-Path (Resolve-Path expanded).Path 'UI4ME.Core/UI4ME.Core.psd1'
           Test-ModuleManifest $module | Out-Null
           Import-Module $module -Force
           & (Get-UI4MEHostPath) --version
           if ($LASTEXITCODE -ne 0) { throw 'PS7 Windows host smoke failed' }
-          if (-not (Get-Module -ListAvailable Pester | Where-Object Version -GE ([version]'5.5.0'))) {
-            Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
-          }
-          Import-Module Pester -MinimumVersion 5.5.0
-          $env:UI4ME_TEST_MODULE = $module
-          $config = New-PesterConfiguration
-          $config.Run.Path = 'powershell/tests'
-          $config.Run.Exit = $true
-          Invoke-Pester -Configuration $config
+          ./tools/release/run_pester.ps1 -TestModule $module
       - name: Validate the staged module on Windows PowerShell 5.1
         shell: powershell
         run: |
@@ -134,40 +166,36 @@ jobs:
           Import-Module $module -Force
           & (Get-UI4MEHostPath) --version
           if ($LASTEXITCODE -ne 0) { throw 'Windows PowerShell 5.1 host smoke failed' }
-          if (-not (Get-Module -ListAvailable Pester | Where-Object Version -GE ([version]'5.5.0'))) {
-            Install-Module Pester -MinimumVersion 5.5.0 -Scope CurrentUser -Force -SkipPublisherCheck
-          }
-          Import-Module Pester -MinimumVersion 5.5.0
-          $env:UI4ME_TEST_MODULE = $module
-          $config = New-PesterConfiguration
-          $config.Run.Path = 'powershell/tests'
-          $config.Run.Exit = $true
-          Invoke-Pester -Configuration $config
+          .\tools\release\run_pester.ps1 -TestModule $module
 
   publish-psgallery:
     needs: [build-and-check, windows-check]
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     environment:
       name: psgallery
-      url: https://www.powershellgallery.com/packages/UI4ME.Core/${{ inputs.version }}
+      url: https://www.powershellgallery.com/packages/UI4ME.Core/${{ needs.build-and-check.outputs.version }}
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.build-and-check.outputs.source_sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: ui4me-powershell-staged-${{ inputs.version }}
+          name: ui4me-powershell-staged-${{ needs.build-and-check.outputs.version }}
           path: staged
       - name: Verify and pack exact staged module
         shell: bash
+        env:
+          VERSION: ${{ needs.build-and-check.outputs.version }}
         run: |
           set -euo pipefail
           mkdir -p expanded
-          unzip -q staged/UI4ME.Core-1.0.1.zip -d expanded
+          unzip -q "staged/UI4ME.Core-$VERSION.zip" -d expanded
           chmod +x expanded/UI4ME.Core/runtimes/linux-x64/ui4me_core/_bin/ui4me-host
-          python tools/release/verify_psgallery.py expanded/UI4ME.Core
+          python3 tools/release/verify_psgallery.py expanded/UI4ME.Core
       - name: Package and publish to PSGallery (manual action only)
         shell: pwsh
         env:
@@ -180,7 +208,7 @@ jobs:
           $required=Get-Module -ListAvailable Microsoft.PowerShell.PSResourceGet |
             Where-Object Version -ge ([version]'1.1.0') | Select-Object -First 1
           if(-not $required){
-            Install-Module Microsoft.PowerShell.PSResourceGet -MinimumVersion 1.1.0 -Scope CurrentUser -Force -ErrorAction Stop
+            Install-Module Microsoft.PowerShell.PSResourceGet -RequiredVersion 1.1.1 -Scope CurrentUser -Force -ErrorAction Stop
           }
           Import-Module Microsoft.PowerShell.PSResourceGet -MinimumVersion 1.1.0 -ErrorAction Stop
           New-Item -ItemType Directory -Force dist | Out-Null
@@ -189,28 +217,31 @@ jobs:
           if($packages.Count -ne 1){throw 'Expected exactly one module .nupkg'}
           Publish-PSResource -NupkgPath $packages[0].FullName -Repository PSGallery -ApiKey $env:PSGALLERY_API_KEY -ErrorAction Stop
           Write-Output ('PSGallery publication submitted: ' + $packages[0].Name)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ui4me-powershell-published-${{ inputs.version }}
+          name: ui4me-powershell-published-${{ needs.build-and-check.outputs.version }}
           path: dist/UI4ME.Core*.nupkg
           if-no-files-found: error
 
   github-release-asset:
-    needs: publish-psgallery
+    needs: [build-and-check, publish-psgallery]
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
-      contents: write
+      contents: write   # upload the nupkg to the existing release
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: ui4me-powershell-published-${{ inputs.version }}
+          name: ui4me-powershell-published-${{ needs.build-and-check.outputs.version }}
           path: packages
-      - name: Attach PowerShell package to the existing qualified Python GitHub release
+      - name: Attach the PowerShell package and its hash to the qualified Python GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build-and-check.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
           test "$(find packages -maxdepth 1 -type f -name '*.nupkg' | wc -l)" -eq 1
-          gh release view "v${{ inputs.version }}" --repo "$GITHUB_REPOSITORY" >/dev/null
-          gh release upload "v${{ inputs.version }}" packages/*.nupkg --repo "$GITHUB_REPOSITORY"
+          (cd packages && sha256sum -- *.nupkg > SHA256SUMS-powershell)
+          gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null
+          gh release upload "v$VERSION" packages/*.nupkg packages/SHA256SUMS-powershell --repo "$GITHUB_REPOSITORY"

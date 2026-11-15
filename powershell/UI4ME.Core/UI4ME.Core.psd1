@@ -5,7 +5,7 @@
     Author = 'UI4ME contributors'
     CompanyName = 'UI4ME'
     Copyright = '(c) 2026 UI4ME contributors. MIT license.'
-    Description = 'Native desktop apps from local HTML and CSS, controlled by ordinary PowerShell scripts. Run them with pwsh -File app.ps1 on Linux and Windows (PowerShell 7.2+) or with Windows PowerShell 5.1. A bundled Rust host renders the windows: no browser, JavaScript, Python runtime or web server.'
+    Description = 'Native desktop apps from local HTML and CSS, controlled by ordinary PowerShell scripts. Run them with pwsh -File app.ps1 on Linux and Windows (PowerShell 7.2+) or with Windows PowerShell 5.1. A bundled Rust host renders the windows: no browser, JavaScript, Python runtime or web server. Status: beta (see the changelog for known issues).'
     PowerShellVersion = '5.1'
     DotNetFrameworkVersion = '4.7.2'
     CompatiblePSEditions = @('Desktop','Core')
@@ -38,7 +38,7 @@
     AliasesToExport = @()
     PrivateData = @{
         PSData = @{
-            Tags = @('UI','GUI','HTML','CSS','Native','Desktop','Linux','Windows','Wayland','PowerShell','Rust','PSEdition_Desktop','PSEdition_Core')
+            Tags = @('UI','GUI','HTML','CSS','Native','Desktop','Linux','Windows','Wayland','PowerShell','Rust','PSEdition_Desktop','PSEdition_Core','Beta')
             LicenseUri = 'https://github.com/ui4me/ui4me-core/blob/main/LICENSE'
             ProjectUri = 'https://github.com/ui4me/ui4me-core'
             ReleaseNotes = '1.0.1: run ordinary scripts directly (pwsh -File ./app.ps1, powershell.exe -File .\app.ps1) with the new Start-UI4MEScript, which starts the bundled native host. New-UI4MEProject generates a directly runnable app.ps1. Wait-UI4ME -UntilShutdown no longer emits a value. Bundles the same native hosts as the ui4me-core 1.0.1 Python wheels. Full notes: https://github.com/ui4me/ui4me-core/blob/main/docs/release/RELEASE_NOTES_1.0.1.md'

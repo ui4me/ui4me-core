@@ -3,6 +3,9 @@ from __future__ import annotations
 import hashlib,json,os,re,stat,sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from version import source_version  # noqa: E402
+
 def digest(p:Path)->str:return hashlib.sha256(p.read_bytes()).hexdigest()
 def validate(mod:Path)->dict:
     if not mod.is_dir() or mod.name!='UI4ME.Core':raise ValueError('Expected staged UI4ME.Core folder')
@@ -10,11 +13,12 @@ def validate(mod:Path)->dict:
     psm1=mod/'UI4ME.Core.psm1'
     for p in (psd1,psm1,mod/'private/UI4ME.Transport.cs',mod/'LICENSE'):
         if not p.is_file():raise ValueError(f'Missing module source: {p}')
-    if not re.search(r"ModuleVersion\s*=\s*'1\.0\.1'",psd1.read_text()):raise ValueError('Unexpected module version')
+    version=source_version()
+    if not re.search(r"ModuleVersion\s*=\s*'"+re.escape(version)+"'",psd1.read_text()):raise ValueError('Unexpected module version')
     if 'Publish-PSResource' in psm1.read_text():raise ValueError('Runtime module must not publish')
     evidence=json.loads((mod/'HOST-SOURCE-MANIFEST.json').read_text())
-    if evidence['version']!='1.0.1' or evidence['python_runtime_required'] is not False:raise ValueError('Invalid staged metadata')
-    report={'version':'1.0.1','binaries':{},'native_files':0}
+    if evidence['version']!=version or evidence['python_runtime_required'] is not False:raise ValueError('Invalid staged metadata')
+    report={'version':version,'binaries':{},'native_files':0}
     for platform,relative,magic in [('linux','runtimes/linux-x64/ui4me_core/_bin/ui4me-host',b'\x7fELF'),
                                      ('windows','runtimes/win-x64/ui4me_core/_bin/ui4me-host.exe',b'MZ')]:
         path=mod/relative

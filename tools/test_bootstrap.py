@@ -210,6 +210,12 @@ class DirectStartIntegrationTests(unittest.TestCase):
         self.temp = folder / "tmp"
         self.temp.mkdir()
         env.update({"TMPDIR": str(self.temp), "TEMP": str(self.temp), "TMP": str(self.temp)})
+        if os.name != "nt":
+            # Without XDG_RUNTIME_DIR the host falls back to a runtime folder
+            # under TMPDIR, which is the folder this test inspects (RELEASE-16).
+            runtime = folder / "runtime"
+            runtime.mkdir(mode=0o700)
+            env["XDG_RUNTIME_DIR"] = str(runtime)
         env.update(extra_env or {})
         target = ["-m", "pkg.main"] if module else ["app.py"]
         return subprocess.run([sys.executable, *target, *arguments], cwd=app_dir, env=env,

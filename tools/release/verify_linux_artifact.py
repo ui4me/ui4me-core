@@ -1,7 +1,11 @@
 """Offline structural validation for Linux UI4ME wheels and source archives."""
 from __future__ import annotations
 from pathlib import Path
-import argparse, hashlib, json, re, struct, tarfile, zipfile
+import argparse, hashlib, json, re, struct, sys, tarfile, zipfile
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from version import artifact_names, source_version  # noqa: E402
+from host_checks import debug_build_markers  # noqa: E402
 
 
 # Local agent instructions, VCS metadata, build/test outputs, caches and
@@ -15,7 +19,7 @@ SENSITIVE_SUFFIXES = ('.pem', '.key', '.secret', '.pyc', '.pyo', '.log', '.crede
 def check_distributable(names) -> None:
     for name in names:
         parts = Path(name).parts
-        # sdist members are prefixed by `ui4me_core-1.0.1/`; wheel members are not.
+        # sdist members are prefixed by `ui4me_core-X.Y.Z/`; wheel members are not.
         rel = parts[1:] if parts and parts[0].startswith('ui4me_core-') else parts
         if rel and rel[-1] in LOCAL_ONLY and len(rel) == 1:
             raise ValueError(f'Local-only development file in artifact: {name}')
@@ -37,6 +41,9 @@ def validate_wheel(path: Path) -> dict:
             raise ValueError('Wheel binary is not a compiled Linux ELF host')
         if data[4]!=2 or data[5]!=1 or struct.unpack_from('<H',data,18)[0]!=62:
             raise ValueError('Linux release requires ELF64 little-endian x86_64')
+        markers=debug_build_markers(data)
+        if markers:
+            raise ValueError('Wheel contains a development (non-release) host: '+'; '.join(markers))
         wheel_files=[x for x in entries if x.endswith('.dist-info/WHEEL')]
         if len(wheel_files)!=1: raise ValueError('Missing wheel metadata')
         wheel_meta=z.read(wheel_files[0]).decode()
@@ -103,12 +110,13 @@ def main() -> None:
     ap=argparse.ArgumentParser()
     ap.add_argument('dist_dir', type=Path, nargs='?',default=Path('dist'))
     args=ap.parse_args()
-    sdists=sorted(args.dist_dir.glob('ui4me_core-1.0.1.tar.gz'))
-    wheels=sorted(args.dist_dir.glob('ui4me_core-1.0.1-*.whl'))
+    version=source_version()
+    sdists=sorted(args.dist_dir.glob(artifact_names(version)['sdist']))
+    wheels=sorted(args.dist_dir.glob(f'ui4me_core-{version}-*.whl'))
     if not sdists or not wheels:
         raise SystemExit('Both source distribution and a Linux wheel must exist')
     reports=[validate_sdist(x) for x in sdists]+[validate_wheel(x) for x in wheels]
-    print(json.dumps({'version':'1.0.1','artifacts':reports,'status':'PASS'},indent=2))
+    print(json.dumps({'version':version,'artifacts':reports,'status':'PASS'},indent=2))
 
 
 if __name__ == '__main__':main()

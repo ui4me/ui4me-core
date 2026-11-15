@@ -1,0 +1,36 @@
+# Release-freeze check of the committed source manifest (F-09 / RELEASE-02).
+# Runs only when release tooling changes; ordinary changes are not expected to
+# refresh tools/release/SOURCE_FILES.sha256. The publish workflows run the same
+# check unconditionally. Not a required check for publishing (the publish
+# preflight runs it itself on the release commit).
+name: Release manifest
+on:
+  pull_request:
+    paths: ['tools/release/**']
+  push:
+    branches: [main]
+    paths: ['tools/release/**']
+permissions:
+  contents: read
+concurrency:
+  group: release-manifest-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  manifest:
+    name: release manifest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: The committed manifest matches the tree
+        env:
+          UI4ME_RELEASE_MANIFEST_CHECK: '1'
+        run: |
+          python tools/verify_package.py
+          python tools/release/refresh_source_manifest.py --check
+          cd tools && python -m unittest -v test_source_manifest

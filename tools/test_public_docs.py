@@ -17,7 +17,11 @@ from run_example import checkout_environment  # noqa: E402
 PUBLIC = sorted({
     'README.md', 'CONTRIBUTING.md', 'tools/README.md',
     'examples/python/README.md', 'powershell/examples/README.md', 'powershell/UI4ME.Core/README.md',
-    *(p.relative_to(ROOT).as_posix() for p in (ROOT / 'docs').rglob('*.md')),
+    # The engineering audit and the stabilization records are internal
+    # history, not user documentation: they quote retired file names and
+    # session paths by necessity.
+    *(p.relative_to(ROOT).as_posix() for p in (ROOT / 'docs').rglob('*.md')
+      if not p.relative_to(ROOT).as_posix().startswith(('docs/audit/', 'docs/stabilization/'))),
     *(p.relative_to(ROOT).as_posix() for p in (ROOT / 'skills').rglob('*.md')),
 })
 # Shipped inside packages, where repository-relative links cannot resolve.

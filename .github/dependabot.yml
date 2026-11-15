@@ -1,0 +1,37 @@
+# Dependency update PRs (F-23 / RELEASE-09). Actions are pinned by full commit
+# SHA with a version comment; Dependabot keeps both current. The vendored
+# Stylo, Taffy, winit and softbuffer trees are path dependencies and are not
+# visible to Dependabot: they are upgraded deliberately (third_party/README.md).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # Let new releases age before adopting them (supply-chain cooldown).
+    cooldown:
+      default-days: 14
+    groups:
+      actions:
+        patterns: ['*']
+    open-pull-requests-limit: 5
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    # Let new releases age before adopting them (supply-chain cooldown).
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 5
+  - package-ecosystem: pip
+    # Hash-pinned release, CI and lint tools (requirements-*.txt).
+    directory: /tools/release
+    schedule:
+      interval: weekly
+    # Let new releases age before adopting them (supply-chain cooldown).
+    cooldown:
+      default-days: 14
+    groups:
+      release-tools:
+        patterns: ['*']
+    open-pull-requests-limit: 3
