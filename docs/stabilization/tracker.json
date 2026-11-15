@@ -1,0 +1,4132 @@
+{
+ "schema": 1,
+ "audit_commit": "c6fd71dc5c15dcdfdcdc1500dc156c1b929c216c",
+ "statuses": [
+  "OPEN",
+  "IN_PROGRESS",
+  "FIXED_VERIFIED",
+  "ALREADY_FIXED",
+  "BLOCKED",
+  "DEFERRED",
+  "NOT_REPRODUCED"
+ ],
+ "workstreams": {
+  "A": "host IPC / transport",
+  "B": "stack safety, parsing, limits",
+  "C": "rendering, fonts, performance",
+  "D": "input, keyboard, a11y, geometry",
+  "E": "Python/PowerShell bindings",
+  "F": "CI, packaging, release",
+  "G": "host lifecycle and headless fidelity (wave 2)",
+  "H": "content stalls and paint budgets (wave 2)"
+ },
+ "findings": [
+  {
+   "id": "F-01",
+   "kind": "runtime",
+   "title": "Windows host aborts on ~40 levels of nested HTML (1 MiB PE main stack, ~24 KiB/level div, ~32 KiB fieldset; fieldset overflows Linux 8 MiB ~252)",
+   "severity": "Critical",
+   "likelihood": "Low-Medium",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "RENDER-02",
+    "INPUTSEC-01",
+    "INPUTSEC-07"
+   ],
+   "workstream": "B",
+   "roadmap": "1.1",
+   "affected": [
+    "crates/ui4me-host/src/main.rs",
+    "crates/ui4me-host/build.rs",
+    "crates/ui4me-renderer/src/layout/box_tree/"
+   ],
+   "evidence": "E7: Windows depth 40/60/120/250 abort; PE SizeOfStackReserve=1048576",
+   "reproduction": "python docs/audit/evidence/scripts/depth.py 40 (Windows, 1.0.1 wheel)",
+   "root_cause": "Recursive box-tree build on the process main thread whose stack (1 MiB PE reserve / 8 MiB ulimit) was never budgeted against MAX_DEPTH",
+   "correction": "Run the event loop on an explicitly sized thread (with_any_thread), /STACK backstop, shrink hot frames, assert reserve in artifact check",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T1",
+    "T6"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-02",
+   "kind": "runtime",
+   "title": "Healthy backend disconnected on event bursts (128-message outbound queue treated as dead peer; 2 syscalls per frame)",
+   "severity": "Critical",
+   "likelihood": "High",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "HOST-01",
+    "HOST-09",
+    "INTERACT-08",
+    "BIND-17",
+    "BIND-19",
+    "BIND-PS-02"
+   ],
+   "workstream": "A",
+   "roadmap": "1.2",
+   "affected": [
+    "crates/ui4me-host/src/transport.rs"
+   ],
+   "evidence": "E2–E4: N=20 transitioned buttons + scheme switch disconnects (Windows Python/PS5.1, Linux windowed)",
+   "reproduction": "python docs/audit/evidence/scripts/burst2.py 20 6 env (windowed)",
+   "root_cause": "Depth-based disconnect on a 128-slot sync_channel; every DOM event forwarded; low kernel slack from two writes per frame",
+   "correction": "Byte-bounded unbounded channel under the existing 8 MiB cap, single-syscall frames, log once after first failure; never drop",
+   "dependencies": "",
+   "overlap": "F-29 (bindings), 3.1 subscription",
+   "tests_required": [
+    "T2",
+    "T3",
+    "T14"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-03",
+   "kind": "runtime",
+   "title": "Crafted image SVG (700 nested <g> / 2,000 chained clip-path) aborts the host",
+   "severity": "High",
+   "likelihood": "Low",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "INPUTSEC-02"
+   ],
+   "workstream": "B",
+   "roadmap": "1.1",
+   "affected": [
+    "crates/ui4me-assets/src/svg/prescan.rs",
+    "crates/ui4me-assets/src/worker.rs"
+   ],
+   "evidence": "E8–E9: svgdepth 700 aborts Linux and Windows",
+   "reproduction": "python docs/audit/evidence/scripts/svgdepth.py 700",
+   "root_cause": "usvg recursion on a 2 MiB default worker stack; no nesting cap for image SVG",
+   "correction": "Pre-scan nesting cap and reference-chain bound; explicit worker stack",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T1",
+    "T6"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-04",
+   "kind": "runtime",
+   "title": "Unbounded host memory growth (issue #2): font file re-copied into system_blobs on every parley reload",
+   "severity": "High",
+   "likelihood": "High",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "RENDER-01"
+   ],
+   "workstream": "C",
+   "roadmap": "1.4",
+   "affected": [
+    "crates/ui4me-renderer/src/text/fonts/environment.rs"
+   ],
+   "evidence": "E5: 63→92 MiB in 95 s windowed; heaptrack copy_from_slice in blobs_for_layout",
+   "reproduction": "LEAK_CSS=custom LEAK_CSSTEXT='.u4-badge { font-weight: 600; }' python issue2_replay.py",
+   "root_cause": "Engine font identity keyed by parley's per-load blob id; non-shared SourceCache pruned every 128 builder calls; unbounded side table",
+   "correction": "Shared source cache, keep blob alive (no copy), engine-owned identity, bounded side table",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T4"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-06",
+   "kind": "runtime",
+   "title": "Depth limit bypassable via move_element / insert_html fragment depth",
+   "severity": "Medium",
+   "likelihood": "Low",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "RENDER-03"
+   ],
+   "workstream": "B",
+   "roadmap": "1.1",
+   "affected": [
+    "crates/ui4me-document/src/document.rs"
+   ],
+   "evidence": "RENDER reproduction",
+   "reproduction": "see RENDER-03",
+   "root_cause": "Depth checked only at parse from root; mutations unchecked",
+   "correction": "Check depth(target)+height(subtree) and depth(parent)+height(fragment); SIZE_LIMIT",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T1",
+    "T6"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-07",
+   "kind": "runtime",
+   "title": "Geometry ignores position:fixed ancestors and CSS transforms outside paint/hit-test (caret, select, IME, a11y bounds, get_rect)",
+   "severity": "High",
+   "likelihood": "Medium-High",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "INTERACT-02",
+    "INTERACT-03"
+   ],
+   "workstream": "D",
+   "roadmap": "3.2",
+   "affected": [
+    "crates/ui4me-renderer interaction/a11y geometry"
+   ],
+   "evidence": "INTERACT headless probe; PR #4 tested",
+   "reproduction": "docs/audit/evidence/scripts/interact-probe/",
+   "root_cause": "Five independent content→window computations, none applying transforms/fixed ancestors",
+   "correction": "One geometry service used by all five consumers; PR #4 as reference",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T5"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-08",
+   "kind": "runtime",
+   "title": "Keyboard focus never scrolls into view (Tab, backend focus, AT Focus)",
+   "severity": "High",
+   "likelihood": "High",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "INTERACT-01"
+   ],
+   "workstream": "D",
+   "roadmap": "1.5/2",
+   "affected": [
+    "renderer focus handling"
+   ],
+   "evidence": "INTERACT probe",
+   "reproduction": "interact-probe",
+   "root_cause": "No scroll-into-view on focus moves",
+   "correction": "Scroll nearest along scroll chain on keyboard/programmatic/AT focus",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T10"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-09",
+   "kind": "process",
+   "title": "CI is red for every non-release change (committed source-manifest change detector) and clippy is skipped",
+   "severity": "Medium",
+   "likelihood": "Certain",
+   "classification": "process_defect",
+   "specialist_refs": [
+    "RELEASE-02"
+   ],
+   "workstream": "F",
+   "roadmap": "6.1",
+   "affected": [
+    ".github/workflows/ci.yml",
+    "tools/test_source_manifest.py"
+   ],
+   "evidence": "CI runs on PR #3/#4 (e.g. 43625326001)",
+   "reproduction": "any PR CI run",
+   "root_cause": "Manifest equality test in the unit suite; clippy step after a failing step",
+   "correction": "Manifest check opt-in for release; clippy unconditional; structural CI test",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T7"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-10",
+   "kind": "process",
+   "title": "Publishing is not gated on CI",
+   "severity": "High",
+   "likelihood": "Proven",
+   "classification": "process_defect",
+   "specialist_refs": [
+    "RELEASE-01",
+    "RELEASE-12"
+   ],
+   "workstream": "F",
+   "roadmap": "6.1",
+   "affected": [
+    ".github/workflows/publish.yaml",
+    ".github/workflows/publish-powershell.yaml"
+   ],
+   "evidence": "1.0.0 published 21 s after CI start",
+   "reproduction": "run history",
+   "root_cause": "No workflow check of CI conclusion for the SHA",
+   "correction": "Publish preflight that requires a successful CI run for the exact SHA",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T8"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-11",
+   "kind": "process",
+   "title": "Published Windows binary differs from the qualified one; PSGallery 1.0.0 built from a different commit than its tag",
+   "severity": "Medium",
+   "likelihood": "Proven",
+   "classification": "process_defect",
+   "specialist_refs": [
+    "RELEASE-03",
+    "RELEASE-04"
+   ],
+   "workstream": "F",
+   "roadmap": "6.0/6.3",
+   "affected": [
+    "publish workflows",
+    "tools/release/"
+   ],
+   "evidence": "hashes, run history",
+   "reproduction": "see RELEASE-03/04",
+   "root_cause": "Rebuild after qualification",
+   "correction": "Interim: qualify the exact wheel (6.0) and record hashes; later build-once-promote",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T12"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-12",
+   "kind": "runtime",
+   "title": "Headless mode diverges from native (no transition clock, flush only on read)",
+   "severity": "Medium",
+   "likelihood": "Certain",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "RENDER-04"
+   ],
+   "workstream": "G",
+   "roadmap": "2.1",
+   "affected": [
+    "crates/ui4me-host headless loop"
+   ],
+   "evidence": "E1: headless emits 0 transition events",
+   "reproduction": "burst2.py headless",
+   "root_cause": "Headless is a separate loop without frame pump or virtual clock",
+   "correction": "Run frame pump headless with a test-mode virtual clock",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T3"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "OPEN",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-13",
+   "kind": "runtime",
+   "title": "Python callback worker dies silently on BaseException / unencodable result; errors lack tracebacks",
+   "severity": "Medium",
+   "likelihood": "Medium-High",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "BIND-01",
+    "BIND-03"
+   ],
+   "workstream": "E",
+   "roadmap": "1.5/2.2",
+   "affected": [
+    "python/ui4me_core/"
+   ],
+   "evidence": "BIND reproduction",
+   "reproduction": "see BIND-01",
+   "root_cause": "Worker loop catches Exception only",
+   "correction": "Catch BaseException per callback, SystemExit→request_quit, tracebacks, continue",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T9"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-14",
+   "kind": "runtime",
+   "title": "Content-driven GUI-thread stalls (SVG filters, shrink-to-fit exponential, quadratic unclosed parse, superlinear request_submit)",
+   "severity": "Medium",
+   "likelihood": "Low-Medium",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "INPUTSEC-03",
+    "INPUTSEC-05",
+    "INPUTSEC-06",
+    "HOST-06"
+   ],
+   "workstream": "H",
+   "roadmap": "2.5",
+   "affected": [
+    "renderer svg filters",
+    "layout intrinsic sizing",
+    "document parser"
+   ],
+   "evidence": "INPUTSEC timings",
+   "reproduction": "see INPUTSEC-03/05/06",
+   "root_cause": "Uncapped costs",
+   "correction": "Caps, memoised intrinsic sizing, parse fix",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T6"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "OPEN",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-15",
+   "kind": "runtime",
+   "title": "Paint-budget overflow fails the whole document",
+   "severity": "Medium",
+   "likelihood": "Medium",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "INPUTSEC-04"
+   ],
+   "workstream": "H",
+   "roadmap": "2.5",
+   "affected": [
+    "renderer scene/paint budget"
+   ],
+   "evidence": "INPUTSEC",
+   "reproduction": "see INPUTSEC-04",
+   "root_cause": "Budget error propagates to frame/document",
+   "correction": "Skip offending item",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T6"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "OPEN",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-16a",
+   "kind": "runtime",
+   "title": "Append cliff in long lists after 8 unrelated updates (content cache not touched on replay)",
+   "severity": "High",
+   "likelihood": "High",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "RENDER-05"
+   ],
+   "workstream": "C",
+   "roadmap": "3.4",
+   "affected": [
+    "renderer content cache / replay"
+   ],
+   "evidence": "1.0–1.8 s at 2,000 rows",
+   "reproduction": "render-harness",
+   "root_cause": "Replayed paragraphs aged out of content cache",
+   "correction": "Touch cache entries on replay/seed; work counters",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T13"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-16b",
+   "kind": "runtime",
+   "title": "O(document) incremental updates; generic family expansion; a11y tree rebuilt every tick",
+   "severity": "Medium",
+   "likelihood": "High",
+   "classification": "improvement",
+   "specialist_refs": [
+    "RENDER-06",
+    "RENDER-07",
+    "INTERACT-04"
+   ],
+   "workstream": "C+D",
+   "roadmap": "3.4/8.1",
+   "affected": [
+    "renderer text, a11y"
+   ],
+   "evidence": "27–31 ms per set_text at 2,000 rows; 18 ms a11y rebuild at 3k nodes",
+   "reproduction": "render-harness",
+   "root_cause": "See refs",
+   "correction": "Memoise resolve_families; gate a11y rebuild on AT activity; measure rest",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T13"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-17",
+   "kind": "runtime",
+   "title": "Enter on a focused link does nothing (WCAG 2.1.1)",
+   "severity": "High",
+   "likelihood": "High",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "INTERACT-05"
+   ],
+   "workstream": "D",
+   "roadmap": "1.5/3.3",
+   "affected": [
+    "renderer keyboard default actions"
+   ],
+   "evidence": "INTERACT probe",
+   "reproduction": "interact-probe",
+   "root_cause": "No Enter activation for anchors",
+   "correction": "Enter activates links like click",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T10"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-17b",
+   "kind": "runtime",
+   "title": "Shortcuts match only layout character; click requires same press/release node",
+   "severity": "Medium",
+   "likelihood": "Medium",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "INTERACT-06",
+    "INTERACT-07"
+   ],
+   "workstream": "D",
+   "roadmap": "3.3",
+   "affected": [
+    "renderer keyboard/pointer"
+   ],
+   "evidence": "headless (07); 06 inferred",
+   "reproduction": "interact-probe",
+   "root_cause": "Logical-key-only match; same-node click rule",
+   "correction": "Physical key fallback; common activatable ancestor",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T10"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-18",
+   "kind": "runtime",
+   "title": "Linux launch fails on env var names systemd rejects or non-UTF-8 values",
+   "severity": "Medium",
+   "likelihood": "Medium",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "HOST-03"
+   ],
+   "workstream": "G",
+   "roadmap": "2.3",
+   "affected": [
+    "crates/ui4me-host bootstrap_supervised"
+   ],
+   "evidence": "HOST",
+   "reproduction": "export -f f; run app",
+   "root_cause": "Environment passed verbatim to systemd-run",
+   "correction": "Filter/forward safely",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T15"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "OPEN",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-19",
+   "kind": "runtime",
+   "title": "PowerShell AllUsers install on Linux unusable by non-root users",
+   "severity": "Medium",
+   "likelihood": "High (shared machines)",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "RELEASE-06",
+    "BIND-PS-11"
+   ],
+   "workstream": "E",
+   "roadmap": "4.2",
+   "affected": [
+    "powershell/UI4ME.Core Get-UI4MEHostPath"
+   ],
+   "evidence": "container repro",
+   "reproduction": "AllUsers install as root, run as user",
+   "root_cause": "nupkg drops exec bit; chmod u+x only by owner",
+   "correction": "Per-user cached executable copy with hash verification",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T12"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-20",
+   "kind": "process",
+   "title": "All public package links 404 while repository is private",
+   "severity": "Medium",
+   "likelihood": "Certain",
+   "classification": "process_defect",
+   "specialist_refs": [
+    "RELEASE-05"
+   ],
+   "workstream": "F",
+   "roadmap": "7.1",
+   "affected": [
+    "package metadata"
+   ],
+   "evidence": "curl",
+   "reproduction": "curl -I <homepage>",
+   "root_cause": "Repository private",
+   "correction": "Owner decision on visibility; preflight URL check",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": true,
+   "notes": ""
+  },
+  {
+   "id": "F-21",
+   "kind": "process",
+   "title": "Version hard-coded in ~61 files",
+   "severity": "Medium",
+   "likelihood": "Proven",
+   "classification": "process_defect",
+   "specialist_refs": [
+    "RELEASE-07"
+   ],
+   "workstream": "F",
+   "roadmap": "6.4",
+   "affected": [
+    "workflows",
+    "verifiers",
+    "host.manifest"
+   ],
+   "evidence": "git grep",
+   "reproduction": "git grep -n 1.0.1",
+   "root_cause": "No single source",
+   "correction": "Single-source from Cargo workspace version; bump tool",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-22",
+   "kind": "process",
+   "title": "CI narrower than claims (Python 3.12 only; real-host Pester skipped; no GUI test)",
+   "severity": "Medium",
+   "likelihood": "Proven",
+   "classification": "process_defect",
+   "specialist_refs": [
+    "RELEASE-08",
+    "BIND-12"
+   ],
+   "workstream": "F",
+   "roadmap": "5.1",
+   "affected": [
+    ".github/workflows"
+   ],
+   "evidence": "workflow files",
+   "reproduction": "n/a",
+   "root_cause": "Matrix missing",
+   "correction": "3.10–3.14 matrix, real-host Pester, windowed smoke",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T11",
+    "T14"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-23",
+   "kind": "process",
+   "title": "Supply-chain hygiene (unpinned actions, no dependency scan, no SBOM/provenance, unsigned binary)",
+   "severity": "Medium",
+   "likelihood": "Proven",
+   "classification": "process_defect",
+   "specialist_refs": [
+    "RELEASE-09",
+    "INPUTSEC-08"
+   ],
+   "workstream": "F",
+   "roadmap": "6.5",
+   "affected": [
+    ".github/workflows",
+    "deny.toml"
+   ],
+   "evidence": "zizmor, cargo deny",
+   "reproduction": "zizmor .github/workflows",
+   "root_cause": "Not configured",
+   "correction": "SHA pinning, Dependabot, cargo deny, SBOM, provenance; signing needs a certificate (owner)",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-24",
+   "kind": "process",
+   "title": "Release evidence not durable; no changelog/compatibility/security/yank policy; Production/Stable claim",
+   "severity": "Medium",
+   "likelihood": "Proven",
+   "classification": "process_defect",
+   "specialist_refs": [
+    "RELEASE-10",
+    "RELEASE-11"
+   ],
+   "workstream": "F",
+   "roadmap": "6.4/7.1",
+   "affected": [
+    "docs/release",
+    "pyproject.toml"
+   ],
+   "evidence": "records",
+   "reproduction": "n/a",
+   "root_cause": "Hand-written records; no policies",
+   "correction": "Beta classifier, CHANGELOG, SECURITY.md, versioning policy, generated records",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-25",
+   "kind": "runtime",
+   "title": "Host lifecycle edge cases (accept error kills listener, SIGTERM skips app.shutdown, relaunch during shutdown, error answer = veto, log flood)",
+   "severity": "Low-Medium",
+   "likelihood": "Low-Medium",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "HOST-04",
+    "HOST-07",
+    "HOST-08",
+    "HOST-10",
+    "HOST-15"
+   ],
+   "workstream": "G",
+   "roadmap": "2.3",
+   "affected": [
+    "crates/ui4me-host"
+   ],
+   "evidence": "HOST (EMFILE reproduced)",
+   "reproduction": "see HOST-04",
+   "root_cause": "Various",
+   "correction": "Retry accept, signal handling, no-decision on error, wait for lock",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T15"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "OPEN",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-26",
+   "kind": "runtime",
+   "title": "Direct-start DX defects (lossy print relay, first open_html failure cancels app, double start, host_binary loop)",
+   "severity": "Low-Medium",
+   "likelihood": "Medium",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "BIND-04",
+    "BIND-05",
+    "BIND-06",
+    "BIND-09"
+   ],
+   "workstream": "E",
+   "roadmap": "3.5/7.2",
+   "affected": [
+    "python/ui4me_core bootstrap"
+   ],
+   "evidence": "BIND",
+   "reproduction": "see BIND-05",
+   "root_cause": "Various",
+   "correction": "See refs",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T9"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-27",
+   "kind": "runtime",
+   "title": "Vendored Taffy fork carries ~1,800 added lines; verify.sh and dependency scans not in CI",
+   "severity": "Low-Medium",
+   "likelihood": "Medium",
+   "classification": "improvement",
+   "specialist_refs": [
+    "RENDER-12",
+    "INPUTSEC-08",
+    "INPUTSEC-09"
+   ],
+   "workstream": "F",
+   "roadmap": "8.2",
+   "affected": [
+    "patches/taffy"
+   ],
+   "evidence": "verify.sh passes",
+   "reproduction": "patches/taffy/verify.sh",
+   "root_cause": "Fork growth",
+   "correction": "Schedule verify.sh and cargo deny in CI; upstreaming postponed (08)",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-28",
+   "kind": "runtime",
+   "title": "PowerShell binding defects (psbase member kills connection, break/continue escape, Start-UI4MEScript wrong file, Ctrl+C exit 0, -NoWait dialog cancelled)",
+   "severity": "Medium",
+   "likelihood": "Low-Medium",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "BIND-PS-01",
+    "BIND-PS-04",
+    "BIND-PS-05",
+    "BIND-PS-06",
+    "BIND-PS-07",
+    "BIND-PS-08",
+    "BIND-PS-09",
+    "BIND-PS-10"
+   ],
+   "workstream": "E",
+   "roadmap": "2.2",
+   "affected": [
+    "powershell/UI4ME.Core"
+   ],
+   "evidence": "pwsh 7.7 mock peer and real host",
+   "reproduction": "see BIND-PS-01",
+   "root_cause": "Various",
+   "correction": "See refs",
+   "dependencies": "",
+   "overlap": "",
+   "tests_required": [
+    "T9",
+    "T16"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  },
+  {
+   "id": "F-29",
+   "kind": "runtime",
+   "title": "Bindings silently drop control notifications under bursts (closed, document.error)",
+   "severity": "High",
+   "likelihood": "High once F-02 fixed",
+   "classification": "confirmed_defect",
+   "specialist_refs": [
+    "BIND-02",
+    "BIND-PS-02",
+    "BIND-PS-03"
+   ],
+   "workstream": "E",
+   "roadmap": "1.3",
+   "affected": [
+    "python/ui4me_core client",
+    "powershell C# transport"
+   ],
+   "evidence": "BIND headless and mock peer",
+   "reproduction": "docs/audit/evidence/scripts/bind/",
+   "root_cause": "Indiscriminate bounded queues; first-come admission",
+   "correction": "Control notifications bypass queues, eager bookkeeping, coalescible dropped first, counters",
+   "dependencies": "F-02",
+   "overlap": "",
+   "tests_required": [
+    "T16"
+   ],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending",
+    "required": "both"
+   },
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "remaining_risk": "",
+   "owner_decision": false,
+   "notes": ""
+  }
+ ],
+ "specialist": [
+  {
+   "id": "HOST-01",
+   "kind": "specialist",
+   "title": "Healthy backend is disconnected (app fails) whenever host output bursts past an instantaneous 128-message depth (issue #1 root cause)",
+   "severity": "High→Critical (F-02)",
+   "classification_text": "Confirmed defect (reproduced headless with a 2 ms/message reader and a pipelined client; reproduced by coordinator windowed on Linux and Windows with the stock Python client).",
+   "consolidated": [
+    "F-02"
+   ],
+   "workstream": "A",
+   "affected": "`transport.rs` `Server::reply` (`:195-222`), `host/mod.rs` `Host::send` (`:442-449`), `document_native.rs` `emit_document_events` (`:214-242`); renderer root capture listeners for every event type (`crates/ui4me-renderer/src/document.rs:~360-404`).",
+   "reproduction": "`python3 adv_run.py fast_reader_single_command_burst ADV_N=250 ADV_READ_DELAY=0.002`; `python3 adv_run.py flood_no_read`; coordinator `exp/main/burst2.py`.",
+   "root_cause": "(1) unconditional emission of every DOM event; (2) depth-based (not stall-based) disconnect policy; (3) no separation between droppable/coalescable events and reliable traffic; (4) small effective kernel buffering.",
+   "correction": "1. Reliable lane vs event lane in `transport.rs`. Replace the single `SyncSender<Vec<u8>>` per connection with a `Mutex<Outbound>{ reliable: VecDeque, events: VecDeque/IndexMap, bytes }` + `Condvar`. Reliable = responses, host→backend requests (`window.before_close`, `app.before_quit`), and lifecycle notifications (`app.shutdown`, `window.event` `closed`/`close_requested`/`focused`, `request.cance",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "HOST-02",
+   "kind": "specialist",
+   "title": "PR #3 (drop saturated notifications) is not a correct fix",
+   "severity": "High→advisory (§2.3)",
+   "classification_text": "Design defect in the proposed change (proven from code; not built/run, because building a worktree would rebuild Stylo).",
+   "consolidated": [],
+   "workstream": "G",
+   "affected": "PR #3 `Host::notify` → `Server::offer`; `Host::send`/`respond` unchanged.",
+   "reproduction": "not reproduced (code reasoning). A test: saturate with 200 notifications, then `respond()` → observe disconnect on PR branch.",
+   "root_cause": "drop policy is type-blind and responses have no reserved capacity.",
+   "correction": "Do not merge as is. If a quick patch is needed: restrict `offer` to an allowlist of non-semantic high-frequency event types (pointermove, mousemove, mouseover/out/enter/leave, wheel, scroll, transition*, animation*), route everything else through a reliable path with headroom (separate small queue or reserved slots), send a `document.events_lost` marker, and rate-limit the WARN. Then implement HOS",
+   "status": "IN_PROGRESS",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": "Advisory about draft PR #3: resolved by not merging PR #3 and fixing F-02 without dropping (see F-02)."
+  },
+  {
+   "id": "HOST-03",
+   "kind": "specialist",
+   "title": "Linux supervised launch fails if the environment contains a non-identifier variable name or a non-UTF-8 value",
+   "severity": "Medium",
+   "classification_text": "Confirmed defect (reproduced).",
+   "consolidated": [
+    "F-18"
+   ],
+   "workstream": "G",
+   "affected": "`platform/linux.rs` `bootstrap_supervised` (`:448-454`).",
+   "reproduction": "`env -u UI4ME_TEST_MODE 'BASH_FUNC_foo%%=() { echo; }' ./ui4me-host run --app /nonexistent/app.toml` (also `LATIN=$'caf\\xe9'`).",
+   "root_cause": "forwarding the whole environment without validating systemd's constraints.",
+   "correction": "in `bootstrap_supervised`, forward only names matching `^[A-Za-z_][A-Za-z0-9_]*$` whose value is valid UTF-8 (`std::env::vars_os` + `to_str`); log skipped names (names only) at debug; document that such variables are not inherited under supervision. Unit test: build the argument list with a synthetic env containing `A-B`, `BASH_FUNC_x%%`, non-UTF-8 value and assert they are excluded; optional inte",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "HOST-04",
+   "kind": "specialist",
+   "title": "Listener dies permanently and silently on any accept error",
+   "severity": "Low-Med",
+   "classification_text": "Confirmed defect on Linux (EMFILE reproduced); plausible on Windows (not testable).",
+   "consolidated": [
+    "F-25"
+   ],
+   "workstream": "G",
+   "affected": "`transport.rs` accept thread (`:165-173`), `host/mod.rs` `pump` handling of `Disconnected(0, …)` (`:500-511`); `windows.rs` `NativeListener::accept` (`:280-302`).",
+   "reproduction": "`python3 fd_test.py 19` → \"socket file still exists: False\", late connect ENOENT, no log line.",
+   "root_cause": "treating transient accept/instance errors as fatal.",
+   "correction": "in the accept loop, classify errors: `EMFILE/ENFILE/ENOBUFS/ENOMEM/ECONNABORTED/EPROTO` (Linux) and `ERROR_NO_DATA/ERROR_PIPE_BUSY/ERROR_BROKEN_PIPE` (Windows) → log (rate-limited), sleep 50–100 ms, continue; Windows: on `ERROR_NO_DATA`, `DisconnectNamedPipe` + reuse the instance. Host: log `Disconnected(0, reason)` at error level. Tests: Linux unit test with a lowered `RLIMIT_NOFILE` in a child p",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "HOST-05",
+   "kind": "specialist",
+   "title": "Native loop can leave queued backend messages unprocessed for up to ~500 ms",
+   "severity": "Low-Med",
+   "classification_text": "Plausible defect, proven from code; not reproduced (native mode not run).",
+   "consolidated": [],
+   "workstream": "G",
+   "affected": "`host/mod.rs` `pump` (64 transport events per call, `:489-513`), `host/native.rs` `about_to_wait` (`WaitUntil` 500 ms when idle, `:609-624`).",
+   "reproduction": "not run; test: native or loop-simulated host, enqueue 300 notifications at once, measure time until the last is dispatched.",
+   "root_cause": "",
+   "correction": "in `pump`, if the 64-event loop ended because of the budget (not `Empty`), call `(self.wake)()` (or `set_control_flow(Poll)` for the next iteration). Unit test: fake wake counter asserted after a pump with >64 queued events.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "HOST-06",
+   "kind": "specialist",
+   "title": "Backend commands run unbounded on the GUI thread",
+   "severity": "Low",
+   "classification_text": "Design tradeoff with a measured pathological case (reproduced, debug build).",
+   "consolidated": [
+    "F-14"
+   ],
+   "workstream": "H",
+   "affected": "`requests.rs` dispatch → `documents.rs` `dispatch_document`/`load_document` (parse, `read_html` file I/O, `canonicalize`), renderer.",
+   "reproduction": "`python3 adv_run.py fast_reader_single_command_burst ADV_N=1000`.",
+   "root_cause": "",
+   "correction": "(a) renderer: find the superlinear path in interactive validation (`request_submit` / `invalid` dispatch); (b) host: measure per-command duration and log commands > 100 ms with op name; (c) longer term, a per-pump time budget (process messages until ~8 ms elapsed, then yield and re-wake) instead of a fixed count of 64. Document the tradeoff.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "HOST-07",
+   "kind": "specialist",
+   "title": "No signal or session-end handling; abrupt termination skips `app.shutdown` and leaks the endpoint",
+   "severity": "Low-Med",
+   "classification_text": "Confirmed behaviour (reproduced headless), design gap.",
+   "consolidated": [
+    "F-25"
+   ],
+   "workstream": "G",
+   "affected": "whole host (no `SIGTERM`/`SIGINT` handling, no `WM_QUERYENDSESSION`/`WM_ENDSESSION` handling found in host or vendored winit-win32).",
+   "reproduction": "`python3 sigterm_test.py SIGTERM`.",
+   "root_cause": "",
+   "correction": "Linux: `signalfd`/self-pipe thread for SIGTERM/SIGINT/SIGHUP → set a flag + wake → `begin_shutdown()` (or `request_quit(\"session_end\")` with a short deadline) — note the backend receives SIGTERM directly under `control-group`; consider `KillMode=mixed` so only the main process (host) gets SIGTERM and the host drives the backend shutdown within `TimeoutStopSec`. Windows: handle `WM_QUERYENDSESSION`",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "HOST-08",
+   "kind": "specialist",
+   "title": "Disconnect paths flood the log and mislabel force quit",
+   "severity": "Low",
+   "classification_text": "Confirmed (reproduced: 214 and 1025 WARN lines; coordinator: 61–351).",
+   "consolidated": [
+    "F-25"
+   ],
+   "workstream": "G",
+   "affected": "`Host::send` (`host/mod.rs:442-449`), `pump` quit deadline branch (`:648-657`).",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "in `send`, on first failure set `self.client_dead = true` (or check `server.is_connected`) and skip further sends silently; log once per connection with a counter. Give force quit its own log message and document its exit status (currently 1).",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "HOST-09",
+   "kind": "specialist",
+   "title": "Each frame is written with two syscalls",
+   "severity": "Low",
+   "classification_text": "Confirmed from code; contributes to HOST-01.",
+   "consolidated": [
+    "F-02"
+   ],
+   "workstream": "A",
+   "affected": "`transport.rs` writer (`:303-307`), same for Windows (`WriteFile` twice).",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "build `[len|body]` in one `Vec` (the body is already serialized in `reply`; reserve 4 bytes up front) or batch all queued frames up to ~64 KiB per write. Test: count writes with a mock stream.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "HOST-10",
+   "kind": "specialist",
+   "title": "Secondary launch during primary shutdown fails instead of becoming the new primary",
+   "severity": "Low",
+   "classification_text": "Confirmed (reproduced).",
+   "consolidated": [
+    "F-25"
+   ],
+   "workstream": "G",
+   "affected": "`host/mod.rs` `forward_activation` (`:261-283`), `message` app.activate branch (`:740-744`).",
+   "reproduction": "`python3 secondary_test.py` → \"exit 1 after 0.01 s; Primary instance is shutting down (RPC -32004)\".",
+   "root_cause": "",
+   "correction": "on `CLOSED` or connect failure, poll `InstanceLock::acquire` (Linux flock, Windows mutex) until `shutdown_timeout_ms + margin`; if it becomes primary, continue a normal start. Test: `secondary_test.py` expecting the second launch to run its backend.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "HOST-11",
+   "kind": "specialist",
+   "title": "Multiple-instance endpoint name is derived from the auth token",
+   "severity": "Low",
+   "classification_text": "Confirmed (reproduced: basename == token[:24]); low practical risk.",
+   "consolidated": [],
+   "workstream": "G",
+   "affected": "`host/mod.rs:369-372`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "HOST-12",
+   "kind": "specialist",
+   "title": "Windows pipe client trusts whatever owns the name; cross-session squatting can block the app",
+   "severity": "Low",
+   "classification_text": "Plausible concern (Windows not testable).",
+   "consolidated": [],
+   "workstream": "G",
+   "affected": "`windows.rs` `NativeStream::connect` (`:402-437`), `NativeListener::create_pipe`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "connect with `SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION`; after connect verify the server via `GetNamedPipeServerProcessId` + process token user/logon SID (or the pipe's owner SID via `GetSecurityInfo`) before sending anything. Log a clear error on bind failure due to a foreign owner. Complexity: S–M. Confidence: Medium.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "HOST-13",
+   "kind": "specialist",
+   "title": "Predictable `/tmp` fallback runtime directory and non-atomic creation",
+   "severity": "Low",
+   "classification_text": "Proven from code; DoS only (fails closed).",
+   "consolidated": [],
+   "workstream": "G",
+   "affected": "`linux.rs` `runtime_base`/`ensure_private_directory` (`:68-133`).",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "HOST-14",
+   "kind": "specialist",
+   "title": "Host-private variables leak into the backend; a UI4ME app started by a backend is bound to its parent",
+   "severity": "Low",
+   "classification_text": "Plausible concern (not reproduced).",
+   "consolidated": [],
+   "workstream": "G",
+   "affected": "`linux.rs` `spawn_backend` (env inheritance), `is_systemd_managed`, `watch_launcher`, group kill in `NativeChild::try_wait`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "HOST-15",
+   "kind": "specialist",
+   "title": "Error answers to policy requests are treated as a veto, including \"busy\"",
+   "severity": "Low-Med",
+   "classification_text": "Design issue (code + client reading); interplay with HOST-01.",
+   "consolidated": [
+    "F-25"
+   ],
+   "workstream": "G",
+   "affected": "`host/mod.rs:666-672` (`allow` defaults to false); Python `client.py:436-440` answers `-32005 Callback queue is full` when its 128-slot callback queue is full; PowerShell answers \"PowerShell callback queue is full\".",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "HOST-16",
+   "kind": "specialist",
+   "title": "Panic handling and diagnostics",
+   "severity": "Low",
+   "classification_text": "Design gap / optional improvement.",
+   "consolidated": [],
+   "workstream": "G",
+   "affected": "`main.rs`, `logging.rs`; `panic = \"unwind\"` in release.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "HOST-17",
+   "kind": "specialist",
+   "title": "Doc/implementation mismatches and dead code",
+   "severity": "Low",
+   "classification_text": "Maintenance problem (reproduced where noted).",
+   "consolidated": [],
+   "workstream": "G",
+   "affected": "",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "decode `{}`-param methods with a `deny_unknown_fields` empty struct (or fix the doc); allow-list `token`, `protocol_version`, `client` in hello; update docs; delete the dead constant. Complexity: S. Confidence: High.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RENDER-01",
+   "kind": "specialist",
+   "title": "Issue #2 root cause — system-font blobs re-copied (≈0.5 MiB each) on every reload after parley's source-cache prune; `system_blobs` never pruned",
+   "severity": "High",
+   "classification_text": "Confirmed defect (reproduced in-process, with heaptrack stack, and in the windowed published 1.0.1 host with discriminating variants).",
+   "consolidated": [
+    "F-04"
+   ],
+   "workstream": "C",
+   "affected": "`text/fonts/environment.rs` (`FontEnvironment::system_blobs`, `blobs_for_layout`), interaction with parley/fontique.",
+   "reproduction": "`LEAK_CSSTEXT='.u4-badge { font-weight: 600; }' NORENDER=1 target/debug/render-audit-harness issue2 4000` (needs `exp/RENDER/{doc,region}.html`); windowed: `exp/RENDER/windowed/w600.log` vs `w700.log` vs `w600both.log`.",
+   "root_cause": "identity of system font data is taken from parley's per-load blob id, which is not stable because parley prunes its source cache on every builder; the side table that copies bytes is keyed by that unstable id and has no eviction.",
+   "correction": "1. In `FontEnvironment::new` use `SourceCache::new_shared()` instead of `SourceCache::default()`, and in `blobs_for_layout` keep the fontique `Blob<u8>` itself alive (e.g. `system_sources: HashMap<u64, parley::fontique::Blob<u8>>` next to `system_blobs`). With a shared cache, a locally pruned entry is re-served from the shared weak entry (`Shared::get` upgrades the weak ref), so the id stays stabl",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RENDER-02",
+   "kind": "specialist",
+   "title": "Hosted documents nested ~40 levels overflow the 1 MiB Windows main-thread stack (host abort); documented limit is 256",
+   "severity": "High→Critical (F-01)",
+   "classification_text": "Reproducible risk (reproduced on Linux with a 1 MiB thread at release-like optimisation; Windows stack size read from the published exe; not run on Windows).",
+   "consolidated": [
+    "F-01"
+   ],
+   "workstream": "B",
+   "affected": "`layout/box_tree/build.rs` recursion `Builder::element` (709) → `element_dispatch` (911) → `block_boxed` (1072) → `children` (561); host runs the renderer on the main thread (`crates/ui4me-host/src/host/mod.rs:246-252` `EventLoop::new` / `run_app`); no stack-size setting anywhere (`crates/ui4me-host/build.rs`, no `.cargo/config.toml`, no linker args in workflows).",
+   "reproduction": "`target/debug/render-audit-harness deep 40 1024` (crash), `deep 35 1024` (ok), `deep 252 8192` (ok).",
+   "root_cause": "deep recursion with ~20 KiB frames per DOM level, plus the MSVC default 1 MiB main-thread reserve; fuzzing runs cases on an 8 MiB worker thread (`fuzz_gate.rs:268`) so it cannot see this.",
+   "correction": "(1) Immediate: in `crates/ui4me-host/build.rs`, for `target_env = \"msvc\"` emit `cargo:rustc-link-arg-bins=/STACK:16777216` (16 MiB reserve; commit stays small) — depth 252 needed < 8 MiB here, so 16 MiB gives ~2× headroom. (2) Shrink frames: pass `&BoxStyle`/`Arc<BoxStyle>` (the style maps already hold `Arc<BoxStyle>`), move large temporaries into `Box`, or convert `Builder::element` recursion to ",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RENDER-03",
+   "kind": "specialist",
+   "title": "The 256 depth limit is bypassable (`move_element`, `insert_html` fragment depth), giving unbounded depth → stack overflow on any platform",
+   "severity": "Medium",
+   "classification_text": "Confirmed defect (move path reproduced; insert_html depth accounting proven from code).",
+   "consolidated": [
+    "F-06"
+   ],
+   "workstream": "B",
+   "affected": "`document.rs` `validate_document` (2473-2539) and `apply_op` arms (2814-2870).",
+   "reproduction": "`NOFIRST=1 target/debug/render-audit-harness movedeep 3 200 8192` → depth ~603 accepted, cold render on an 8 MiB thread aborts with stack overflow. With an initial render before the moves the incremental box build (iterative take-over) survived, so the crash needs a full box build: first render, `fo",
+   "root_cause": "",
+   "correction": "track depth incrementally — check `depth(target) + subtree_height(moved)` in `MoveElement` and `depth(insertion parent) + fragment height` in `InsertHtml` (compute the insertion parent's depth by walking ancestors, O(depth)); add tests `move_element_rejects_depth_over_limit`, `insert_html_counts_insertion_depth`. Independently fix RENDER-02 so the limit is survivable.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RENDER-04",
+   "kind": "specialist",
+   "title": "Headless/flushless growth (~0.38 KiB per DOM op) — the journal epoch segment and dirty records accumulate until an update runs; dirty coalescing is O(n²)",
+   "severity": "Low",
+   "classification_text": "Confirmed defect (reproduced; mechanism from code).",
+   "consolidated": [
+    "F-12"
+   ],
+   "workstream": "G",
+   "affected": "`ui4me-document/src/journal.rs:181-232` (`Journal::segment`, appended per entry, cleared only by `take_epoch` at 292), consumed only in `pipeline/update.rs:290` (`run_update`); `pipeline/dirty.rs:31-43` (`DirtySets::note` linear search over all records), fed per entry by `note_journal_since` (`update.rs:168-226`, ChildList builds a `Vec` subject per entry).",
+   "reproduction": "`cd exp/RENDER/headless && python3 run.py set_text 10000 0` vs `... 10000 50`.",
+   "root_cause": "",
+   "correction": "(1) Bound the segment: when `segment.len()` exceeds `WINDOW`, drop it and set an `overflowed` flag on the epoch; `StyleBridge::restyle` then restyles the document conservatively (the cold path already exists) and `box_damage` builds in full. (2) Make `DirtySets` coalesce with a `HashMap<(Reason, Subject), usize>` index and cap per-reason subjects (widen to `Subject::Document` past a threshold). (3",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RENDER-05",
+   "kind": "specialist",
+   "title": "Performance cliff — after 8 unrelated updates, a structural change to a large list re-shapes every row (~1 s per 2000 rows)",
+   "severity": "Medium→High (F-16a)",
+   "classification_text": "Reproducible risk (measured); exact root cause needs verification.",
+   "consolidated": [
+    "F-16a"
+   ],
+   "workstream": "C",
+   "affected": "`layout/coordinator/replay.rs` (`ifc_seeds`, `seed` requiring `InlineContainer::same_input`), `text/paragraph/shaped.rs:187` `RETAIN_PASSES = 8` (`ContentCache::next_pass`).",
+   "reproduction": "`INSERTS=1 UI4ME_PROFILE=1 target/debug/render-audit-harness settext 2000 8 1280 800 1.0` vs `... settext 2000 7 ...`.",
+   "root_cause": "",
+   "correction": "mark the content-cache entries of replayed/seeded inline containers as used in each pass (`ContentCache::touch(hash)` from `seed`/`adopt_results`), or keep the shaped paragraph inside the host snapshot and reuse it by content hash without the cache; then investigate why `seed` fails for unchanged rows when the parent's child list changed (likely `ifc_seeds` only covering `same_ids` ranges). Test: ",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RENDER-06",
+   "kind": "specialist",
+   "title": "Cold shaping dominated by `resolve_families` expanding generics to the full fontconfig fallback list (165 families here), several times per paragraph",
+   "severity": "Medium",
+   "classification_text": "Confirmed performance problem (sampled), remediation impact estimated.",
+   "consolidated": [
+    "F-16b"
+   ],
+   "workstream": "C+D",
+   "affected": "`text/fonts/environment.rs:412-458` `resolve_families`; callers `paragraph/source.rs:894, 1009, 1186`, `text/metrics.rs:82`.",
+   "reproduction": "`target/debug/render-audit-harness settext 2000 1 1280 800 1.0` (first_render), sampling loop in the log of this audit.",
+   "root_cause": "",
+   "correction": "memoize `resolve_families` per `(families, face-table generation)` → `Arc<[String]>` in `FontEnvironment`; truncate system generic expansions to the first few families (fontique already does per-script fallback) or pass the generic to parley. Bench test: cold layout of 2000 paragraphs under a time budget in the release long-document harness.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RENDER-07",
+   "kind": "specialist",
+   "title": "Every incremental update is O(document) — ~27–31 ms per `set_text` in a 2000-row document",
+   "severity": "Medium",
+   "classification_text": "Design tradeoff with measurable cost.",
+   "consolidated": [
+    "F-16b"
+   ],
+   "workstream": "C+D",
+   "affected": "`pipeline/update.rs` `compute_draft` (comment \"S2–S4 (conservative full rebuild)\"), `layout/coordinator/host_tree.rs` (`layout_boxes` rebuilds the whole `HostTree` and fragments), scene build.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "profile and make the per-pass O(N) walks subtree-skippable (dirty-ancestor sets already exist: `dom_dirty` in `update.rs:1118`): skip lang/dir recomputation for clean subtrees, keep `HostTree` nodes of untouched subtrees instead of re-adding, patch fragments for replayed roots, reuse scene subtrees for the remaining 2000 unchanged rows (today only 1 subtree is reused). Add a long-document benchmar",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RENDER-08",
+   "kind": "specialist",
+   "title": "Every frame converts and presents the full surface; damage tracking stops at the vello raster",
+   "severity": "Low-Med",
+   "classification_text": "Optional improvement / performance.",
+   "consolidated": [],
+   "workstream": "C",
+   "affected": "`document.rs:1514-1565` `render_into` (per-pixel premultiplied→0RGB conversion of the whole surface, then `paint_selection`/`paint_editing_caret`), host `host/native.rs:471-494` (`buffer.present()` without damage).",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RENDER-09",
+   "kind": "specialist",
+   "title": "`insert_html`/`replace_children_html` validate the entire document on every call",
+   "severity": "Low",
+   "classification_text": "Performance concern (measured, modest).",
+   "consolidated": [],
+   "workstream": "C",
+   "affected": "`document.rs:2473-2539` (`validate_document` walks from the document node with a `BTreeSet` of all ids) called from `apply_op` (2826, 2833).",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "validate only the fragment (script/attribute/id rules) and check id uniqueness against the DOM's id index (`element_by_id`) and depth via the insertion parent (shares the fix with RENDER-03). **Complexity**: S. **Confidence**: High.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RENDER-10",
+   "kind": "specialist",
+   "title": "Fuzz gate is not run in CI and cannot see stack exhaustion",
+   "severity": "Low (test gap)",
+   "classification_text": "Test/maintenance gap.",
+   "consolidated": [],
+   "workstream": "C",
+   "affected": "`fuzz_gate.rs` (3 `#[ignore]` harnesses: HTML+pipeline, CSS, DOM sequences; xorshift mutation fuzzer, default 2000 iterations, per-case watchdog), `tools/verify.py` (no `--ignored` run), `.github/workflows/ci.yml` (only `verify.py`).",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "nightly CI job running each harness for a fixed seed and 120 s in release, worker stack 1 MiB; add generators for deep nesting (≥ 256 via move/insert chains), huge tables (`<td>` × 10⁴, `colspan=1000`), 10⁵ siblings, extreme numeric CSS combined with `calc()` NaN paths. **Complexity**: S. **Confidence**: High.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RENDER-11",
+   "kind": "specialist",
+   "title": "Production code hidden behind crate-wide `#[allow(dead_code)]`; paged-media pipeline compiled but unreachable",
+   "severity": "Low",
+   "classification_text": "Maintenance problem / simplification opportunity.",
+   "consolidated": [],
+   "workstream": "C",
+   "affected": "`lib.rs:5-20` (every internal module `#[allow(dead_code)]`); `pipeline/paged.rs` (912 lines), `layout/fragmentation/paged.rs` (247), `layout_pages` in `host_tree.rs` (~300), reachable only from `#[cfg(test)] document::paged_facade` (`document.rs:2973-2974`); the CSS profile marks `@page` off (`lib.rs:30`).",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "remove the blanket allows and let the compiler list dead code; gate paged output behind a cargo feature or delete it (with Stylo patch P-006-9 if `@page` parsing is not needed). **Complexity**: S–M. **Confidence**: High.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RENDER-12",
+   "kind": "specialist",
+   "title": "Taffy patch delta is large and expensive to rebase",
+   "severity": "Low-Med",
+   "classification_text": "Design tradeoff / expensive-to-reverse decision.",
+   "consolidated": [
+    "F-27"
+   ],
+   "workstream": "F",
+   "affected": "",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "add `patches/*/verify.sh` to CI (they need the pristine checkout: vendor it as a cached artifact or fetch by revision); upstream the Taffy hooks or isolate subgrid behind Taffy's `LayoutPartialTree` extension points to shrink the rebase surface. **Complexity**: M (CI) / L (upstreaming). **Confidence**: High.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RENDER-13",
+   "kind": "specialist",
+   "title": "Raw `text_ptr` aliasing in the host tree (sound today, fragile)",
+   "severity": "Low",
+   "classification_text": "Maintenance risk (unsafe review).",
+   "consolidated": [],
+   "workstream": "C",
+   "affected": "`layout/coordinator/host_tree.rs:203, 3102-3104, 3491-3493`; deref at `atomic.rs:465` (`unsafe { self.tree.text_ptr.as_mut() }`).",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "thread `&mut TextServices` through the Taffy tree as a field borrowed for the pass (`HostTree<'t> { text: &'t mut TextServices }`) instead of a raw pointer; add a debug-assert re-entrancy flag meanwhile. **Complexity**: M. **Confidence**: Medium.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INTERACT-01",
+   "kind": "specialist",
+   "title": "Moving focus never scrolls the focused element into view (Tab, backend `focus`, AT Focus)",
+   "severity": "High",
+   "classification_text": "Confirmed defect (reproduced headless).",
+   "consolidated": [
+    "F-08"
+   ],
+   "workstream": "D",
+   "affected": "- `interaction/focus.rs::focus_update` (l.258 onward), `keyboard.rs::keydown_default` \"Tab\" arm (l.190-203).",
+   "reproduction": "`interact-probe tabscroll`.",
+   "root_cause": "HTML's focusing steps include \"scroll into view (nearest)\". That step was never implemented, and the module header of `keyboard.rs` lists related navigation work as not done.",
+   "correction": "- In `focus_update`, after `set_focus` succeeds, scroll the new focus target into view with `block: nearest, inline: nearest`, `instant`, unless `FocusSource::Pointer` is set. Pointer focus is already visible, and browsers do not scroll on click focus.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INTERACT-02",
+   "kind": "specialist",
+   "title": "PR #4 is correct but incomplete. Control, caret, IME and text-run geometry inside `position: fixed` is wrong after outer scrolling",
+   "severity": "High",
+   "classification_text": "Confirmed defect (reproduced), plus an assessment of PR #4.",
+   "consolidated": [
+    "F-07"
+   ],
+   "workstream": "D",
+   "affected": "Every geometry path computes `document_rect − Σ scroll_chain(n)` without the fixed-ancestor stop:",
+   "reproduction": "- `interact-probe fixed select` gives the main-tree results.",
+   "root_cause": "Five copies of the \"viewport offset of node\" computation exist. PR #4 patched one of them.",
+   "correction": "- Introduce one `DocumentPipeline::viewport_offset(node) -> (dx, dy)`, or better a `node_to_viewport` transform (see INTERACT-03). It should sum sticky, anchor and scroll offsets up to and including the nearest fixed ancestor.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INTERACT-03",
+   "kind": "specialist",
+   "title": "CSS 2D transforms are ignored by all non-scene geometry (caret placement, select picking, IME area, a11y and get_rect bounds)",
+   "severity": "High",
+   "classification_text": "Confirmed defect (reproduced).",
+   "consolidated": [
+    "F-07"
+   ],
+   "workstream": "D",
+   "affected": "- The same call sites as INTERACT-02.",
+   "reproduction": "`interact-probe transform select`.",
+   "root_cause": "The layout fragment tree has no transforms. Paint and hit testing apply them in the scene, but geometry consumers read layout rects.",
+   "correction": "- Expose from the committed scene or hit index a per-element `local_to_viewport: Affine2D`, including scroll, sticky, fixed and transforms.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INTERACT-04",
+   "kind": "specialist",
+   "title": "The full accessibility tree is rebuilt on every repaint tick (CSS animation frames, caret blink, smooth scroll) even when no assistive technology is active",
+   "severity": "Medium",
+   "classification_text": "Reproducible risk. The per-tick cost was measured on the engine API; the host loop path is proven from code and was not run end to end.",
+   "consolidated": [
+    "F-16b"
+   ],
+   "workstream": "C+D",
+   "affected": "- Path: `host/document_native.rs::flush_document_refresh` l.381-394 → `if repaint || document.a11y.is_none() { accessibility_tree_titled(...); update_document(...) }`.",
+   "reproduction": "`interact-probe anim perf`.",
+   "root_cause": "- The a11y build is keyed on \"needs repaint\" instead of \"semantics or geometry changed\".",
+   "correction": "1. Track a semantic epoch in `Document`, bumped by DOM, attribute, value, selection, focus, layout-geometry and scroll changes but not by caret blink or paint-only animation ticks. Rebuild only when it changed. Throttle geometry-only rebuilds (scroll, animations that move layout) to at most 10 Hz.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INTERACT-05",
+   "kind": "specialist",
+   "title": "Enter on a focused `<a href>` does nothing (no `click`, no `link_activated`)",
+   "severity": "Medium→High (F-17)",
+   "classification_text": "Confirmed defect (reproduced).",
+   "consolidated": [
+    "F-17"
+   ],
+   "workstream": "D",
+   "affected": "`interaction/keyboard.rs::is_button_like` (l.140-146) limits Enter activation to `button | input | summary`, so `has_activation_behaviour`'s `\"a\" | \"area\"` arm is never reached for keys.",
+   "reproduction": "`interact-probe link`.",
+   "root_cause": "",
+   "correction": "- In the Enter arm, also dispatch the synthetic `click` for `a[href]` and `area[href]`. Enter fires on keydown and Space must not activate links, as in browsers.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INTERACT-06",
+   "kind": "specialist",
+   "title": "Editing and clipboard shortcuts match only the logical key, so they fail on non-Latin keyboard layouts",
+   "severity": "Medium",
+   "classification_text": "Confirmed defect in the engine. Platform key reporting is inferred from winit behaviour and was not reproduced natively.",
+   "consolidated": [
+    "F-17b"
+   ],
+   "workstream": "D",
+   "affected": "- `interaction/editing/clipboard.rs::command_of` (l.51-77).",
+   "reproduction": "`interact-probe layout`.",
+   "root_cause": "",
+   "correction": "- Add `fn shortcut_letter(key: &str, code: &str) -> Option<char>`. When Ctrl/Meta is held and `key` is not ASCII, derive the letter from `code` (`KeyA`..`KeyZ` → a..z). This is the Chromium, GTK and Qt approach, applied only when the layout produces no Latin letter.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INTERACT-07",
+   "kind": "specialist",
+   "title": "`click` requires the press and release targets to be the same node (no common-ancestor rule)",
+   "severity": "Medium",
+   "classification_text": "Confirmed defect (reproduced).",
+   "consolidated": [
+    "F-17b"
+   ],
+   "workstream": "D",
+   "affected": "`interaction/sequences.rs:466`: `let same = press.0 == Some(target) && press.1 == Some(p.button);`.",
+   "reproduction": "`interact-probe click`.",
+   "root_cause": "",
+   "correction": "- On release, compute the nearest common inclusive ancestor of `press_target` and the release target in the flat tree. If both are connected, dispatch `click`, `auxclick` and `contextmenu` there, per UI Events and Pointer Events.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INTERACT-08",
+   "kind": "specialist",
+   "title": "Input event amplification feeds Issue #1 (a backend disconnect on a saturated outbound queue)",
+   "severity": "Medium",
+   "classification_text": "Reproducible risk. Volume was measured; the disconnect itself is Issue #1 and was not re-run here.",
+   "consolidated": [
+    "F-02"
+   ],
+   "workstream": "A",
+   "affected": "- The root capture listener list (`document.rs:345-399`) forwards every event type.",
+   "reproduction": "`interact-probe volume`.",
+   "root_cause": "",
+   "correction": "1. Coalesce `pointermove`/`mousemove` per document per frame or pump, keeping only the latest. Browsers align these to animation frames.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INTERACT-09",
+   "kind": "specialist",
+   "title": "On Windows, password fields keep IME composition enabled, so the IME window may show the typed text in clear",
+   "severity": "Low (Windows IME in password fields, not run)",
+   "classification_text": "Plausible concern; needs native verification.",
+   "consolidated": [],
+   "workstream": "D",
+   "affected": "- `host/document_native.rs::update_ime` and `ime_policy`: password sends `ImeRequest::Enable` with `HIDDEN_TEXT | SENSITIVE_DATA` and `ImePurpose::Password`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- On `cfg(windows)`, when `ime.password` is set, send `ImeRequest::Disable`, or never enable, so keys arrive as plain `KeyboardInput` text.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INTERACT-10",
+   "kind": "specialist",
+   "title": "Pointer capture survives window focus loss while pressed-button state is reset",
+   "severity": "Low",
+   "classification_text": "Confirmed (reproduced), minor.",
+   "consolidated": [],
+   "workstream": "D",
+   "affected": "`sequences.rs:671-681` (`WindowFocus{false}` resets `PointerState` and `set_active`, but not `capture`). `Document::handle_input_inner` zeroes `pointer_buttons`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- On `WindowFocus{false}`, if a capture or a pending capture exists, dispatch `pointercancel` then `lostpointercapture` and clear `capture`, as browsers do when the OS steals the pointer.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INTERACT-11",
+   "kind": "specialist",
+   "title": "Frameless drag regions exclude only a fixed tag list, and double-click timing is hard-coded",
+   "severity": "Low",
+   "classification_text": "Design gap (from code).",
+   "consolidated": [],
+   "workstream": "D",
+   "affected": "- `document/application_api.rs::native_chrome_hit` (l.252-300) excludes only `input|textarea|select|button|a|summary`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- Also stop at `is_focusable()` elements, `label`, editing hosts and explicit interactive ARIA roles. `data-ui4me-no-drag` already exists for anything else.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INTERACT-12",
+   "kind": "specialist",
+   "title": "The 250 ms \"IME quiet\" window can drop the first IME commit or preedit after an interrupted composition",
+   "severity": "Low",
+   "classification_text": "Plausible concern (from code).",
+   "consolidated": [],
+   "workstream": "D",
+   "affected": "- `document_native.rs::update_ime` (l.20-28) and `refresh_document` (l.296-300) set `ime_quiet_until` = now + 250 ms.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- Instead of time-based suppression, drop only events that predate the reset. Track an \"IME generation\", bump it on `Disable`, and accept events once an `Ime::Enabled` arrives for the new generation.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INTERACT-13",
+   "kind": "specialist",
+   "title": "Wheel line deltas use a fixed 40 px and ignore the OS wheel-scroll setting",
+   "severity": "Low",
+   "classification_text": "Design tradeoff / platform divergence.",
+   "consolidated": [],
+   "workstream": "D",
+   "affected": "`document_native.rs` MouseWheel arm (l.918-929): `LineDelta * 40.0`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- Windows: `lines * SPI_GETWHEELSCROLLLINES * ~33 px` (or treat the page setting `-1` as a page).",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INTERACT-14",
+   "kind": "specialist",
+   "title": "Vendored patch review: maintenance notes and small risks",
+   "severity": "Low",
+   "classification_text": "Maintenance problem / minor risks.",
+   "consolidated": [],
+   "workstream": "D",
+   "affected": "",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INTERACT-15",
+   "kind": "specialist",
+   "title": "Undisclosed or under-disclosed platform divergences",
+   "severity": "Low",
+   "classification_text": "Documentation gap.",
+   "consolidated": [],
+   "workstream": "D",
+   "affected": "",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "Add a \"Behaviour differences\" list.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-01",
+   "kind": "specialist",
+   "title": "A `BaseException` in any callback (e.g. `sys.exit()`), or an unencodable request result, silently kills the callback worker; events or close decisions then stop forever",
+   "severity": "Medium",
+   "classification_text": "Confirmed defect (reproduced).",
+   "consolidated": [
+    "F-13"
+   ],
+   "workstream": "E",
+   "affected": "`python/ui4me_core/client.py` `_callback_worker` (l.469-482) and `_dispatch` (l.498-530).",
+   "reproduction": "1. `e2_sysexit.py`: a focus callback calls `sys.exit(0)`. Output: `seen after two focus events: ['a']`, and the thread list no longer contains `ui4me-application-events`. Later events are never delivered, and `run()` then waits out the full 2 s drain (`run returned after 2.21 s`). Same result on 3.1",
+   "root_cause": "User code runs inside a `BaseException`-unsafe loop, and response encoding is treated as infallible.",
+   "correction": "- In `_dispatch`, wrap the callback in `except BaseException`. For `SystemExit` or `KeyboardInterrupt` raised in a callback:",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-02",
+   "kind": "specialist",
+   "title": "The client drops notifications indiscriminately, including `window.event closed` and `document.error`; `Window` objects are then never retired, and the drop is invisible",
+   "severity": "Medium→High (F-29)",
+   "classification_text": "Confirmed defect (reproduced). Also a documentation inaccuracy.",
+   "consolidated": [
+    "F-29"
+   ],
+   "workstream": "E",
+   "affected": "`client.py` `_reader` (l.436-442), ordered queue `maxsize=128` (l.304); `application.py` `_window_event` (l.239-246).",
+   "reproduction": "`e6_overflow.py`. Window 1's focus callback sleeps 3 s. 80 focus commands produce about 320 events, then window 2 is closed by `request_close()` with the default allow policy. Observed:",
+   "root_cause": "A single bounded FIFO with a drop-newest policy that does not look at message type.",
+   "correction": "1. Never drop control notifications (`window.event`, `document.error`, `app.activated`, `desktop.preferences_changed`, `request.cancelled`). Replace `queue.Queue` with a small custom deque that has a lock and condition. When the queue is full and a control message arrives, evict the **oldest droppable** DOM event instead. Prefer high-frequency types such as `pointermove`, `pointerover`/`out`, `mou",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-03",
+   "kind": "specialist",
+   "title": "Callback errors are hard to see: one stdout line and no traceback; one failing handler skips the others; failing or `None`-returning policies veto silently",
+   "severity": "Medium",
+   "classification_text": "Confirmed defect (DX). Partly a design tradeoff.",
+   "consolidated": [
+    "F-13"
+   ],
+   "workstream": "E",
+   "affected": "`client.py:506-507, 520-522`; `application.py:478-482` (`Document._dispatch`), `:187`, `:193`.",
+   "reproduction": "`e3_exceptions.py`. Stdout contained only `Notification handler failed: KeyError: 'missing_key'`. The second handler's message `second handler for same event ran` was never printed. A policy raising `ValueError` and a policy with no `return` both silently kept the window open (`window closed? False`",
+   "root_cause": "Minimal error reporting, plus `Document._dispatch` not isolating handlers.",
+   "correction": "- Print through `traceback.print_exc()` to stderr for notification, request and per-handler failures.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-04",
+   "kind": "specialist",
+   "title": "`host_binary()` can resolve to the `ui4me-host` console script itself, causing an infinite exec loop (POSIX) or, by reasoning, unbounded nested processes (Windows)",
+   "severity": "Medium",
+   "classification_text": "Confirmed defect (reproduced on Linux; Windows reasoned).",
+   "consolidated": [
+    "F-26"
+   ],
+   "workstream": "E",
+   "affected": "`python/ui4me_core/launcher.py:19-29` (`shutil.which(name)` fallback) together with `pyproject.toml [project.scripts] ui4me-host = \"ui4me_core.launcher:main\"`.",
+   "reproduction": "- `fakevenv/bin/ui4me-host` is a wrapper with the same shape as pip's, plus an invocation counter. `env -u UI4ME_HOST_BINARY PATH=fakevenv/bin:… PYTHONPATH=<repo>/python timeout 5 ui4me-host --version` gave exit 124 with **65 re-executions in 5 s** and no output.",
+   "root_cause": "The PATH fallback does not exclude the package's own wrapper, and there is no recursion guard.",
+   "correction": "In `host_binary()`:",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-05",
+   "kind": "specialist",
+   "title": "In direct start, backend `print()` output is relayed through the host's lossy 512-line GUI-thread log ring; output is lost under load",
+   "severity": "Medium",
+   "classification_text": "Confirmed defect (DX and observability).",
+   "consolidated": [
+    "F-26"
+   ],
+   "workstream": "E",
+   "affected": "- `crates/ui4me-host/src/backend.rs:12-13, 88-100`: the ring holds `LOG_LINES=512` and drops the oldest line when full.",
+   "reproduction": "`e11_print.py` with the debug host. The backend prints 20,000 lines; **155 reached the launcher's stdout**. stderr showed `3243 backend log records discarded because the bounded log ring was full` and `ui4me-host warn: backend log batch exceeded the GUI formatting budget (source=backend, omitted_rec",
+   "root_cause": "The relay meant for the diagnostics window doubles as the developer console.",
+   "correction": "- Add a manifest option such as `[backend] stdio = \"inherit\"`, which `_bootstrap.write_manifest` sets.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-06",
+   "kind": "specialist",
+   "title": "A failed first `open_html`/`open_file` cancels the whole app before `run()`; a quit or close before `run()` makes `run()` raise",
+   "severity": "Low-Med",
+   "classification_text": "Confirmed defect.",
+   "consolidated": [
+    "F-26"
+   ],
+   "workstream": "E",
+   "affected": "`application.py:116-133` (`open_file`/`open_html` cleanup calls `window.request_close()`), `:140-147` (`run()` calls `ready()` unconditionally). The host rule is in `host/mod.rs:906-914`: closing a window before `app.ready` cancels startup.",
+   "reproduction": "- `e14_fallback.py`: the first `open_html(\"<p onclick=…>\")` raises `-32602` as expected. Then `open_html(\"<p>fallback</p>\")` fails with `RpcError -32008: Application is shutting down or failed`, and `run()` fails the same way. A thread calling `request_quit` gets a third traceback.",
+   "root_cause": "",
+   "correction": "- In `open_*`, when `not self._ready`, keep the empty window on load failure and re-raise. Document that the caller may call `window.load_html(...)` on `exc.window` or reuse it.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-07",
+   "kind": "specialist",
+   "title": "Single-instance in direct start: a second launch exits 0 silently, its script arguments are lost, and Python has no `on_activated` API",
+   "severity": "Low-Med",
+   "classification_text": "Confirmed defect (DX). Also an API gap.",
+   "consolidated": [],
+   "workstream": "E",
+   "affected": "`_bootstrap.launch`, which passes the user's argv only inside the temp manifest; the host's `app.activated` params (`protocol.md` \"Second launches\"); `application.py`, which has no `app.activated` handling.",
+   "reproduction": "`e17_single.py`.",
+   "root_cause": "",
+   "correction": "1. Have the host include the secondary's `[backend].args` and `cwd` in `app.activated` (for example `backend_args`). This is an additive field.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-08",
+   "kind": "specialist",
+   "title": "Default app identities collide: zipapps and directories share `__main__`, scaffolded apps share the `org.ui4me.examples.*` namespace, and `-m` identity depends on cwd",
+   "severity": "Low-Med",
+   "classification_text": "- Confirmed for zipapp/directory and scaffold (proven from code).",
+   "consolidated": [],
+   "workstream": "E",
+   "affected": "`_bootstrap.backend_command` l.137-143; `scaffold.py:40`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- For the `__main__` spec (zipapp or directory), use `script:` with `abspath(sys.argv[0])`, and take the label from its stem.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-09",
+   "kind": "specialist",
+   "title": "Calling `Application.start()` twice in one backend process recursively spawns hosts (`instance=\"multiple\"`) or hangs (`\"single\"`)",
+   "severity": "Low-Med",
+   "classification_text": "Confirmed defect (misuse, but with a severe consequence).",
+   "consolidated": [
+    "F-26"
+   ],
+   "workstream": "E",
+   "affected": "`_bootstrap.forget_host_environment` (l.64-68) also removes the `UI4ME_DIRECT_START` loop guard. A second `start()` then sees `managed() == False` and calls `launch()` from inside a backend.",
+   "reproduction": "`e10_twice.py`.",
+   "root_cause": "",
+   "correction": "Set a process-local flag in `_bootstrap` when `start()` connects or launches. A second call raises `StartupError(\"Application.start() was already called in this process\")`. Optionally return the existing `Application` instead.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-10",
+   "kind": "specialist",
+   "title": "Launcher exit status and diagnostics are wrong when the host dies by a signal; Ctrl+C and SIGTERM give no orderly shutdown",
+   "severity": "Low",
+   "classification_text": "Confirmed defect (Low) plus a design tradeoff.",
+   "consolidated": [],
+   "workstream": "E",
+   "affected": "`_bootstrap.run_host` l.316 (`return process.wait()` returns `-signum` on POSIX, then `SystemExit(-9)`); the l.317-329 interrupt path.",
+   "reproduction": "`e7_signals.sh`.",
+   "root_cause": "",
+   "correction": "- Map `rc < 0` to `128 + (-rc)` and print `ui4me-host terminated by signal SIGSEGV (this is a UI4ME bug; …)`.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-11",
+   "kind": "specialist",
+   "title": "The stale-handle contract leaks as `RpcError -32004` instead of `StaleDocumentError`",
+   "severity": "Low",
+   "classification_text": "Confirmed inconsistency.",
+   "consolidated": [],
+   "workstream": "E",
+   "affected": "`application.py` `Document.command` and `Window.*`. The docs (`python-api.md:142`) say \"every later call on it raises `StaleDocumentError` locally\".",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "Map `-32004` from `document.*`, `window.*` and `bitmap.*` calls on a facade to a new `StaleDocumentError` subclass that also derives from `RpcError` (for example `class HostStaleError(StaleDocumentError, RpcError)`), and mark the facade retired at that point.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-12",
+   "kind": "specialist",
+   "title": "Python 3.10 is claimed but not tested: `except TimeoutError` does not catch `call()` timeouts, and `test_bootstrap` cannot run there",
+   "severity": "Low",
+   "classification_text": "Confirmed (ran on 3.10.22).",
+   "consolidated": [
+    "F-22"
+   ],
+   "workstream": "F",
+   "affected": "- `client.py:391-400` raises `concurrent.futures.TimeoutError`, which is a separate class before 3.11.",
+   "reproduction": "- `e16_timeout.py` on 3.10 prints `NOT a TimeoutError: concurrent.futures._base.TimeoutError`; on 3.13 it is caught.",
+   "root_cause": "",
+   "correction": "- Raise the builtin: `except concurrent.futures.TimeoutError as e: future.cancel(); raise TimeoutError(...) from e`.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-13",
+   "kind": "specialist",
+   "title": "No `py.typed` marker, so the type hints are invisible to mypy and pyright for installed users",
+   "severity": "Low",
+   "classification_text": "Confirmed (packaging).",
+   "consolidated": [],
+   "workstream": "E",
+   "affected": "`python/ui4me_core/` and `pyproject.toml [tool.setuptools.package-data]`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "Add an empty `python/ui4me_core/py.typed` and list it in package-data. Add a `verify_package.py` check that the wheel contains it.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-14",
+   "kind": "specialist",
+   "title": "Startup DX on Linux: raw systemd errors, an undocumented escape hatch, misleading hints and a stale \"v0.1\" text",
+   "severity": "Low",
+   "classification_text": "Confirmed (DX).",
+   "consolidated": [],
+   "workstream": "E",
+   "affected": "- `crates/ui4me-host/src/platform/linux.rs:416-461` (`bootstrap_supervised`).",
+   "reproduction": "- No user bus prints `Failed to connect to user scope bus via local transport: No such file or directory`, exit 1. That is systemd's text with no UI4ME context. The troubleshooting page says starting \"fails with a message about systemd user supervision\", which only happens when `systemd-run` is miss",
+   "root_cause": "",
+   "correction": "- Before calling `systemd-run`, probe the user manager (`$XDG_RUNTIME_DIR/systemd/private`, or `systemctl --user is-system-running`). Print a UI4ME message naming `UI4ME_ALLOW_UNSUPERVISED=1` and `UI4ME_TEST_MODE=1`.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-15",
+   "kind": "specialist",
+   "title": "`pythonw app.py` or a `.pyw` launch would open a console window for `ui4me-host.exe`",
+   "severity": "not confirmed (coordinator test)",
+   "classification_text": "Plausible concern; needs verification on Windows.",
+   "consolidated": [],
+   "workstream": "E",
+   "affected": "`_bootstrap.spawn_host` (l.278-284) uses `subprocess.Popen` without `creationflags`. The host has no `#![windows_subsystem = \"windows\"]`, so it is a console-subsystem exe. Only the *backend* is spawned with `CREATE_NO_WINDOW` (`platform/windows.rs:882`).",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "On `os.name == \"nt\"`, pass `creationflags=subprocess.CREATE_NO_WINDOW` when `GetConsoleWindow()` returns 0 or `sys.stdout is None`. stderr is piped anyway. Verify on winDEV with an interactive session.",
+   "status": "NOT_REPRODUCED",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": "Coordinator E12 on Windows Server 2022 (uv Python 3.13): no console window, no conhost. Evidence docs/audit/evidence/logs/win-pyw5-result.txt."
+  },
+  {
+   "id": "BIND-16",
+   "kind": "specialist",
+   "title": "API surface gaps and inconsistencies (Python)",
+   "severity": "Low",
+   "classification_text": "Design and maintenance.",
+   "consolidated": [],
+   "workstream": "E",
+   "affected": "",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- Add `resizable` and `open_file(asset_root=)`.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-17",
+   "kind": "specialist",
+   "title": "Issue #1 from the client side (socketpair microbenchmark): Python drains fast when idle, about 25x slower under GIL contention, and no client can absorb an instantaneous burst. Windowed measurements are in BIND-19.",
+   "severity": "Medium",
+   "classification_text": "A reproducible risk (measured) plus analysis.",
+   "consolidated": [
+    "F-02"
+   ],
+   "workstream": "A",
+   "affected": "`client.py` `_reader`/`read_exact`, which does two `recv` calls per frame and decodes on the reader thread.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "The fix must be host-side (not PR #3 as written; see HOST-02): an allowlisted drop/coalesce of non-semantic high-frequency types, and better per-document subscription filtering. On the client side, keep the non-blocking reader (do not change it), and add the typed drop policy (BIND-02). Optionally parse on the reader only enough to classify and defer the full `json.loads` work. That has low value.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-18",
+   "kind": "specialist",
+   "title": "sdist fallback on unsupported platforms",
+   "severity": "Low",
+   "classification_text": "Proven from code (Low).",
+   "consolidated": [],
+   "workstream": "E",
+   "affected": "- `setup.py` `BuildWithHost.run`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- At the top of `run()`, check `platform.machine()` and `shutil.which(\"cargo\")` and fail fast with a single clear message.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-19",
+   "kind": "specialist",
+   "title": "Issue #1 measured in a real windowed session (nested `kwin_wayland --virtual`, socket `ui4me-audit-0`): both readers drain at about 35-45k frames/s, yet bursts of about 240 or more messages disconnect the backend. The host's two writes per frame halve the kernel buffering.",
+   "severity": "High (=F-02)",
+   "classification_text": "Confirmed defect (host-side) with measured client behaviour.",
+   "consolidated": [
+    "F-02"
+   ],
+   "workstream": "A",
+   "affected": "",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "1. Never disconnect on notification overflow. Drop or coalesce notifications (an allowlisted drop of non-semantic high-frequency types only, as in HOST-02's quick-patch note; not PR #3 as written), keep responses and lifecycle requests, and emit one `document.error` or diagnostic counter.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-01",
+   "kind": "specialist",
+   "title": "A host JSON object whose member name PowerShell reserves (`psbase`, `psobject`, `psadapted`, `psextended`, `pstypenames`) or that is empty kills the backend connection",
+   "severity": "Medium",
+   "classification_text": "Confirmed defect (reproduced against the real headless host).",
+   "consolidated": [
+    "F-28"
+   ],
+   "workstream": "E",
+   "affected": "`UI4ME.Transport.cs`, `Json.Parser.ReadObject`.",
+   "reproduction": "`reserved_host.ps1 -Attr psbase` loads `<div id='x' psbase='1'>` and calls `get_attributes`. Result:",
+   "root_cause": "PSObject note properties cannot use ETS-reserved names. The existing fallback to an ordinal Hashtable (`:137-143`) covers only case collisions.",
+   "correction": "- In `ReadObject`, before building the PSObject, check each name: empty, or (case-insensitive) one of `psobject`, `psbase`, `psadapted`, `psextended`, `pstypenames`. In that case use the existing ordinal `Hashtable` path, which means extending the `caseCollision` flag into a `needsDictionary` flag.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-02",
+   "kind": "specialist",
+   "title": "Bursts of events the app never subscribed to fill the 128-message queue, and later user events (clicks) are dropped silently (issue #1, PowerShell side)",
+   "severity": "Medium (=F-29)",
+   "classification_text": "Confirmed defect (reproduced with the mock peer). The drop policy is a deliberate design, but its consequences are not covered by any test.",
+   "consolidated": [
+    "F-02",
+    "F-29"
+   ],
+   "workstream": "A",
+   "affected": "`Transport.cs` `ReadLoop` admission (`:583-603`) and the psm1 pump.",
+   "reproduction": "`python3 mockpeer.py burst_client.ps1 -N 300 -Mode toplevel` sends a 300-event `transitionrun` burst, then a `click`, then `window.event closed`. Result:",
+   "root_cause": "- The host sends events nobody subscribed to.",
+   "correction": "1. Do client-side interest filtering on the reader thread.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-03",
+   "kind": "specialist",
+   "title": "A lifecycle `window.event` \"closed\" that the transport deliberately admitted can still be dropped by the module's deferral cap",
+   "severity": "Medium-Low (=F-29)",
+   "classification_text": "Confirmed defect (reproduced).",
+   "consolidated": [
+    "F-29"
+   ],
+   "workstream": "E",
+   "affected": "`UI4ME.Core.psm1` `Invoke-UI4MEPump`, lines 283-291.",
+   "reproduction": "`mockpeer.py burst_client.ps1 -N 300 -Mode inrpc`. A click handler issues RPCs while 300 events plus `closed` arrive. Result: `closedCallback=False window.Closed=False deferredDropped=4`. The window handle stays \"open\" and stays in `$app.Windows`, and the `window.event` callback never sees `closed`.",
+   "root_cause": "Two independent bounds with inconsistent lifecycle rules.",
+   "correction": "- In the `default` branch, if `$message.Method -eq 'window.event'` and its type is `closed`, always enqueue, bypassing the cap. The count is bounded by the number of windows.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-04",
+   "kind": "specialist",
+   "title": "`Wait-UI4ME -UntilShutdown` returns without delivering deferred final events when shutdown arrives during a callback",
+   "severity": "Low-Med",
+   "classification_text": "Confirmed defect and parity gap (reproduced).",
+   "consolidated": [
+    "F-28"
+   ],
+   "workstream": "E",
+   "affected": "psm1 `Wait-UI4ME` (lines 480-491) together with `Invoke-UI4MEPump` (284) and `Close-UI4ME` (515).",
+   "reproduction": "`mockpeer.py shutdown_client.ps1`. A click handler is doing RPCs while the host sends `window.event closed` and `app.shutdown`. Result: `closed-callback-ran=False window.Closed=False deferred-left=2`.",
+   "root_cause": "",
+   "correction": "- After the `-UntilShutdown` loop (and when `-not $Application.Dispatching`), drain `Deferred`, then `Transport.Receive(0)` until empty or about 2 s have passed, dispatching notifications and answering requests. This mirrors Python.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-05",
+   "kind": "specialist",
+   "title": "`Show-UI4MEFileDialog -NoWait` followed by `Wait-UI4MERpc` cancels the user's dialog after 15 s",
+   "severity": "Low-Med",
+   "classification_text": "Confirmed defect (API trap; reproduced with the mock).",
+   "consolidated": [
+    "F-28"
+   ],
+   "workstream": "E",
+   "affected": "psm1 `Wait-UI4MERpc` (:402 default `TimeoutMilliseconds = 15000`) versus `Invoke-UI4MERpc` (:449, where `dialog.*` defaults to -1).",
+   "reproduction": "`mockpeer.py dialog_client.ps1`. Result:",
+   "root_cause": "",
+   "correction": "- Store `DefaultTimeout` on the `UI4ME.Request` object in `Start-UI4MERpc`: -1 for `dialog.*`, else 15000.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-06",
+   "kind": "specialist",
+   "title": "`Start-UI4MEScript` re-runs the wrong file when called from a helper function (dot-sourced script or the user's own module)",
+   "severity": "Low-Med",
+   "classification_text": "Confirmed defect (reproduced with the real headless host).",
+   "consolidated": [
+    "F-28"
+   ],
+   "workstream": "E",
+   "affected": "psm1 `Start-UI4MEScript`, line 1472: `$ScriptPath = $MyInvocation.PSCommandPath`.",
+   "reproduction": "`dotsrc/app.ps1` dot-sources `helper.ps1`, which defines `function Start-MyApp { Start-UI4MEScript ... }`. Result: `ui4me-host error: application failed (reason=Backend exited with exit status: 0)`, exit 1, with no hint about the cause. A user module (`.psm1`) is worse: the backend would be `-File X",
+   "root_cause": "",
+   "correction": "- Default to the entry script. In -File mode, take the script path that follows `-File`/`-f` (or the first positional argument) from `[Environment]::GetCommandLineArgs()`. Otherwise use the outermost frame of `Get-PSCallStack` that has a `ScriptName` ending in `.ps1`.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-07",
+   "kind": "specialist",
+   "title": "Ctrl+C makes `pwsh -File app.ps1` exit 0, not the documented 130",
+   "severity": "Low",
+   "classification_text": "Confirmed defect: docs and behaviour disagree (reproduced on Linux pwsh 7.7).",
+   "consolidated": [
+    "F-28"
+   ],
+   "workstream": "E",
+   "affected": "psm1 `Start-UI4MEScript` :1527-1537, and `HostProcess.Stop` (`Transport.cs:785-789`).",
+   "reproduction": "`forever.ps1` with job control. `kill -INT <launcher>` gave exit 0. `kill -INT -<pgid>` (a true Ctrl+C) also gave exit 0. The Python launcher (`py_forever.py`) gave exit 130. `kill -TERM` gave 143, and the host and backend were gone in all cases.",
+   "root_cause": "",
+   "correction": "- Track `$finished = $true` after the wait loop. In `finally`, if not finished, stop the host and call `[Environment]::Exit(130)`. Alternatively, register a `Console.CancelKeyPress` handler in `HostProcess` that sets `e.Cancel = true`, terminates the host and records 130.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-08",
+   "kind": "specialist",
+   "title": "`break`/`continue` inside user callbacks escape into the module's loops",
+   "severity": "Low",
+   "classification_text": "Confirmed defect, a reproducible PowerShell pitfall.",
+   "consolidated": [
+    "F-28"
+   ],
+   "workstream": "E",
+   "affected": "psm1 `Invoke-UI4MECallback` (:148, `return ,@(& $Callback @Arguments)`) and its callers. These are the `foreach` in `Invoke-UI4MEDocumentHandlers` (:166-173), the `switch` in `Invoke-UI4MEHostRequest` (:237-251), and the `while` loops in `Wait-UI4ME`/`Wait-UI4MERpc` for deferred notifications (:266 is outside any `switch`).",
+   "reproduction": "- `flow_client.ps1 -Case break`: an `if (...) { break }` in the first click handler silently skipped the second handler for that event (`h1-1-break h1-2 h2-2`, where `h2-1` is missing). `continue` happened to behave like `return`.",
+   "root_cause": "",
+   "correction": "- Invoke callbacks inside a sentinel loop so that `break`/`continue` terminate there: `foreach ($__ in 1) { $out = @(& $Callback @Arguments) }`. Then log a warning (\"use return, not break\") when the loop exited early without output. A labelled loop is another option.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-09",
+   "kind": "specialist",
+   "title": "A policy decision is `[bool]` of the last output object; strings and numbers decide too",
+   "severity": "Low",
+   "classification_text": "Design tradeoff with a reproducible pitfall.",
+   "consolidated": [
+    "F-28"
+   ],
+   "workstream": "E",
+   "affected": "psm1 `ConvertTo-UI4MEDecision` (:225-229).",
+   "reproduction": "- `policy_client.ps1 -Case stringfalse`: `'false'` gave `{\"allow\": true}`.",
+   "root_cause": "",
+   "correction": "- Accept only `[bool]` (or `[System.Management.Automation.SwitchParameter]`) as the last output. Otherwise log `UI4ME: before-close policy returned <type> '<value>'; treated as veto` and veto (fail-safe).",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-10",
+   "kind": "specialist",
+   "title": "Writes happen synchronously on the runspace thread and are not covered by RPC timeouts",
+   "severity": "Low",
+   "classification_text": "Reproducible risk (design difference from Python).",
+   "consolidated": [
+    "F-28"
+   ],
+   "workstream": "E",
+   "affected": "`Transport.Send` (`Transport.cs:635-660`, `stream.Write` under `writeLock`). It is called from `Start-UI4MERpc` (:366) before the timed wait.",
+   "reproduction": "`mockpeer.py stall_client.ps1`. The peer stops reading for 6 s, and the client sends a 1.5 MB request with `-TimeoutMilliseconds 1000`. Result: `call 0 returned after 6008 ms (timeout was 1000)`. Ctrl+C cannot interrupt a blocked .NET write promptly.",
+   "root_cause": "",
+   "correction": "- A C# writer thread with a bounded outgoing queue. `Send` enqueues, or throws `RpcException(-32005)` when the queue is full.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-11",
+   "kind": "specialist",
+   "title": "On Linux, a module installed for all users can never be executed by non-owners (`chmod u+x`)",
+   "severity": "Low",
+   "classification_text": "Plausible defect. Proven from code and POSIX semantics. Not reproduced, because that needs a second user or root.",
+   "consolidated": [
+    "F-19"
+   ],
+   "workstream": "E",
+   "affected": "psm1 `Get-UI4MEHostPath`, :1316-1319: `test -x \"$1\" || chmod u+x -- \"$1\"`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- When the file is not executable and the current user cannot chmod it, copy the host to a per-user cache (for example `$XDG_CACHE_HOME/ui4me/<version>/ui4me-host`), `chmod 0755` the copy, verify its hash, and use it.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-12",
+   "kind": "specialist",
+   "title": "JSON serializer edge cases: `[switch]` refused, `[xml]` and other IEnumerables silently become nested arrays, lone surrogates give a cryptic error",
+   "severity": "Low",
+   "classification_text": "Confirmed behaviour (`codec.ps1`). Low-impact defects.",
+   "consolidated": [],
+   "workstream": "E",
+   "affected": "`Json.Write` (`Transport.cs:278-352`) and `Transport.Send` (`:637`, a UTF8Encoding that throws on invalid input).",
+   "reproduction": "- `@{ v = $SwitchParam }` fails with `Cannot send a System.Management.Automation.SwitchParameter`.",
+   "root_cause": "",
+   "correction": "- Serialize `SwitchParameter` as `IsPresent`.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-13",
+   "kind": "specialist",
+   "title": "Collection and pipeline semantics and error records are not idiomatic PowerShell",
+   "severity": "Low",
+   "classification_text": "Design or maintenance issues, confirmed.",
+   "consolidated": [],
+   "workstream": "E",
+   "affected": "Exported functions.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- Emit list items normally (`$items` without the comma), or keep the current behaviour and document \"returns an array as one object\".",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-14",
+   "kind": "specialist",
+   "title": "Naming and API-surface inconsistencies",
+   "severity": "Low",
+   "classification_text": "Maintenance and DX.",
+   "consolidated": [],
+   "workstream": "E",
+   "affected": "",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- Add aliases or new consistent names (for example `Get-UI4MEDocumentValue`) without removing the old ones.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-15",
+   "kind": "specialist",
+   "title": "No runspace or thread-affinity guard",
+   "severity": "Low",
+   "classification_text": "Reproducible risk.",
+   "consolidated": [],
+   "workstream": "E",
+   "affected": "psm1 `Start-UI4MERpc` (:358 `$Application.NextId++`, not atomic) and the shared `Pending`/`Replies`/`Deferred` hashtables.",
+   "reproduction": "`thread_client.ps1`. A `Start-ThreadJob` using `$using:doc` and the main thread each did 300 `Set-UI4MEDocumentText`. The job saw 2 failures: `Exception calling \"Register\" ... \"Duplicate request ID\"`. Callbacks can also run on the job's runspace when it pumps.",
+   "root_cause": "",
+   "correction": "- Record `[Runspace]::DefaultRunspace.InstanceId` (or `[Threading.Thread]::CurrentThread.ManagedThreadId`) in `Connect-UI4ME`.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-16",
+   "kind": "specialist",
+   "title": "Runtime `Add-Type` cost and constraints; helper compatibility check is presence-based",
+   "severity": "Low",
+   "classification_text": "Design tradeoff with maintenance risk.",
+   "consolidated": [],
+   "workstream": "E",
+   "affected": "psm1 `Initialize-UI4MEHelper` (:25-38).",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- Add `public const string HelperVersion = \"1.0.1\"` in C# and compare it with the module version in `Initialize-UI4MEHelper`.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-17",
+   "kind": "specialist",
+   "title": "Callbacks resolve unqualified variables through whatever call stack is pumping",
+   "severity": "Low",
+   "classification_text": "Reproducible PowerShell pitfall (docs are incomplete).",
+   "consolidated": [],
+   "workstream": "E",
+   "affected": "psm1 `Invoke-UI4MECallback` (:148), which follows PowerShell's dynamic scoping.",
+   "reproduction": "`scope_client.ps1`. The same top-level handler printed `status=function-local` when the event was pumped inside a function's RPC wait, and `status=script-level` when pumped at script level. `$counter++` without `$script:` updated a local copy, as documented. The `.GetNewClosure()` and `$script:` beh",
+   "root_cause": "",
+   "correction": "Docs (`powershell-api.md` \"Scriptblocks and variables\"): state that unqualified reads in callbacks can see the locals of whichever function is waiting, and recommend `$script:name` for shared reads too, or a state hashtable. No code change is needed.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-18",
+   "kind": "specialist",
+   "title": "On Windows, launcher output may lose non-ASCII text (unverified)",
+   "severity": "Low",
+   "classification_text": "Plausible concern. Windows only; reasoned from code, not run.",
+   "consolidated": [],
+   "workstream": "E",
+   "affected": "`HostProcess.Relay` (`Transport.cs:796-801`) writes through `Console.Out`/`Console.Error`. The backend role sets `[Console]::OutputEncoding = UTF8` (psm1 :1455), but the launcher role does not.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "Verify on winDEV with `Write-Output 'Grüße 😀'` from the backend. If it is broken, write to the console with `WriteConsoleW` when stdout is a console, or set `Console.OutputEncoding` to UTF-8 for the duration of the launcher wait (and restore it).",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "BIND-PS-19",
+   "kind": "specialist",
+   "title": "`Start-UI4MEHost` (wait mode) prints raw JSON host log records",
+   "severity": "Low",
+   "classification_text": "DX inconsistency, confirmed from code.",
+   "consolidated": [],
+   "workstream": "E",
+   "affected": "psm1 :1340 `& $hostBinary run --app $full`. The host's stderr goes straight to the console. `Start-UI4MEScript` humanizes it through `HostProcess.RelayLine`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "Reuse `UI4ME.HostProcess` in `Start-UI4MEHost` (with the same Ctrl+C and exit-code handling as BIND-PS-07).",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INPUTSEC-01",
+   "kind": "specialist",
+   "title": "Deeply nested HTML overflows the main-thread stack and aborts the host",
+   "severity": "High (=F-01)",
+   "classification_text": "confirmed defect (reproduced).",
+   "consolidated": [
+    "F-01"
+   ],
+   "workstream": "B",
+   "affected": "`crates/ui4me-renderer` box-tree builder (`layout::box_tree::build::Builder::{children,block_boxed,element_dispatch,element}`), reached through the render/layout path; depth gate `crates/ui4me-renderer/src/document.rs:41` (`MAX_DEPTH = 256`) and `validate_document` at `:2487`.",
+   "reproduction": "`gen_cases.py` -> `div40.html` (`ulimit -s 1024`), `fieldset252.html` (default). Both rc 134, `thread 'main' has overflowed its stack`, `fatal runtime error: stack overflow, aborting` (SIGABRT). Also reproduced live: the same layout runs on the GUI thread via `host/native.rs::draw` (`render_into`), ",
+   "root_cause": "`MAX_DEPTH = 256` was chosen for the parser/DOM, not for the recursive layout builder's per-element stack cost, and it is not scaled to the 1 MiB Windows main-thread stack. The builder recurses on the native call stack.",
+   "correction": "(a) set the host main thread (and the winit/event-loop thread on Windows) to an explicit large stack via `std::thread::Builder::stack_size` the way the fuzz worker already does (`fuzz_gate.rs:267` uses 8 MiB) — `main.rs` currently calls `execute()` straight on the default main stack; the Windows PE reserve must also be raised (linker `/STACK` or a spawned worker). (b) Lower `MAX_DEPTH` to a value ",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INPUTSEC-02",
+   "kind": "specialist",
+   "title": "SVG with deep element nesting overflows the asset-worker stack and aborts the host",
+   "severity": "High (=F-03)",
+   "classification_text": "confirmed defect (reproduced).",
+   "consolidated": [
+    "F-03"
+   ],
+   "workstream": "B",
+   "affected": "`ui4me-assets` SVG pipeline on worker threads; usvg `convert_element`/`convert_children`/`convert_group` recursion, reached from `worker.rs::decode_and_publish` -> `svg::usvg_adapter::UsvgRenderer::parse`. Worker stack set at `worker.rs` supervisor spawn (no custom `stack_size`, so OS default — on Windows 1 MiB).",
+   "reproduction": "`gen_cases.py` -> `g700_file.html` (SVG file under the asset root), `g700_data.html` (10.6 KB `data:` URL in an `<img>`; also reproduced via CSS `background-image`), `clip2000.html` (2000 chained `clip-path`, a different unbounded usvg recursion). All rc 134, `thread 'ui4me-assets-N' has overflowed ",
+   "root_cause": "the pre-scan enforces an element *count* and a 4-deep cap on specific constructs but not on arbitrary element nesting, and usvg/resvg recurse on the native stack; the asset workers use the default (small on Windows) stack.",
+   "correction": "in `svg/prescan.rs`, reject documents whose maximum element nesting exceeds a safe bound (roxmltree already walks the tree, so track depth) before handing bytes to usvg; pick the bound against the worker stack size. Independently, give the asset workers an explicit large `stack_size` at spawn in `worker.rs` (as the fuzz worker does). Test: feed `g<N>.svg` and `clip<N>.svg` at the bound through the",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INPUTSEC-03",
+   "kind": "specialist",
+   "title": "SVG filter primitives run uncapped on the main thread (CPU/time DoS)",
+   "severity": "Medium",
+   "classification_text": "reproducible risk.",
+   "consolidated": [
+    "F-14"
+   ],
+   "workstream": "H",
+   "affected": "resvg filter rasterisation (`resvg::filter::turbulence`, `feMorphology`, `feConvolveMatrix`, chained primitives) via `svg::raster_cache::SvgRasterCache::raster` -> `ResourceManager::paint_image`, called from the renderer paint path (`pipeline/resources.rs::lookup_at`) **on the main/GUI thread** (SVG raster happens at paint time, not on the asset worker).",
+   "reproduction": "`gen_cases.py` -> `turbulence.html` (inline `<svg>`, octaves 10000 => ~47 s main-thread stall). Raise octaves for an effectively unbounded stall.",
+   "root_cause": "no bound on filter-primitive work (octaves, kernel area, morphology radius, primitive count), and filter rasterisation is synchronous on the paint thread with no time budget.",
+   "correction": "clamp dangerous filter parameters in the SVG prescan/adapter before rasterising — cap `numOctaves` (browsers effectively cap near ~5-10), `feConvolveMatrix` order, `feMorphology` radius and total primitive count; and/or move SVG rasterisation off the GUI thread or wrap it in a wall-clock budget. Test: assert bounded time for `turbulence.html` and friends.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INPUTSEC-04",
+   "kind": "specialist",
+   "title": "Paint-budget rejections (deep scopes, too many gradient stops / filter functions) drop the whole frame, and live they drop the document fatally",
+   "severity": "Medium",
+   "classification_text": "confirmed defect (reproduced) for the error behaviour; design-tradeoff for the thresholds.",
+   "consolidated": [
+    "F-15"
+   ],
+   "workstream": "H",
+   "affected": "`crates/ui4me-renderer/src/raster/validate.rs` (`MAX_STOPS = 1024`, `MAX_FILTER_FUNCTIONS = 64`, scope nesting cap 128); consumed by the host at `host/native.rs::draw` which on any render error takes `record.document`, sets a failure and emits `document.error` with `\"fatal\":true` (`native.rs:545-574`).",
+   "reproduction": "`gen_cases.py` -> `stops5000.html`, `filters65.html`, `overflow129.html`.",
+   "root_cause": "the scene validator rejects the whole built scene instead of degrading the one offending display item (clamp stop count, drop excess filter functions, flatten scopes past the cap); and the host treats any `render_into` error as fatal.",
+   "correction": "in `raster/validate.rs` / scene building, clamp rather than reject (cap stops to `MAX_STOPS`, drop filter functions past `MAX_FILTER_FUNCTIONS`, stop applying scopes past the nesting cap) and map genuinely unavoidable cases to a non-`INTERNAL_INVARIANT` code; in `host/native.rs::draw`, treat a render error as a skipped frame / per-item degrade, not a document kill. Test: each case renders (rc 0) w",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INPUTSEC-05",
+   "kind": "specialist",
+   "title": "Parser is quadratic on deeply nested unclosed block elements",
+   "severity": "Low-Med",
+   "classification_text": "reproducible risk.",
+   "consolidated": [
+    "F-14"
+   ],
+   "workstream": "H",
+   "affected": "html5ever tree builder (`close_p_element_in_button_scope` -> `in_scope_named`, scope scan is O(open-elements)) driven by `ui4me-document` sink; the DOM node gate (`document.rs:40` `MAX_NODES = 65_536`) is the only bound.",
+   "reproduction": "`gen_cases.py` -> `divs40k.html`.",
+   "root_cause": "`MAX_NODES = 65_536` combined with per-node O(depth) scope scans; nothing caps *open-element depth* early during tokenising.",
+   "correction": "enforce an open-element depth cap in the sink during parsing (reject once the open-element stack passes a bound, e.g. a few hundred) so the quadratic blowup is cut off early, consistent with INPUTSEC-01's layout depth bound. Test: assert `divs40k.html` is rejected quickly.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INPUTSEC-06",
+   "kind": "specialist",
+   "title": "Shrink-to-fit inline-block layout is exponential in nesting depth",
+   "severity": "Medium",
+   "classification_text": "reproducible risk.",
+   "consolidated": [
+    "F-14"
+   ],
+   "workstream": "H",
+   "affected": "`crates/ui4me-renderer/src/layout/coordinator/atomic.rs::layout_atomic_child` / `atomic_intrinsic_width` — an `auto`-width atomic does a min-content and a max-content intrinsic pass (`:206-207, :221-222`), each of which recurses into children that each do the same two passes.",
+   "reproduction": "`gen_cases.py` -> `ifb26.html` (~8-11 s); increase depth to make it unbounded.",
+   "root_cause": "intrinsic-size passes are recomputed per level without memoising the child's min/max-content across the two parent passes (the final pass does `clear_subtree_cache`, but intrinsic passes re-descend).",
+   "correction": "memoise min-content/max-content intrinsic widths per node within one layout (Taffy has a cache; ensure the intrinsic passes consult it rather than recomputing), and/or add a layout work/time budget. Test: assert near-linear scaling of nested inline-block depth.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INPUTSEC-07",
+   "kind": "specialist",
+   "title": "`MAX_DEPTH`/`SVG_MAX_NESTING` are not tuned to the 1 MiB Windows stack and no worker/main stacks are sized",
+   "severity": "High (=F-01)",
+   "classification_text": "plausible concern needing verification on Windows (Linux parts reproduced).",
+   "consolidated": [
+    "F-01"
+   ],
+   "workstream": "B",
+   "affected": "`crates/ui4me-host/src/main.rs` (runs `execute()` on the default main stack; no `stack_size`), `worker.rs` supervisor (default worker stack), the published Windows PE (`SizeOfStackReserve = 0x100000 = 1 MiB`).",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INPUTSEC-08",
+   "kind": "specialist",
+   "title": "Four unmaintained-dependency advisories; no `deny.toml` / advisory gate in CI",
+   "severity": "Low",
+   "classification_text": "maintenance problem (confirmed).",
+   "consolidated": [
+    "F-23",
+    "F-27"
+   ],
+   "workstream": "F",
+   "affected": "dependency tree; CI.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "add a committed `deny.toml` and a CI job running `cargo deny check advisories licenses sources`; `ignore` the four unmaintained IDs with a dated rationale so a *new* advisory still fails the build. Track `fontdue`->`skrifa` (already a direct dep) to drop `ttf-parser`, and the zbus 5/6 `names` migration. Complexity: S. Confidence: High.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INPUTSEC-09",
+   "kind": "specialist",
+   "title": "Vendored Stylo (MPL-2.0) / Taffy — provenance verified, but no CI drift gate and large carried Taffy changes",
+   "severity": "Low-Med",
+   "classification_text": "maintenance problem / design tradeoff.",
+   "consolidated": [
+    "F-27"
+   ],
+   "workstream": "F",
+   "affected": "`patches/stylo/stylo` (servo/stylo `37c1ed3` + P-006-1..20), `patches/taffy/taffy` (DioxusLabs/taffy `fca167c` + P-008-1..6), `patches/*/verify.sh`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "run both `verify.sh` in CI (provision the pristine checkout, or vendor a hash of it); record the upstream base revisions and a cadence for pulling security fixes; verify the published sdist actually contains the patched Stylo sources (MPL-2.0 §3.2); consider whether the subgrid fork can be upstreamed to shed the maintenance burden. Complexity: S (CI gate) / L (subgrid upstreaming). Confidence: Hig",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INPUTSEC-10",
+   "kind": "specialist",
+   "title": "Windows DLL/dlopen search-path exposure (not verified on Windows)",
+   "severity": "Low",
+   "classification_text": "plausible concern needing verification.",
+   "consolidated": [],
+   "workstream": "H",
+   "affected": "Windows host DLL loading; `fontconfig-dlopen`/`wayland-dlopen` features (Linux only, low risk); `build.rs` embeds a manifest.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "INPUTSEC-11",
+   "kind": "specialist",
+   "title": "batch/decode.rs — bounds look correct; one near-miss to confirm",
+   "severity": "Low",
+   "classification_text": "GOOD, with one check.",
+   "consolidated": [],
+   "workstream": "H",
+   "affected": "`crates/ui4me-document/src/batch/decode.rs`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-01",
+   "kind": "specialist",
+   "title": "Publishing is not gated on CI, and 1.0.0 shipped from a commit whose Windows CI failed",
+   "severity": "High",
+   "classification_text": "Confirmed defect (process). Proven from run history.",
+   "consolidated": [
+    "F-10"
+   ],
+   "workstream": "F",
+   "affected": "`.github/workflows/publish.yaml`, `publish-powershell.yaml`, GitHub repo settings.",
+   "reproduction": "`gh run list --repo ui4me/ui4me-core --limit 30` and compare rows 43484564824 and 43484619109. `gh api repos/ui4me/ui4me-core/environments`.",
+   "root_cause": "The gate is documentation only (`docs/release/publishing.md:7`, \"All gates … pass\"). The plan has no protection features, and the workflow has no CI-status check.",
+   "correction": "1. In `publish.yaml` `preflight` (after line 54) and `publish-powershell.yaml` `build-and-check`, add a step that fails unless every required check run for `$SHA` concluded `success`. For example, `gh api repos/$GITHUB_REPOSITORY/commits/$SHA/check-runs --paginate --jq '.check_runs[]|[.name,.conclusion]|@tsv'` must contain `verify (ubuntu-24.04)\\tsuccess` and `verify (windows-2022)\\tsuccess`, plus",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-02",
+   "kind": "specialist",
+   "title": "The committed `SOURCE_FILES.sha256` is a change-detector in the unit suite. Every non-release change fails CI and hides clippy",
+   "severity": "High→Medium (F-09)",
+   "classification_text": "Confirmed defect (CI design).",
+   "consolidated": [
+    "F-09"
+   ],
+   "workstream": "F",
+   "affected": "`tools/test_source_manifest.py:14-17`, `tools/release/refresh_source_manifest.py`, `tools/release/SOURCE_FILES.sha256` (1,472 entries), `.github/workflows/ci.yml:28-31`.",
+   "reproduction": "Push any one-line source change: CI goes red. Locally, `touch notes.txt && python3 tools/release/refresh_source_manifest.py --check` exits 1 (follows from the code: an untracked, non-ignored file is included).",
+   "root_cause": "The manifest is a legacy of archive-based delivery. `provenance-1.0.0.json` records an input zip with no `.git`, and `verify_package.py`'s docstring says \"Verify the delivered source manifest before importing\". In a Git repository the commit or tree hash already is a tamper-evident manifest, and an unsigned in-tree hash list adds no security: whoever edits a file can regenerate it. Placing a relea",
+   "correction": "1. Delete `test_checked_manifest_matches_entire_source`. Keep the generator unit tests (`:19-51`).",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-03",
+   "kind": "specialist",
+   "title": "The published Windows host binary was never natively qualified, and the release notes contradict the qualification record",
+   "severity": "Medium",
+   "classification_text": "Confirmed defect (evidence and provenance).",
+   "consolidated": [
+    "F-11"
+   ],
+   "workstream": "F",
+   "affected": "`docs/release/RELEASE_NOTES_1.0.1.md:38`, `tools/release/records/qualification-1.0.1.json:5,15`, `publish.yaml` windows-wheel job.",
+   "reproduction": "`gh release download v1.0.1 --pattern '*.whl'`, then hash `ui4me_core/_bin/ui4me-host*` inside each wheel and compare with `qualification-1.0.1.json`.",
+   "root_cause": "The process qualifies local candidates, and then CI rebuilds them for publication.",
+   "correction": "Switch to promote-not-rebuild, as PSGallery already does:",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-04",
+   "kind": "specialist",
+   "title": "The PowerShell Gallery module source is not tied to the release tag. UI4ME.Core 1.0.0 was built from a different commit than v1.0.0",
+   "severity": "Medium",
+   "classification_text": "Confirmed defect (provenance).",
+   "consolidated": [
+    "F-11"
+   ],
+   "workstream": "F",
+   "affected": "`publish-powershell.yaml:22-73`.",
+   "reproduction": "`gh run list` (row 43512337180) and `git ls-remote --tags origin`.",
+   "root_cause": "",
+   "correction": "1. In `build-and-check`, resolve `TAG_SHA=$(git ls-remote origin \"refs/tags/v$VERSION^{}\" …)`, falling back to the lightweight ref, and `test \"$(git rev-parse HEAD)\" = \"$TAG_SHA\"`. Or check out `ref: v${{ inputs.version }}` explicitly instead of `main`.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-05",
+   "kind": "specialist",
+   "title": "All public package metadata and docs links point to a private repository (404 for users)",
+   "severity": "Medium",
+   "classification_text": "Confirmed defect (release metadata).",
+   "consolidated": [
+    "F-20"
+   ],
+   "workstream": "F",
+   "affected": "`pyproject.toml:33-38`, `docs/publish/pypi.md` (PyPI description), `powershell/UI4ME.Core/UI4ME.Core.psd1:42-43`, `build_psgallery.py` (`standalone()` turns repo-relative links into absolute links), README CI badge.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "Decide on visibility. If the repo stays private, point metadata at a public docs site or Pages site, and at the sdist-contained LICENSE. Add a check to the publish preflight that every URL in `project.urls` and `PrivateData.PSData.*Uri` returns 200 when fetched without credentials.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-06",
+   "kind": "specialist",
+   "title": "A Linux AllUsers install of UI4ME.Core cannot be used by non-root users (host stays non-executable)",
+   "severity": "Medium",
+   "classification_text": "Confirmed defect (packaging). Reproduced.",
+   "consolidated": [
+    "F-19"
+   ],
+   "workstream": "E",
+   "affected": "`powershell/UI4ME.Core/UI4ME.Core.psm1:1315-1319` (`chmod u+x` at first use). The nupkg format drops Unix modes.",
+   "reproduction": "`exp/RELEASE/psg/run.sh` (shown in §1 #9). Run it with `docker run --rm -v <dir>:/psg:ro mcr.microsoft.com/powershell:latest sh /psg/run.sh`.",
+   "root_cause": "",
+   "correction": "In `Get-UI4MEHostPath`:",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-07",
+   "kind": "specialist",
+   "title": "The version is hard-coded in about 61 files, including the workflows and verifiers. Every release edits the release machinery itself",
+   "severity": "Medium",
+   "classification_text": "Maintenance problem (proven from code).",
+   "consolidated": [
+    "F-21"
+   ],
+   "workstream": "F",
+   "affected": "- `publish.yaml` (11 occurrences, e.g. `:49 assert version == '1.0.1'`, `:99,140,145,177-184`)",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "1. Make `Cargo.toml [workspace.package].version` the single source.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-08",
+   "kind": "specialist",
+   "title": "CI coverage is narrower than the support claims",
+   "severity": "Medium",
+   "classification_text": "Reproducible risk / test gap.",
+   "consolidated": [
+    "F-22"
+   ],
+   "workstream": "F",
+   "affected": "`ci.yml`, `test-powershell.yaml`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "1. Add a cheap Linux matrix job: build the host once, then `uv run --python {3.10,3.11,3.13,3.14} python -m unittest tools/test_bootstrap.py tools/test_application.py tools/test_reference_client.py` with `UI4ME_HOST_BINARY=target/debug/ui4me-host`.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-09",
+   "kind": "specialist",
+   "title": "Supply-chain hygiene is below the bar for a binary-shipping stable package",
+   "severity": "Medium",
+   "classification_text": "Mixed. The unpinned actions and template injection are confirmed (zizmor). The rest are optional improvements, rated per item.",
+   "consolidated": [
+    "F-23"
+   ],
+   "workstream": "F",
+   "affected": "All workflows, release tooling, repo settings.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "1. Pin all `uses:` to full SHAs with a version comment and add `.github/dependabot.yml` for `github-actions`, `cargo` and `pip`.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-10",
+   "kind": "specialist",
+   "title": "Release evidence is not durable or verifiable, and records reference deleted files",
+   "severity": "Medium",
+   "classification_text": "Confirmed maintenance problem.",
+   "consolidated": [
+    "F-24"
+   ],
+   "workstream": "F",
+   "affected": "`tools/release/records/*.json`, commit 805bc86.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "1. Make the qualification record machine-generated: `native_acceptance.py` (schema 2), the Pester `Qualify.ps1` output and `verify.py` `report.json` merged by a `tools/release/make_record.py` that embeds the artifact hashes and the evidence-file SHA-256s.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-11",
+   "kind": "specialist",
+   "title": "The stability claim has no supporting policy (classifier, compatibility, changelog, security reporting)",
+   "severity": "Medium",
+   "classification_text": "Design tradeoff / maintenance problem.",
+   "consolidated": [
+    "F-24"
+   ],
+   "workstream": "F",
+   "affected": "`pyproject.toml:18,38`, docs.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "1. Add `docs/release/versioning.md` stating SemVer for the public Python and PowerShell APIs and the manifest schema, the protocol version policy, the supported-platform policy, and the deprecation window.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-12",
+   "kind": "specialist",
+   "title": "The repository process does not support review",
+   "severity": "Low-Med",
+   "classification_text": "Maintenance problem.",
+   "consolidated": [
+    "F-10"
+   ],
+   "workstream": "F",
+   "affected": "Repo settings, history.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- Going forward: PR-only `main` (requires RELEASE-01's plan or visibility change), squash-merge only, delete-branch-on-merge, CODEOWNERS for `crates/ui4me-host/src/transport.rs`, `.github/`, `tools/release/` and `third_party/`, and PR and issue templates with a \"native-qualification needed?\" checkbox.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-13",
+   "kind": "specialist",
+   "title": "Publish ordering makes the tag and GitHub release trail PyPI, and the PowerShell asset is appended later",
+   "severity": "Low",
+   "classification_text": "Design tradeoff with a recoverable failure mode.",
+   "consolidated": [],
+   "workstream": "F",
+   "affected": "`publish.yaml:252-319`, `publish-powershell.yaml:198-216`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "1. Create an annotated tag and a **draft** release with all assets first.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-14",
+   "kind": "specialist",
+   "title": "CI is slow and wasteful: no cache, duplicate runs, no cancellation, no job timeout",
+   "severity": "Low",
+   "classification_text": "Simplification and optimization opportunity.",
+   "consolidated": [],
+   "workstream": "F",
+   "affected": "`ci.yml`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- Use `on: push: branches: [main]` plus `pull_request`.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-15",
+   "kind": "specialist",
+   "title": "Release-tooling tests and docs that assert form, not behaviour",
+   "severity": "Low",
+   "classification_text": "Simplification opportunity / minor doc defect.",
+   "consolidated": [],
+   "workstream": "F",
+   "affected": "`tools/test_publish_workflow.py:15-34`, `tools/release/verify_source.py:88-89`, `docs/release/building.md:77`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- Parse the workflows with `yaml.safe_load` and assert on the structure (triggers, `jobs.pypi.needs`, `permissions`, `environment.name`). Add actionlint and zizmor (RELEASE-09).",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-16",
+   "kind": "specialist",
+   "title": "A test assumes `XDG_RUNTIME_DIR` is set, and assets tests synchronize with sleeps",
+   "severity": "Low",
+   "classification_text": "Confirmed environment-dependent test failure (reproduced). Sleeps are a plausible flakiness concern.",
+   "consolidated": [],
+   "workstream": "F",
+   "affected": "`tools/test_bootstrap.py:258-260`, `crates/ui4me-host/src/platform/linux.rs:71`, `crates/ui4me-assets/tests/{shutdown.rs:96,114-117,231-236, lifecycle.rs:121,538, svg.rs:392}`.",
+   "reproduction": "`exp/RELEASE/contributor.sh` (see `contributor.log`).",
+   "root_cause": "",
+   "correction": "- In the test, either set `XDG_RUNTIME_DIR` to a private temp dir in `run_app`'s env, or assert only that no `*.toml` or temp manifest remains.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-17",
+   "kind": "specialist",
+   "title": "A developer environment variable can silently put the 345 MB debug host into a wheel",
+   "severity": "Low",
+   "classification_text": "Reproducible risk (proven from code, not run).",
+   "consolidated": [],
+   "workstream": "F",
+   "affected": "`setup.py:33-37`, `docs/guides/development.md:136`, `tools/release/verify_linux_artifact.py:36`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- Rename the build override to `UI4ME_WHEEL_HOST_BINARY`, separate from the runtime override.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-18",
+   "kind": "specialist",
+   "title": "Build recipes are duplicated across workflows, scripts and docs",
+   "severity": "Low",
+   "classification_text": "Simplification opportunity.",
+   "consolidated": [],
+   "workstream": "F",
+   "affected": "`release-linux.yml`, `release-windows.yml`, `tools/release/build_windows.ps1`, `docs/release/building.md:47-53`, `publish.yaml:109-203`.",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- Move the build into a reusable workflow `build-dist.yml` (`on: workflow_call` and `workflow_dispatch`). `publish.yaml` would call it and then promote. Delete `release-linux.yml` and `release-windows.yml`.",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  },
+  {
+   "id": "RELEASE-19",
+   "kind": "specialist",
+   "title": "Heavy and periodic verification exists but is never scheduled",
+   "severity": "Low-Med",
+   "classification_text": "Test gap.",
+   "consolidated": [],
+   "workstream": "F",
+   "affected": "- `#[ignore]` evidence tests: `handles_misuse.rs:156` (1M ops), `shutdown.rs:110` (1,000 iterations), `bombs.rs:22`",
+   "reproduction": "",
+   "root_cause": "",
+   "correction": "- Add `nightly.yml` (`schedule:` plus `workflow_dispatch`, Linux only) with these steps:",
+   "status": "OPEN",
+   "commits": [],
+   "tests": [],
+   "verification": {
+    "linux": "pending",
+    "windows": "pending"
+   },
+   "remaining_risk": "",
+   "notes": ""
+  }
+ ],
+ "gates": [
+  {
+   "id": "R1",
+   "kind": "gate",
+   "title": "No open Critical or High runtime defect",
+   "baseline": "FAILING",
+   "status": "FAILING",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "R2",
+   "kind": "gate",
+   "title": "Documented limits render without abort on production stacks",
+   "baseline": "FAILING",
+   "status": "FAILING",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "R3",
+   "kind": "gate",
+   "title": "10,000-event bursts / 2,000 events/s for 60 s: no disconnect, no dropped control notification",
+   "baseline": "FAILING",
+   "status": "FAILING",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "R4",
+   "kind": "gate",
+   "title": "Memory: counting-allocator soak <1 MiB; 30-min windowed soak <5 MiB/5%",
+   "baseline": "FAILING",
+   "status": "FAILING",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "R5",
+   "kind": "gate",
+   "title": "Stalls bounded (pathological <250 ms or rejected; reference docs <100 ms; frame gap <50 ms draining)",
+   "baseline": "FAILING",
+   "status": "FAILING",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "R6",
+   "kind": "gate",
+   "title": "Keyboard reachability/operability; focus scrolled into view",
+   "baseline": "FAILING",
+   "status": "FAILING",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "R7",
+   "kind": "gate",
+   "title": "Geometry consistency across caret/selection/IME/AT/get_rect vs hit testing",
+   "baseline": "FAILING",
+   "status": "FAILING",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "R8",
+   "kind": "gate",
+   "title": "AT contract checks automated + manual Orca/NVDA checklist",
+   "baseline": "UNVERIFIED",
+   "status": "UNVERIFIED",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "R9",
+   "kind": "gate",
+   "title": "Backend crash/freeze/veto, signals, session end handled as documented",
+   "baseline": "PARTIAL",
+   "status": "PARTIAL",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "R10",
+   "kind": "gate",
+   "title": "Bindings never die silently on user-code errors",
+   "baseline": "FAILING",
+   "status": "FAILING",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P1",
+   "kind": "gate",
+   "title": "Release commit has green required CI on every OS, enforced by publish workflow",
+   "baseline": "FAILING",
+   "status": "FAILING",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P2",
+   "kind": "gate",
+   "title": "Ordinary changes can be green; lint always runs",
+   "baseline": "FAILING",
+   "status": "FAILING",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P3",
+   "kind": "gate",
+   "title": "Publish requires green CI for the SHA plus manual dispatch",
+   "baseline": "PARTIAL",
+   "status": "PARTIAL",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P4",
+   "kind": "gate",
+   "title": "Published artifacts are exactly the qualified artifacts",
+   "baseline": "MET Linux / FAILING Windows",
+   "status": "MET Linux / FAILING Windows",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P5",
+   "kind": "gate",
+   "title": "Every package version traceable to its tag",
+   "baseline": "MET PyPI / FAILING PSGallery 1.0.0",
+   "status": "MET PyPI / FAILING PSGallery 1.0.0",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P6",
+   "kind": "gate",
+   "title": "Every claimed runtime tested in CI against the real host",
+   "baseline": "FAILING",
+   "status": "FAILING",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P7",
+   "kind": "gate",
+   "title": "Every documented install mode works",
+   "baseline": "FAILING",
+   "status": "FAILING",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P8",
+   "kind": "gate",
+   "title": "Dependency advisories and licences checked in CI",
+   "baseline": "FAILING",
+   "status": "FAILING",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P9",
+   "kind": "gate",
+   "title": "Workflows hardened (SHA-pinned, no template injection)",
+   "baseline": "FAILING",
+   "status": "FAILING",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P10",
+   "kind": "gate",
+   "title": "Provenance: PyPI attestations, build provenance, SBOM",
+   "baseline": "PARTIAL",
+   "status": "PARTIAL",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P11",
+   "kind": "gate",
+   "title": "Version single-sourced; a release does not edit CI",
+   "baseline": "FAILING",
+   "status": "FAILING",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P12",
+   "kind": "gate",
+   "title": "Changelog, release notes, compatibility/deprecation policy, SECURITY.md, yank procedure",
+   "baseline": "FAILING",
+   "status": "FAILING",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P13",
+   "kind": "gate",
+   "title": "Public metadata links resolve",
+   "baseline": "FAILING",
+   "status": "FAILING",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P14",
+   "kind": "gate",
+   "title": "MPL-2.0 source availability for modified Stylo",
+   "baseline": "MET",
+   "status": "MET",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P15",
+   "kind": "gate",
+   "title": "Fresh contributor can build and test from docs",
+   "baseline": "MET",
+   "status": "MET",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P16",
+   "kind": "gate",
+   "title": "Published artifacts work on clean machines",
+   "baseline": "MET (audit)",
+   "status": "MET (audit)",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P17",
+   "kind": "gate",
+   "title": "Vendored dependencies verifiably equal upstream plus patches",
+   "baseline": "MET manually",
+   "status": "MET manually",
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "P18",
+   "kind": "gate",
+   "title": "Secrets least-privilege",
+   "baseline": "MET",
+   "status": "MET",
+   "evidence": "",
+   "notes": ""
+  }
+ ],
+ "tests": [
+  {
+   "id": "T1",
+   "kind": "test",
+   "status": "OPEN",
+   "location": "",
+   "ci": "",
+   "notes": ""
+  },
+  {
+   "id": "T2",
+   "kind": "test",
+   "status": "OPEN",
+   "location": "",
+   "ci": "",
+   "notes": ""
+  },
+  {
+   "id": "T3",
+   "kind": "test",
+   "status": "OPEN",
+   "location": "",
+   "ci": "",
+   "notes": ""
+  },
+  {
+   "id": "T4",
+   "kind": "test",
+   "status": "OPEN",
+   "location": "",
+   "ci": "",
+   "notes": ""
+  },
+  {
+   "id": "T5",
+   "kind": "test",
+   "status": "OPEN",
+   "location": "",
+   "ci": "",
+   "notes": ""
+  },
+  {
+   "id": "T6",
+   "kind": "test",
+   "status": "OPEN",
+   "location": "",
+   "ci": "",
+   "notes": ""
+  },
+  {
+   "id": "T7",
+   "kind": "test",
+   "status": "OPEN",
+   "location": "",
+   "ci": "",
+   "notes": ""
+  },
+  {
+   "id": "T8",
+   "kind": "test",
+   "status": "OPEN",
+   "location": "",
+   "ci": "",
+   "notes": ""
+  },
+  {
+   "id": "T9",
+   "kind": "test",
+   "status": "OPEN",
+   "location": "",
+   "ci": "",
+   "notes": ""
+  },
+  {
+   "id": "T10",
+   "kind": "test",
+   "status": "OPEN",
+   "location": "",
+   "ci": "",
+   "notes": ""
+  },
+  {
+   "id": "T11",
+   "kind": "test",
+   "status": "OPEN",
+   "location": "",
+   "ci": "",
+   "notes": ""
+  },
+  {
+   "id": "T12",
+   "kind": "test",
+   "status": "OPEN",
+   "location": "",
+   "ci": "",
+   "notes": ""
+  },
+  {
+   "id": "T13",
+   "kind": "test",
+   "status": "OPEN",
+   "location": "",
+   "ci": "",
+   "notes": ""
+  },
+  {
+   "id": "T14",
+   "kind": "test",
+   "status": "OPEN",
+   "location": "",
+   "ci": "",
+   "notes": ""
+  },
+  {
+   "id": "T15",
+   "kind": "test",
+   "status": "OPEN",
+   "location": "",
+   "ci": "",
+   "notes": ""
+  },
+  {
+   "id": "T16",
+   "kind": "test",
+   "status": "OPEN",
+   "location": "",
+   "ci": "",
+   "notes": ""
+  }
+ ]
+}
