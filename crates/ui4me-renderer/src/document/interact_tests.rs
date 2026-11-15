@@ -18,8 +18,13 @@ fn key_input(key: &str, code: &str, pressed: bool, shift: bool, ctrl: bool) -> I
 }
 /// A full key press (down and up) of `key`; the events of both.
 fn press_key(d: &mut Document, key: &str, code: &str) -> Vec<Value> {
-    let mut ev = d.handle_input(key_input(key, code, true, false, false)).unwrap();
-    ev.extend(d.handle_input(key_input(key, code, false, false, false)).unwrap());
+    let mut ev = d
+        .handle_input(key_input(key, code, true, false, false))
+        .unwrap();
+    ev.extend(
+        d.handle_input(key_input(key, code, false, false, false))
+            .unwrap(),
+    );
     ev
 }
 fn tab(d: &mut Document) -> Vec<Value> {
@@ -86,14 +91,25 @@ fn tab_to_an_off_screen_button_scrolls_it_into_view() {
     tab(&mut d);
     assert_eq!(focused(&d), "b");
     let y = page_y(&mut d);
-    assert!(y > 0.0, "Tab to an off-screen button scrolls (scroll y = {y})");
+    assert!(
+        y > 0.0,
+        "Tab to an off-screen button scrolls (scroll y = {y})"
+    );
     let r = rect(&mut d, "b");
-    assert!(inside_viewport(&r, 400.0, 300.0), "b is fully visible: {r:?}");
+    assert!(
+        inside_viewport(&r, 400.0, 300.0),
+        "b is fully visible: {r:?}"
+    );
     // `nearest`: the target ends at the bottom edge, not at the top.
-    assert!((r.y + r.height - 300.0).abs() < 1.0, "aligned to the nearest edge: {r:?}");
+    assert!(
+        (r.y + r.height - 300.0).abs() < 1.0,
+        "aligned to the nearest edge: {r:?}"
+    );
     // Shift+Tab back to `a` scrolls up again.
-    d.handle_input(key_input("Tab", "Tab", true, true, false)).unwrap();
-    d.handle_input(key_input("Tab", "Tab", false, true, false)).unwrap();
+    d.handle_input(key_input("Tab", "Tab", true, true, false))
+        .unwrap();
+    d.handle_input(key_input("Tab", "Tab", false, true, false))
+        .unwrap();
     assert_eq!(focused(&d), "a");
     assert!(inside_viewport(&rect(&mut d, "a"), 400.0, 300.0));
 }
@@ -111,7 +127,10 @@ fn tab_to_an_off_screen_text_input_scrolls_it_into_view() {
     assert_eq!(focused(&d), "b");
     assert!(inside_viewport(&rect(&mut d, "b"), 400.0, 300.0));
     // The IME area reported for the focused field is on screen too.
-    let ime = d.ime_request().cloned().expect("an IME request for the focused field");
+    let ime = d
+        .ime_request()
+        .cloned()
+        .expect("an IME request for the focused field");
     assert!(
         ime.cursor_area.1 >= 0.0 && ime.cursor_area.1 < 300.0,
         "IME cursor area {:?} is on screen",
@@ -169,7 +188,10 @@ fn nested_scroll_containers_scroll_innermost_first() {
     tab(&mut d);
     tab(&mut d);
     assert_eq!(focused(&d), "b");
-    assert!(d.scroll_state(Some("box")).unwrap().y > 0.0, "the inner box scrolled");
+    assert!(
+        d.scroll_state(Some("box")).unwrap().y > 0.0,
+        "the inner box scrolled"
+    );
     assert!(page_y(&mut d) > 0.0, "the page scrolled to the box");
     let r = rect(&mut d, "b");
     assert!(inside_viewport(&r, 400.0, 300.0), "b is visible: {r:?}");
@@ -192,10 +214,17 @@ fn focus_inside_a_fixed_box_does_not_scroll_the_page() {
     );
     d.scroll_to(None, None, Some(500.0)).unwrap();
     d.focus("a").unwrap();
-    assert_eq!(page_y(&mut d), 500.0, "focus in a fixed box keeps the page scroll");
+    assert_eq!(
+        page_y(&mut d),
+        500.0,
+        "focus in a fixed box keeps the page scroll"
+    );
     d.focus("b").unwrap();
     assert_eq!(page_y(&mut d), 500.0, "the page does not move a fixed box");
-    assert!(d.scroll_state(Some("fx")).unwrap().y > 0.0, "the fixed box's own scroller moved");
+    assert!(
+        d.scroll_state(Some("fx")).unwrap().y > 0.0,
+        "the fixed box's own scroller moved"
+    );
     assert!(inside_viewport(&rect(&mut d, "b"), 400.0, 300.0));
 }
 
@@ -215,8 +244,15 @@ fn tab_inside_a_scrolled_modal_dialog_reveals_the_control() {
     assert_eq!(focused(&d), "a", "showModal focuses the first control");
     tab(&mut d);
     assert_eq!(focused(&d), "b");
-    assert_eq!(page_y(&mut d), 800.0, "the page behind the modal does not scroll");
-    assert!(d.scroll_state(Some("dlg")).unwrap().y > 0.0, "the dialog scrolled");
+    assert_eq!(
+        page_y(&mut d),
+        800.0,
+        "the page behind the modal does not scroll"
+    );
+    assert!(
+        d.scroll_state(Some("dlg")).unwrap().y > 0.0,
+        "the dialog scrolled"
+    );
     let r = rect(&mut d, "b");
     let port = rect(&mut d, "dlg");
     assert!(
@@ -224,7 +260,9 @@ fn tab_inside_a_scrolled_modal_dialog_reveals_the_control() {
         "b is inside the dialog's scrollport: {r:?} in {port:?}"
     );
     // The control is where it is hit.
-    let hit = d.element_at_point(r.x + r.width / 2.0, r.y + r.height / 2.0).unwrap();
+    let hit = d
+        .element_at_point(r.x + r.width / 2.0, r.y + r.height / 2.0)
+        .unwrap();
     assert_eq!(hit["element"], "b", "hit {hit}");
 }
 
@@ -279,11 +317,15 @@ fn enter_on_a_link_clicks_it_and_activates_it() {
     let t = types(&ev);
     let click = t.iter().position(|e| e == "click@lnk");
     let link = t.iter().position(|e| e == "link_activated@lnk");
-    assert!(click.is_some() && link.is_some(), "click then link_activated: {t:?}");
+    assert!(
+        click.is_some() && link.is_some(),
+        "click then link_activated: {t:?}"
+    );
     assert!(click < link, "click precedes link_activated: {t:?}");
     assert_eq!(count(&ev, "click", "lnk"), 1);
     assert!(
-        ev.iter().any(|e| e["type"] == "link_activated" && e["href"] == "next.html"),
+        ev.iter()
+            .any(|e| e["type"] == "link_activated" && e["href"] == "next.html"),
         "{ev:?}"
     );
 }
@@ -324,10 +366,23 @@ fn enter_and_space_on_a_button_click_once_each() {
     let ev = press_on(&mut d, "btn", "Enter", "Enter");
     assert_eq!(count(&ev, "click", "btn"), 1, "Enter: {:?}", types(&ev));
     d.drain_events();
-    let down = d.handle_input(key_input(" ", "Space", true, false, false)).unwrap();
-    assert_eq!(count(&down, "click", "btn"), 0, "Space clicks on keyup, not keydown");
-    let up = d.handle_input(key_input(" ", "Space", false, false, false)).unwrap();
-    assert_eq!(count(&up, "click", "btn"), 1, "Space keyup: {:?}", types(&up));
+    let down = d
+        .handle_input(key_input(" ", "Space", true, false, false))
+        .unwrap();
+    assert_eq!(
+        count(&down, "click", "btn"),
+        0,
+        "Space clicks on keyup, not keydown"
+    );
+    let up = d
+        .handle_input(key_input(" ", "Space", false, false, false))
+        .unwrap();
+    assert_eq!(
+        count(&up, "click", "btn"),
+        1,
+        "Space keyup: {:?}",
+        types(&up)
+    );
     assert_eq!(page_y(&mut d), 0.0, "Space on a button does not scroll");
 }
 
@@ -392,8 +447,13 @@ fn a_role_button_element_gets_no_synthetic_click() {
 
 /// Ctrl+`key` with physical `code`, down and up.
 fn ctrl_key(d: &mut Document, key: &str, code: &str) -> Vec<Value> {
-    let mut ev = d.handle_input(key_input(key, code, true, false, true)).unwrap();
-    ev.extend(d.handle_input(key_input(key, code, false, false, true)).unwrap());
+    let mut ev = d
+        .handle_input(key_input(key, code, true, false, true))
+        .unwrap();
+    ev.extend(
+        d.handle_input(key_input(key, code, false, false, true))
+            .unwrap(),
+    );
     ev
 }
 fn selection(d: &mut Document, id: &str) -> (u64, u64) {
@@ -406,11 +466,7 @@ fn selection(d: &mut Document, id: &str) -> (u64, u64) {
 
 #[test]
 fn shortcuts_fall_back_to_the_physical_key_on_a_non_latin_layout() {
-    let mut d = doc(
-        "<!doctype html><input id=i value='hello world'>",
-        400,
-        300,
-    );
+    let mut d = doc("<!doctype html><input id=i value='hello world'>", 400, 300);
     d.focus("i").unwrap();
     assert_eq!(focused(&d), "i");
     d.drain_events();
@@ -418,7 +474,12 @@ fn shortcuts_fall_back_to_the_physical_key_on_a_non_latin_layout() {
     ctrl_key(&mut d, "ф", "KeyA");
     assert_eq!(selection(&mut d, "i"), (0, 11), "Ctrl+A selects all");
     let ev = ctrl_key(&mut d, "с", "KeyC");
-    assert_eq!(count(&ev, "copy", "i"), 1, "Ctrl+C copies: {:?}", types(&ev));
+    assert_eq!(
+        count(&ev, "copy", "i"),
+        1,
+        "Ctrl+C copies: {:?}",
+        types(&ev)
+    );
     let ev = ctrl_key(&mut d, "ч", "KeyX");
     assert_eq!(count(&ev, "cut", "i"), 1, "Ctrl+X cuts: {:?}", types(&ev));
     // Greek layout: Ctrl+Z is "ζ" on KeyZ and undoes the cut.
@@ -471,3 +532,79 @@ fn shortcut_key_maps_only_non_latin_letters_with_ctrl_or_meta() {
     assert_eq!(shortcut_key("ö", "Digit1", ctrl), "ö");
 }
 
+// ---------------------------------------------------------------------------------------------
+// T10 click target (F-17b / INTERACT-07)
+
+const BUTTON: &str = "<!doctype html><style>body{margin:0}button{padding:20px;font:16px sans-serif;border:0}\
+    </style><button id=b><span id=s1>One</span> <span id=s2>Two</span></button><p id=p>text</p>";
+
+fn centre(d: &mut Document, id: &str) -> (f64, f64) {
+    let r = rect(d, id);
+    (r.x + r.width / 2.0, r.y + r.height / 2.0)
+}
+
+#[test]
+fn press_on_a_child_and_release_on_the_button_clicks_the_button_once() {
+    let mut d = doc(BUTTON, 400, 300);
+    let (sx, sy) = centre(&mut d, "s1");
+    let b = rect(&mut d, "b");
+    let mut ev = ptr(&mut d, true, sx, sy);
+    ev.extend(ptr(&mut d, false, b.x + 4.0, sy));
+    assert_eq!(
+        ev.iter().filter(|e| e["type"] == "click").count(),
+        1,
+        "{:?}",
+        types(&ev)
+    );
+    assert_eq!(count(&ev, "click", "b"), 1, "{:?}", types(&ev));
+}
+
+#[test]
+fn press_and_release_on_different_children_of_one_button_click_it_once() {
+    let mut d = doc(BUTTON, 400, 300);
+    let (x1, y1) = centre(&mut d, "s1");
+    let (x2, y2) = centre(&mut d, "s2");
+    let mut ev = ptr(&mut d, true, x1, y1);
+    ev.extend(ptr(&mut d, false, x2, y2));
+    assert_eq!(
+        ev.iter().filter(|e| e["type"] == "click").count(),
+        1,
+        "{:?}",
+        types(&ev)
+    );
+    assert_eq!(count(&ev, "click", "b"), 1, "{:?}", types(&ev));
+}
+
+#[test]
+fn release_outside_the_button_produces_no_click() {
+    let mut d = doc(BUTTON, 400, 300);
+    let (sx, sy) = centre(&mut d, "s1");
+    let (px, py) = centre(&mut d, "p");
+    let mut ev = ptr(&mut d, true, sx, sy);
+    ev.extend(ptr(&mut d, false, px, py));
+    assert_eq!(
+        ev.iter().filter(|e| e["type"] == "click").count(),
+        0,
+        "{:?}",
+        types(&ev)
+    );
+}
+
+#[test]
+fn press_on_label_text_and_release_on_its_checkbox_toggles_it() {
+    let mut d = doc(
+        "<!doctype html><style>body{margin:0;font:16px sans-serif}</style>\
+         <label id=l><span id=t>Accept terms</span> <input id=c type=checkbox></label>",
+        400,
+        300,
+    );
+    let (tx, ty) = centre(&mut d, "t");
+    let (cx, cy) = centre(&mut d, "c");
+    ptr(&mut d, true, tx, ty);
+    let ev = ptr(&mut d, false, cx, cy);
+    assert!(
+        checked(&mut d, "c"),
+        "the label forwarded one click: {:?}",
+        types(&ev)
+    );
+}
