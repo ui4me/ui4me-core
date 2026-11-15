@@ -19,6 +19,17 @@ pub const GIB: u64 = 1024 * MIB;
 pub const MAX_RASTER_SIDE: u32 = 65_535;
 pub const SVG_MAX_NODES: u32 = 1_000_000;
 pub const SVG_MAX_NESTING: u32 = 4;
+/// Effective nesting depth of an SVG image (F-03): element nesting plus the content its references
+/// (`use`, `clip-path`, `mask`, `filter`, patterns, markers) and nested `data:` SVG images pull in,
+/// along the deepest path. usvg and resvg recurse once per level on the decoding thread; 128 is far
+/// above real icons and illustrations (typically < 20) and costs well under 1 MiB of worker stack.
+pub const SVG_MAX_DEPTH: u32 = 128;
+/// Most elements an SVG image may expand to when every reference (`use`, `clip-path`, `mask`,
+/// `filter`, patterns, markers) is instantiated where it is used (F-03: usvg converts referenced
+/// content per use, so fan-out chains are exponential in time). Equal to [`SVG_MAX_NODES`].
+pub const SVG_MAX_EXPANDED: u64 = SVG_MAX_NODES as u64;
+/// Most compound selectors in one selector of an SVG style sheet (simplecss matches recursively).
+pub const SVG_MAX_SELECTOR_COMPOUNDS: usize = 32;
 pub const IMPORT_MAX_DEPTH: u32 = 16;
 
 pub fn invalid_argument(msg: impl Into<String>) -> Status {

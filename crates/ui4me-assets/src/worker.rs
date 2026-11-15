@@ -589,6 +589,13 @@ struct Supervisor {
 }
 static SUPERVISOR: OnceLock<Arc<Supervisor>> = OnceLock::new();
 
+/// Stack of each decode worker (F-03), explicit instead of the platform's default thread stack.
+/// The deepest recursion on a worker is usvg's conversion of an SVG image, bounded by the
+/// pre-scan's [`crate::policy::SVG_MAX_DEPTH`] (nested `data:` SVG images included);
+/// `tests/svg_depth.rs` proves an image at that cap on half this stack. Raster and font decoders
+/// do not recurse over content. Reserved address space; pages are committed only on use.
+pub const ASSET_WORKER_STACK_BYTES: usize = 8 * 1024 * 1024;
+
 impl Supervisor {
     fn get() -> Arc<Self> {
         SUPERVISOR
@@ -606,6 +613,7 @@ impl Supervisor {
                     supervisor.alive.fetch_add(1, Ordering::AcqRel);
                     match std::thread::Builder::new()
                         .name(format!("ui4me-assets-{n}"))
+                        .stack_size(ASSET_WORKER_STACK_BYTES)
                         .spawn(move || service.worker())
                     {
                         Ok(handle) => supervisor

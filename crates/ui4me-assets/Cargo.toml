@@ -19,6 +19,8 @@ data-url = { workspace = true }
 usvg = { workspace = true }
 resvg = { workspace = true }
 roxmltree = { workspace = true }
+# The style-sheet matcher usvg uses (same pinned version), for the F-03 pre-scan.
+simplecss = "=0.2.2"
 flate2 = { workspace = true }
 brotli-decompressor = { workspace = true }
 
