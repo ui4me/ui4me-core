@@ -705,6 +705,58 @@ fn release_outside_the_button_produces_no_click() {
     );
 }
 
+/// Renderer review #5: a focusable container is not activatable. A text-selection drag between
+/// two paragraphs of an open dialog (or a `tabindex` panel) produces no click, so the common
+/// `if (e.target === dialog) dialog.close()` backdrop pattern does not close the dialog.
+#[test]
+fn a_drag_between_children_of_a_focusable_container_produces_no_click() {
+    for container in [
+        "<dialog id=c open style='margin:0;padding:10px'>",
+        "<div id=c tabindex=0>",
+    ] {
+        let end = if container.starts_with("<dialog") {
+            "</dialog>"
+        } else {
+            "</div>"
+        };
+        let mut d = doc(
+            &format!(
+                "<!doctype html><style>body{{margin:0;font:16px sans-serif}}</style>{container}\
+                 <p id=p1>First paragraph</p><p id=p2>Second paragraph</p>{end}"
+            ),
+            400,
+            300,
+        );
+        let (x1, y1) = centre(&mut d, "p1");
+        let (x2, y2) = centre(&mut d, "p2");
+        let mut ev = ptr(&mut d, true, x1, y1);
+        ev.extend(ptr(&mut d, false, x2, y2));
+        assert_eq!(
+            ev.iter().filter(|e| e["type"] == "click").count(),
+            0,
+            "{container}: {:?}",
+            types(&ev)
+        );
+    }
+}
+
+/// A large link card: press and release on different parts of it click the link (as browsers do
+/// for a press and release without a link drag).
+#[test]
+fn press_and_release_on_different_parts_of_a_link_card_click_the_link() {
+    let mut d = doc(
+        "<!doctype html><style>body{margin:0;font:16px sans-serif}a{display:block}</style>\
+         <a id=a href='#x'><h3 id=t>Title</h3><p id=s>Summary</p></a>",
+        400,
+        300,
+    );
+    let (x1, y1) = centre(&mut d, "t");
+    let (x2, y2) = centre(&mut d, "s");
+    let mut ev = ptr(&mut d, true, x1, y1);
+    ev.extend(ptr(&mut d, false, x2, y2));
+    assert_eq!(count(&ev, "click", "a"), 1, "{:?}", types(&ev));
+}
+
 #[test]
 fn press_on_label_text_and_release_on_its_checkbox_toggles_it() {
     let mut d = doc(

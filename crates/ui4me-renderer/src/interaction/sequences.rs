@@ -723,11 +723,12 @@ fn run_item_inner(host: &mut dyn DispatchHost, item: &InputItem) -> Result<(), S
 
 /// The target of the `click` (and `auxclick` / `contextmenu`) that ends a press on `pressed` and a
 /// release on `released`: the same node, else their nearest common inclusive ancestor in the
-/// flat tree, when that ancestor or one of its ancestors is activatable (has activation behaviour
-/// or is a focusable area, such as a `<button>`, a `<label>` or a `tabindex` widget). A drag between
-/// two parts of plain content (a text selection across paragraphs) therefore produces no click, as
-/// before; a press on a button's icon released on its padding clicks the button. `None` when either
-/// node is gone or no ancestor qualifies.
+/// flat tree, when that ancestor or one of its ancestors has activation behaviour (a `<button>`, a
+/// `<label>`, a `<summary>`, an `<a href>`, an activatable `<input>`). Merely focusable is not
+/// enough (renderer review #5): a drag between two parts of plain content (a text selection across
+/// paragraphs, also inside an open `<dialog>` or a `tabindex` panel) produces no click, so a
+/// `target === dialog` backdrop check does not fire; a press on a button's icon released on its
+/// padding clicks the button. `None` when either node is gone or no ancestor qualifies.
 fn click_target(d: &Document, pressed: NodeId, released: NodeId) -> Option<NodeId> {
     if pressed == released {
         return Some(released);
@@ -746,9 +747,7 @@ fn click_target(d: &Document, pressed: NodeId, released: NodeId) -> Option<NodeI
     let common = common?;
     let mut a = Some(common);
     while let Some(n) = a {
-        if crate::interaction::activation::has_activation_behaviour(d, n)
-            || crate::interaction::focus::is_focusable(d, n)
-        {
+        if crate::interaction::activation::has_activation_behaviour(d, n) {
             return Some(common);
         }
         a = parent(n);
