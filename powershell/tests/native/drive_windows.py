@@ -19,6 +19,10 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tools" / "release"))
+import version as versioning  # noqa: E402  (F-21: one version source)
+VERSION = versioning.source_version()
+
 DISPLAY = os.environ.get("UI4ME_RDP_DISPLAY", ":88")
 WIN_ROOT = r"F:\ui4me\ps"
 KEYS = {"Tab": "Tab", "Enter": "Return", "Escape": "Escape"}
@@ -85,7 +89,7 @@ d = Path(r'{run_dir}')
 if d.exists(): shutil.rmtree(d)
 d.mkdir(parents=True)
 home = Path(os.environ['USERPROFILE'])
-mod = home / 'Documents' / ('PowerShell' if '{a.edition}' == 'pwsh' else 'WindowsPowerShell') / 'Modules' / 'UI4ME.Core' / '1.0.1'
+mod = home / 'Documents' / ('PowerShell' if '{a.edition}' == 'pwsh' else 'WindowsPowerShell') / 'Modules' / 'UI4ME.Core' / '{VERSION}'
 hostexe = mod / 'runtimes' / 'win-x64' / 'ui4me_core' / '_bin' / 'ui4me-host.exe'
 env = {{'UI4ME_PS_RESULTS': str(d), 'UI4ME_PS_MODE': '{a.mode}'}}
 before = sorted(glob.glob(os.path.join(os.environ['TEMP'], 'ui4me-bitmap-*')))
