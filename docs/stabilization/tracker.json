@@ -194,15 +194,21 @@
     "T4"
    ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending",
+    "linux": "soak +78.3 MiB baseline -> +95 KiB fixed; windowed nested kwin 900 s: baseline 58->296 MiB, fixed flat 44-55 MiB",
+    "windows": "native unit+soak pass; windowed replay: scenario does not reproduce on Windows baseline (flat), fixed flat (evidence/lead/windows-f04-a02d21a.md)",
     "required": "both"
    },
-   "status": "IN_PROGRESS",
-   "commits": [],
-   "remaining_risk": "",
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "7c111c8"
+   ],
+   "remaining_risk": "One heap copy per system font file remains (FontBlob/FontTable take bytes); content-number map never shrinks (one entry per distinct file). 30-min windowed soak R4b not yet automated.",
    "owner_decision": false,
-   "notes": ""
+   "notes": "",
+   "tests": [
+    "text::fonts::environment::font_identity_tests",
+    "tests/font_identity_soak.rs (R4a)"
+   ]
   },
   {
    "id": "F-06",
@@ -632,15 +638,20 @@
     "T13"
    ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending",
+    "linux": "2,000 rows append after 20 updates: 691-750 ms -> 54-55 ms; shaped 2,001 -> 1",
+    "windows": "append_cliff test passes natively",
     "required": "both"
    },
-   "status": "IN_PROGRESS",
-   "commits": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "3335e26"
+   ],
    "remaining_risk": "",
    "owner_decision": false,
-   "notes": ""
+   "notes": "",
+   "tests": [
+    "regression::append_cliff::append_after_twenty_unrelated_updates_shapes_at_most_two_paragraphs (T13)"
+   ]
   },
   {
    "id": "F-16b",
@@ -669,15 +680,23 @@
     "T13"
    ],
    "verification": {
-    "linux": "pending",
+    "linux": "cold render 828-930 ms -> 273-334 ms; a11y builds/100 ticks no AT 100 -> 0",
     "windows": "pending",
     "required": "both"
    },
    "status": "IN_PROGRESS",
-   "commits": [],
+   "commits": [
+    "c955e44",
+    "98bc678"
+   ],
    "remaining_risk": "",
    "owner_decision": false,
-   "notes": ""
+   "notes": "RENDER-06 and INTERACT-04 fixed; RENDER-07 (O(document) set_text ~27 ms at 2,000 rows) measured only - Phase 8.1 optional, postponed per 08-non-recommendations.",
+   "tests": [
+    "family_resolution_tests",
+    "truncated_generic_expansion_selects_the_same_fonts",
+    "a11y T13 counters (ws D)"
+   ]
   },
   {
    "id": "F-17",
@@ -1658,12 +1677,16 @@
    "reproduction": "`LEAK_CSSTEXT='.u4-badge { font-weight: 600; }' NORENDER=1 target/debug/render-audit-harness issue2 4000` (needs `exp/RENDER/{doc,region}.html`); windowed: `exp/RENDER/windowed/w600.log` vs `w700.log` vs `w600both.log`.",
    "root_cause": "identity of system font data is taken from parley's per-load blob id, which is not stable because parley prunes its source cache on every builder; the side table that copies bytes is keyed by that unstable id and has no eviction.",
    "correction": "1. In `FontEnvironment::new` use `SourceCache::new_shared()` instead of `SourceCache::default()`, and in `blobs_for_layout` keep the fontique `Blob<u8>` itself alive (e.g. `system_sources: HashMap<u64, parley::fontique::Blob<u8>>` next to `system_blobs`). With a shared cache, a locally pruned entry is re-served from the shared weak entry (`Shared::get` upgrades the weak ref), so the id stays stabl",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "7c111c8"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1763,12 +1786,16 @@
    "reproduction": "`INSERTS=1 UI4ME_PROFILE=1 target/debug/render-audit-harness settext 2000 8 1280 800 1.0` vs `... settext 2000 7 ...`.",
    "root_cause": "",
    "correction": "mark the content-cache entries of replayed/seeded inline containers as used in each pass (`ContentCache::touch(hash)` from `seed`/`adopt_results`), or keep the shaped paragraph inside the host snapshot and reuse it by content hash without the cache; then investigate why `seed` fails for unchanged rows when the parent's child list changed (likely `ifc_seeds` only covering `same_ids` ranges). Test: ",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "3335e26"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1787,12 +1814,16 @@
    "reproduction": "`target/debug/render-audit-harness settext 2000 1 1280 800 1.0` (first_render), sampling loop in the log of this audit.",
    "root_cause": "",
    "correction": "memoize `resolve_families` per `(families, face-table generation)` → `Arc<[String]>` in `FontEnvironment`; truncate system generic expansions to the first few families (fontique already does per-script fallback) or pass the generic to parley. Bench test: cold layout of 2000 paragraphs under a time budget in the release long-document harness.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "c955e44"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1811,7 +1842,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "profile and make the per-pass O(N) walks subtree-skippable (dirty-ancestor sets already exist: `dom_dirty` in `update.rs:1118`): skip lang/dir recomputation for clean subtrees, keep `HostTree` nodes of untouched subtrees instead of re-adding, patch fragments for replayed roots, reuse scene subtrees for the remaining 2000 unchanged rows (today only 1 subtree is reused). Add a long-document benchmar",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -1819,7 +1850,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Measured 26-27 ms per set_text at 2,000 rows (layout ~17, scene ~5, raster ~4-5). O(dirty) pipeline is roadmap 8.1, optional; postponed per 08 until measured need beyond R5(b) 100 ms budget, which is met."
   },
   {
    "id": "RENDER-08",
@@ -1833,7 +1864,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -1841,7 +1872,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Full frame 8 ms @1280x800, ~20 ms @4K; damage-limited present is roadmap 8.3 (optional)."
   },
   {
    "id": "RENDER-09",
@@ -3939,8 +3970,8 @@
    "kind": "gate",
    "title": "Memory: counting-allocator soak <1 MiB; 30-min windowed soak <5 MiB/5%",
    "baseline": "FAILING",
-   "status": "FAILING",
-   "evidence": "",
+   "status": "PARTIAL: R4a MET; R4b (30-min windowed soak) not automated",
+   "evidence": "font_identity_soak; 900 s windowed Linux flat; Windows flat",
    "notes": ""
   },
   {
@@ -4188,10 +4219,10 @@
   {
    "id": "T4",
    "kind": "test",
-   "status": "OPEN",
-   "location": "",
-   "ci": "",
-   "notes": ""
+   "status": "FIXED_VERIFIED",
+   "location": "renderer font_identity_tests, tests/font_identity_soak.rs",
+   "ci": "cargo test (default)",
+   "notes": "Baseline: +78.3 MiB; fixed +95 KiB; native Windows pass"
   },
   {
    "id": "T5",
@@ -4260,10 +4291,10 @@
   {
    "id": "T13",
    "kind": "test",
-   "status": "OPEN",
-   "location": "",
-   "ci": "",
-   "notes": ""
+   "status": "FIXED_VERIFIED",
+   "location": "regression::append_cliff, a11y presence counters",
+   "ci": "cargo test (default)",
+   "notes": "append shapes 1 paragraph; 0 a11y builds per 100 ticks without AT"
   },
   {
    "id": "T14",
