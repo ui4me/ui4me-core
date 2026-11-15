@@ -34,6 +34,8 @@ pub(super) struct HostedDocument {
     pub(super) viewport: (u32, u32, f64),
     pub(super) native_refresh_pending: bool,
     pub(super) bitmaps: super::bitmap::Bitmaps,
+    /// When the headless frame pump last ran this document's frame (F-12).
+    pub(super) headless_frame_at: Option<Instant>,
 }
 
 impl HostedDocument {
@@ -306,6 +308,10 @@ impl Host {
         if !self.headless {
             engine.enable_deferred_clipboard();
         }
+        if self.virtual_time_ms.is_some() {
+            // F-12: once a test drives the clock, every document follows it.
+            engine.use_manual_clock();
+        }
         let serial = NEXT_HOST_DOCUMENT
             .try_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
             .map_err(|_| RpcError::busy("Host document identity space exhausted"))?;
@@ -319,6 +325,7 @@ impl Host {
             viewport: (width, height, scale),
             native_refresh_pending: false,
             bitmaps: Default::default(),
+            headless_frame_at: None,
             source,
             asset_root,
         };

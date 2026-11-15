@@ -1605,6 +1605,22 @@ impl Document {
         self.repaint = false;
         Ok(())
     }
+    /// The frame of a host without a native surface (the headless test host, F-12): what
+    /// [`Self::render_into`] does except rasterising. Resources and the document clock are
+    /// polled, pending updates (style, layout, scene) are committed — this is where a style
+    /// change starts its transitions and where the mutation journal is consumed — and the
+    /// repaint request is taken. Events it produces are drained like after any operation.
+    pub fn frame_without_surface(&mut self) -> Result<()> {
+        self.poll_resources()?;
+        self.apply_follow()?;
+        self.pipeline.flush()?;
+        if self.hosted {
+            let id = self.id();
+            crate::interaction::editing::ime_enabled(self, id);
+        }
+        self.repaint = false;
+        Ok(())
+    }
     #[cfg(test)]
     pub(crate) fn resources_weak_for_testing(&self) -> std::sync::Weak<Mutex<ResourceManager>> {
         Arc::downgrade(&self.resources)

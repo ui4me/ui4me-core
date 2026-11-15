@@ -5,6 +5,7 @@ mod bitmap;
 mod document_integration_tests;
 mod document_native;
 mod documents;
+mod headless;
 mod native;
 use documents::HostedDocument;
 mod requests;
@@ -217,6 +218,8 @@ pub struct Host {
     presentation: Option<softbuffer::Context<OwnedDisplayHandle>>,
     preferences: platform::preferences::PreferenceWatch,
     preference_revision: u64,
+    /// F-12: `None` until the first `test.advance_time`; then the virtual time advanced so far.
+    virtual_time_ms: Option<f64>,
 }
 
 /// Launch a manifest, forwarding secondary launches to the existing instance.
@@ -454,6 +457,7 @@ impl Host {
             presentation: None,
             preferences,
             preference_revision: 0,
+            virtual_time_ms: None,
             #[cfg(test)]
             observed_notifications: Vec::new(),
         })
@@ -717,6 +721,7 @@ impl Host {
             }
         }
         self.flush_document_refreshes();
+        self.headless_frames(false);
     }
 
     fn message(&mut self, connection: u64, value: Value, event_loop: Option<&dyn ActiveEventLoop>) {
@@ -944,6 +949,7 @@ impl Host {
             "platform":std::env::consts::OS,"containment":platform::containment_description(),
             "limits":{"frame_bytes":protocol::MAX_FRAME_BYTES,"pending_requests":protocol::MAX_PENDING,"probe_text_bytes":crate::presentation::MAX_TEXT_BYTES},
             "window_positioning":native && cfg!(target_os="windows"),"native_qualification":"requires local evidence"});
+        result["test_clock"] = json!(self.headless);
         result["capability_schema"] = json!(2);
         result["qualification"] = json!({"status":"unqualified_candidate","evidence":"No native qualification is inferred from compiled code, a previous release, or an available service"});
         result["legacy_flags"] = json!("Top-level service booleans describe enabled API surfaces; feature availability below is authoritative and null means unobserved");
@@ -1323,6 +1329,7 @@ mod tests {
             presentation: None,
             preferences: platform::preferences::PreferenceWatch::new(false, Arc::new(|| {})),
             preference_revision: 0,
+            virtual_time_ms: None,
             #[cfg(test)]
             observed_notifications: Vec::new(),
         }

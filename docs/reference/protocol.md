@@ -165,7 +165,7 @@ For `instance = "single"`, a second launch of the same app sends `app.activate` 
 | `app.force_quit` | `{}` | `{"requested":true}` |
 | `request.cancel` | `{"id":"<pending request id>"}` | `{"cancelled":bool}`; the cancelled request is answered with `-32006`. Usually sent as a notification. |
 
-`host.capabilities` returns `capability_schema: 2` with top-level flags (`native`, `headless`, `max_windows`, `max_documents` (16), `renderer: "cpu"`, `css_profile: "ui4me-desktop-1.0"`, `platform`, `containment`, `window_positioning`, `limits` {`frame_bytes`, `pending_requests`, …}, `printing: false`, `tray: false`), a `features` map and the current `native_preferences`. Each feature is `{"implemented":bool,"available":true|false|null,"qualification":…,"scope":"…"}`, where `available: null` means "not observed yet". Feature keys: `window_constraints`, `window_observation`, `window_visibility`, `window_focus`, `window_position`, `window_restore`, `attention`, `clipboard_text`, `file_dialogs`, `external_open`, `reveal_file`, `native_preferences`, `ime`, `ime_purpose_hints`, `incoming_drop`, `accessibility`, `printing`, `tray`. Prefer `features` over the legacy top-level booleans.
+`host.capabilities` returns `capability_schema: 2` with top-level flags (`native`, `headless`, `test_clock` (headless test mode only, see [Test mode](#test-mode-headless-only)), `max_windows`, `max_documents` (16), `renderer: "cpu"`, `css_profile: "ui4me-desktop-1.0"`, `platform`, `containment`, `window_positioning`, `limits` {`frame_bytes`, `pending_requests`, …}, `printing: false`, `tray: false`), a `features` map and the current `native_preferences`. Each feature is `{"implemented":bool,"available":true|false|null,"qualification":…,"scope":"…"}`, where `available: null` means "not observed yet". Feature keys: `window_constraints`, `window_observation`, `window_visibility`, `window_focus`, `window_position`, `window_restore`, `attention`, `clipboard_text`, `file_dialogs`, `external_open`, `reveal_file`, `native_preferences`, `ime`, `ime_purpose_hints`, `incoming_drop`, `accessibility`, `printing`, `tray`. Prefer `features` over the legacy top-level booleans.
 
 ## Windows
 
@@ -288,6 +288,18 @@ Dialogs, external open and reveal are answered when the user or the OS service f
 | `text`, `dropped_text`, `dropped_files` | Only for the built-in diagnostic probe surface (a window without a document) |
 
 Drops onto a document are delivered as `document.event`.
+
+## Test mode (headless only)
+
+These requests exist for automated tests of a backend or binding against `ui4me-host run --headless`. They are **not part of the application protocol**: a native host answers them with `-32001` and `host.capabilities` reports `test_clock: false`.
+
+A headless host runs the same frame pump as a native window, without a surface: whenever a document has pending work it gets a frame at most every 16 ms of wall time, which commits pending DOM writes (style, layout, scene) and sends the events that produces, such as `transitionrun` after a style change. Its document clock is real time, so a backend that never uses the request below sees time pass as in a native window.
+
+| Method | Params | Result |
+| --- | --- | --- |
+| `test.advance_time` | `{"ms": 0…60000}` | `{"advanced_ms":…, "frames":…, "virtual_time_ms":…}` |
+
+`test.advance_time` switches the host to a **deterministic virtual clock** the first time it is called: from then on the clock of every document (also documents loaded later) moves only through this request. It first commits pending changes at the current virtual time (a change made just before the call starts its transitions there, as the next native frame would), then advances in 16 ms frames, running each frame. Every `document.event` those frames produce is sent **before** the result, so a backend that waits for the result has seen all of them. `{"ms":0}` only switches to the virtual clock and commits pending work. Smooth scrolling, CSS transitions and keyframe animations follow the virtual clock; caret blinking does not.
 
 ## Error codes
 

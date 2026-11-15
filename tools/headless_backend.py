@@ -1,0 +1,204 @@
+"""A raw JSON-RPC backend for host lifecycle and headless-clock tests (F-12, F-25; T3, T15).
+
+The host starts this script as its backend (`UI4ME_ENDPOINT`/`UI4ME_TOKEN` in the environment).
+It speaks the wire protocol directly with the framing helpers of the reference client, on one
+thread, so the order in which host messages arrive is observable exactly. It runs one scenario
+and writes a JSON report to the path given as the first argument.
+
+    python headless_backend.py REPORT SCENARIO [ARGS...]
+"""
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+import sys
+import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
+from ui4me_core.client import connect_stream, encode_frame, read_frame, write_all  # noqa: E402
+
+
+class HostError(Exception):
+    def __init__(self, error):
+        super().__init__(f"{error.get('code')}: {error.get('message')}")
+        self.code = error.get("code")
+
+
+class Peer:
+    """One authenticated connection; every host message is recorded in arrival order."""
+
+    def __init__(self, stream, policy=None):
+        self.stream = stream
+        self.next_id = 0
+        self.log = []          # every notification and host request, in arrival order
+        self.responses = {}
+        self.policy = policy or (lambda method, params: {"allow": True})
+
+    def send(self, message):
+        write_all(self.stream, encode_frame(message))
+
+    def request(self, method, params=None):
+        self.next_id += 1
+        ident = f"t{self.next_id}"
+        self.send({"jsonrpc": "2.0", "id": ident, "method": method, "params": params or {}})
+        return ident
+
+    def notify(self, method, params=None):
+        self.send({"jsonrpc": "2.0", "method": method, "params": params or {}})
+
+    def read_one(self):
+        message = read_frame(self.stream)
+        if message is None:
+            raise EOFError("host closed the connection")
+        if "method" in message:
+            self.log.append(message)
+            if "id" in message:     # a host -> backend policy request
+                answer = self.policy(message["method"], message.get("params", {}))
+                if isinstance(answer, dict) and "error" in answer:
+                    self.send({"jsonrpc": "2.0", "id": message["id"], "error": answer["error"]})
+                elif answer is not None:
+                    self.send({"jsonrpc": "2.0", "id": message["id"], "result": answer})
+        else:
+            self.responses[message["id"]] = message
+            self.log.append({"response": message["id"]})
+        return message
+
+    def wait(self, ident):
+        while ident not in self.responses:
+            self.read_one()
+        message = self.responses.pop(ident)
+        if "error" in message:
+            raise HostError(message["error"])
+        return message["result"]
+
+    def call(self, method, params=None):
+        return self.wait(self.request(method, params))
+
+    def wait_for(self, predicate, timeout=30.0):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            for message in self.log:
+                if predicate(message):
+                    return message
+            self.read_one()
+        raise TimeoutError("expected host message did not arrive")
+
+    def events(self, start=0):
+        return [m["params"]["event"] for m in self.log[start:]
+                if m.get("method") == "document.event"]
+
+
+def connect(policy=None):
+    stream = connect_stream(os.environ["UI4ME_ENDPOINT"])
+    peer = Peer(stream, policy)
+    peer.call("host.hello", {"token": os.environ["UI4ME_TOKEN"], "protocol_version": 1,
+                             "client": {"name": "headless_backend"}})
+    return peer
+
+
+def open_document(peer, html, width=800, height=600):
+    window = peer.call("window.create", {"title": "test", "width": width, "height": height})
+    document = peer.call("document.load", {"window_id": window["window_id"], "html": html})
+    return window["window_id"], document["document_id"]
+
+
+def command(peer, window, document, op, **args):
+    return peer.call("document.command", {"window_id": window, "document_id": document,
+                                          "command": {"op": op, **args}})
+
+
+def rss_kib(pid):
+    try:
+        for line in Path(f"/proc/{pid}/status").read_text().splitlines():
+            if line.startswith("VmRSS:"):
+                return int(line.split()[1])
+    except OSError:
+        pass
+    return None
+
+
+# burst2.py's style sheet, with `outline-color` instead of the `border-color` shorthand so each
+# control transitions exactly three longhands (the shorthand expands to four border colours).
+BURST_CSS = """
+button { transition: background-color 120ms, outline-color 120ms, color 120ms;
+         background: #eee; outline: 1px solid #999; color: #111 }
+@media (prefers-color-scheme: dark) { button { background: #333; outline-color: #777; color: #eee } }
+"""
+
+
+def scenario_burst(peer, report, count="100", rounds="6"):
+    """T3: the headless version of burst2.py on the virtual clock."""
+    count, rounds = int(count), int(rounds)
+    html = "<style>%s</style><div id=root>%s</div><p id=s>x</p>" % (
+        BURST_CSS, "".join(f'<button id="b{i}">B{i}</button>' for i in range(count)))
+    window, document = open_document(peer, html)
+    peer.call("app.ready")
+    report["capabilities_test_clock"] = peer.call("host.capabilities").get("test_clock")
+    # Settle the initial style on the virtual clock; the first call switches it on.
+    peer.call("test.advance_time", {"ms": 0})
+    report["rounds"] = []
+    for index in range(rounds):
+        scheme = "dark" if index % 2 == 0 else "light"
+        start = len(peer.log)
+        command(peer, window, document, "set_environment", color_scheme=scheme)
+        advanced = peer.call("test.advance_time", {"ms": 200})
+        # Everything the interval produced arrived before the advance_time answer.
+        events = [e for e in peer.events(start) if e.get("type", "").startswith("transition")]
+        text = command(peer, window, document, "get_text", element="s")
+        report["rounds"].append({
+            "scheme": scheme, "advanced": advanced, "text": text,
+            "events": [[e.get("type"), e.get("element"), e.get("property_name")]
+                       for e in events],
+        })
+    return window
+
+
+def scenario_soak(peer, report, count="10000"):
+    """RENDER-04: many DOM writes without any read; host RSS is sampled along the way."""
+    count = int(count)
+    window, document = open_document(peer, "<p id=t>start</p>")
+    peer.call("app.ready")
+    host_pid = peer.call("host.diagnostics")["pid"]
+    samples = []
+    pending = []
+    for index in range(count):
+        pending.append(peer.request("document.command", {
+            "window_id": window, "document_id": document,
+            "command": {"op": "set_text", "element": "t", "text": f"value {index}"}}))
+        if len(pending) >= 64:
+            for ident in pending:
+                peer.wait(ident)
+            pending = []
+        if (index + 1) % 1000 == 0:
+            for ident in pending:
+                peer.wait(ident)
+            pending = []
+            time.sleep(0.05)   # let the host pump run its frames (as a display would)
+            samples.append([index + 1, rss_kib(host_pid)])
+    report["rss_kib"] = samples
+    report["final_text"] = command(peer, window, document, "get_text", element="t")
+    return window
+
+
+SCENARIOS = {"burst": scenario_burst, "soak": scenario_soak}
+
+
+def main():
+    report_path = Path(sys.argv[1])
+    name, args = sys.argv[2], sys.argv[3:]
+    report = {"scenario": name, "ok": False}
+    try:
+        peer = connect()
+        SCENARIOS[name](peer, report, *args)
+        peer.call("app.request_quit")
+        peer.wait_for(lambda m: m.get("method") == "app.shutdown")
+        report["ok"] = True
+    except Exception as error:  # the report carries the failure to the test
+        report["error"] = f"{type(error).__name__}: {error}"
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    return 0 if report["ok"] else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

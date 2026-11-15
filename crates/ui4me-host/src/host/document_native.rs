@@ -258,7 +258,7 @@ impl Host {
         self.notify("desktop.preferences_changed", observation.value());
     }
 
-    fn document_error(
+    pub(super) fn document_error(
         &mut self,
         window_id: &str,
         document_id: &str,

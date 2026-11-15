@@ -239,6 +239,7 @@ impl Host {
                 result?
             }
             "host.capabilities" => self.capabilities(),
+            "test.advance_time" => self.advance_time(params)?,
             "host.diagnostics" => {
                 json!({"phase":self.lifecycle.phase(),"windows":self.windows.keys().collect::<Vec<_>>(),
                 "pending_jobs":self.jobs.len(),"pending_transfers":self.transfers.len(),"pid":std::process::id(),

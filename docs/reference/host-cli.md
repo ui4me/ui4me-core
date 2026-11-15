@@ -31,7 +31,7 @@ Validates the manifest, starts the backend it describes and runs the application
 | Option | Meaning |
 | --- | --- |
 | `--app <APP>` | Path to the TOML manifest (required). |
-| `--headless` | Protocol and lifecycle without a desktop: no native windows, dialogs, clipboard or external open. For CI and binding tests. It does not claim desktop integration. |
+| `--headless` | Protocol and lifecycle without a desktop: no native windows, dialogs, clipboard or external open. For CI and binding tests. It does not claim desktop integration. Documents still get frames (without a surface) and may use the test-only virtual clock `test.advance_time` (see [Test mode](protocol.md#test-mode-headless-only)). |
 | `--allow-unsupervised` | Linux only: run without the `systemd-run --user` scope. A diagnostic mode; hard host death no longer reliably cleans up the backend. Ignored on Windows. |
 
 Exit status: `0` after a normal shutdown, `1` when the manifest is invalid, the backend fails, does not become ready before `startup_timeout_ms`, exits on its own, exits non-zero during shutdown, or overruns `shutdown_timeout_ms`. A secondary launch forwarded to a running single instance exits `0` once the primary accepted it.
