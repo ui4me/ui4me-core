@@ -1,0 +1,19 @@
+07:07:35.740345 - SPEECH OUTPUT: 'Screen reader on.' {'established': False}
+07:07:36.394209 - SPEECH OUTPUT: 'Desktop @ QRect(0,0 1280x800) ' {'established': False, 'family': {'name': '', 'gender'
+07:07:40.839242 - SPEECH OUTPUT: 'N-probe focus' {'established': False, 'family': {'name': '', 'gender': None, 'lang': '
+07:07:40.868134 - SPEECH OUTPUT: 'Browse mode' {'established': False}
+07:07:40.880290 - SPEECH OUTPUT: 'focus probe' {'established': False, 'family': {'name': '', 'gender': None, 'lang': 'C'
+07:07:40.880860 - SPEECH OUTPUT: 'document web' {'established': False}
+07:07:43.133987 - SPEECH OUTPUT: 'Top button' {'established': False, 'family': {'name': '', 'gender': None, 'lang': 'C',
+07:07:43.134484 - SPEECH OUTPUT: 'button.' {'established': False}
+07:07:45.066984 - SPEECH OUTPUT: 'tab' {'established': False, 'family': {'name': '', 'gender': None, 'lang': 'C', 'diale
+07:07:45.095254 - SPEECH OUTPUT: 'Far button (y~1500)' {'established': False, 'family': {'name': '', 'gender': None, 'la
+07:07:45.095700 - SPEECH OUTPUT: 'button.' {'established': False}
+07:07:47.128294 - SPEECH OUTPUT: 'tab' {'established': False, 'family': {'name': '', 'gender': None, 'lang': 'C', 'diale
+07:07:47.155114 - SPEECH OUTPUT: 'Far link (y~2900)' {'established': False, 'family': {'name': '', 'gender': None, 'lang
+07:07:47.155655 - SPEECH OUTPUT: 'link.' {'established': False}
+07:07:49.191925 - SPEECH OUTPUT: 'tab' {'established': False, 'family': {'name': '', 'gender': None, 'lang': 'C', 'diale
+07:07:49.217186 - SPEECH OUTPUT: 'Inner button (in overflow box)' {'established': False, 'family': {'name': '', 'gender'
+07:07:49.217787 - SPEECH OUTPUT: 'button.' {'established': False}
+07:07:51.605951 - SPEECH OUTPUT: 'Desktop @ QRect(0,0 1280x800) ' {'established': False, 'family': {'name': '', 'gender'
+07:07:52.616632 - SPEECH OUTPUT: 'Screen reader off.' {'established': False}

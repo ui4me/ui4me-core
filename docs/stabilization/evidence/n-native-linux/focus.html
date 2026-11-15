@@ -1,0 +1,26 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>focus probe</title>
+<style>
+html, body { margin: 0; background: #e8f0ff; font: 16px sans-serif; }
+.pad { height: 1400px; border-left: 6px dashed #9ab; margin: 0 20px; }
+button, a { display: inline-block; font-size: 20px; padding: 10px 18px; margin: 10px 20px; }
+:focus { outline: 6px solid #ff2a00; outline-offset: 2px; }
+#box { height: 120px; overflow: auto; margin: 10px 20px; border: 3px solid #333; background: #fff; }
+#box .inner { height: 600px; }
+h1 { margin: 0; padding: 12px 20px; font-size: 22px; }
+</style></head>
+<body>
+<h1 id="top">F-08 focus reveal probe</h1>
+<button id="b1">Top button</button>
+<div class="pad"></div>
+<button id="far">Far button (y~1500)</button>
+<div class="pad"></div>
+<a id="farlink" href="next.html">Far link (y~2900)</a>
+<div class="pad"></div>
+<div id="box"><div class="inner"></div><button id="inner">Inner button (in overflow box)</button></div>
+<div class="pad"></div>
+<button id="atbtn">AT-SPI target</button>
+<div class="pad"></div>
+<button id="apibtn">Backend focus target</button>
+<div class="pad"></div>
+</body></html>

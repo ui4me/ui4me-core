@@ -1,0 +1,16 @@
+{"t": 1794725714.732, "type": "pointerdown", "element": "b1", "ctrl": false, "shift": false, "alt": false, "meta": false, "x": 91.0, "y": 91.0, "button": 0}
+{"t": 1794725714.732, "type": "focus", "element": "b1", "ctrl": false, "shift": false, "alt": false, "meta": false}
+{"t": 1794725714.756, "type": "pointerup", "element": "b1", "ctrl": false, "shift": false, "alt": false, "meta": false, "x": 91.0, "y": 91.0, "button": 0}
+{"t": 1794725714.757, "type": "click", "element": "b1", "ctrl": false, "shift": false, "alt": false, "meta": false, "x": 91.0, "y": 91.0, "button": 0}
+{"t": 1794725716.335, "type": "keydown", "element": "b1", "key": "Tab", "code": "Tab", "ctrl": false, "shift": false, "alt": false, "meta": false}
+{"t": 1794725716.337, "type": "focus", "element": "far", "ctrl": false, "shift": false, "alt": false, "meta": false}
+{"t": 1794725718.053, "type": "keydown", "element": "far", "key": "Tab", "code": "Tab", "ctrl": false, "shift": false, "alt": false, "meta": false}
+{"t": 1794725718.053, "type": "focus", "element": "farlink", "ctrl": false, "shift": false, "alt": false, "meta": false}
+{"t": 1794725719.772, "type": "keydown", "element": "farlink", "key": "Enter", "code": "Enter", "ctrl": false, "shift": false, "alt": false, "meta": false}
+{"t": 1794725719.772, "type": "click", "element": "farlink", "ctrl": false, "shift": false, "alt": false, "meta": false}
+{"t": 1794725719.772, "type": "link_activated", "element": "farlink", "href": "next.html", "url": "file://~/projects/ui4me-core-stab/n-probe/next.html"}
+{"t": 1794725720.936, "type": "keydown", "element": "farlink", "key": " ", "code": "Space", "ctrl": false, "shift": false, "alt": false, "meta": false}
+{"t": 1794725722.1, "type": "keydown", "element": "farlink", "key": "Tab", "code": "Tab", "ctrl": false, "shift": false, "alt": false, "meta": false}
+{"t": 1794725722.1, "type": "focus", "element": "inner", "ctrl": false, "shift": false, "alt": false, "meta": false}
+{"t": 1794725724.043, "type": "focus", "element": "atbtn", "ctrl": false, "shift": false, "alt": false, "meta": false}
+{"t": 1794725725.985, "type": "focus", "element": "apibtn", "ctrl": false, "shift": false, "alt": false, "meta": false}

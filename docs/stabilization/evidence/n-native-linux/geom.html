@@ -1,0 +1,17 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>geometry probe</title>
+<style>
+html, body { margin: 0; background: #e8f0ff; font: 18px sans-serif; }
+.tall { height: 3000px; }
+#fixed { position: fixed; top: 60px; left: 30px; width: 330px; padding: 10px; background: #fff3c4; border: 2px solid #a80; }
+#modal { position: fixed; left: 600px; top: 250px; transform: translate(-50%, -50%) translateX(-20px); width: 300px; padding: 10px; background: #d9ffd9; border: 2px solid #080; }
+#scaled { position: absolute; left: 430px; top: 690px; transform: scale(1.5); transform-origin: 0 0; width: 220px; padding: 6px; background: #ffd9f0; border: 2px solid #a08; }
+input { font: 20px monospace; width: 280px; background: #fff; }
+#sinput { width: 200px; font: 14px monospace; }
+</style></head>
+<body>
+<div class="tall"></div>
+<div id="fixed">fixed<br><input id="finput" value="fixed field"></div>
+<div id="modal">transformed modal<br><input id="tinput" value="modal field"></div>
+<div id="scaled">scale(1.5)<br><input id="sinput" value="scaled"></div>
+</body></html>

@@ -1,0 +1,115 @@
+{
+ "inputs": {
+  "finput": {
+   "caret_before": 3,
+   "fcitx5_state": "2",
+   "value_during_composition": "fixnied field",
+   "caret_during_composition": 5,
+   "atspi_entry_window": [
+    42,
+    96,
+    288,
+    33
+   ],
+   "atspi_char_at_caret_window": [
+    106,
+    99,
+    12,
+    27
+   ],
+   "popup_screen": [
+    346,
+    273,
+    639,
+    300,
+    1414
+   ],
+   "popup_minus_caret_px": [
+    0,
+    6
+   ],
+   "popup_minus_entry_bottom_px": 3,
+   "composition_events": [
+    "compositionupdate",
+    "compositionupdate",
+    "compositionupdate",
+    "compositionupdate"
+   ],
+   "value_after_cancel": "fixed field"
+  },
+  "tinput": {
+   "caret_before": 3,
+   "fcitx5_state": "2",
+   "value_during_composition": "modnial field",
+   "caret_during_composition": 5,
+   "atspi_entry_window": [
+    430,
+    245,
+    288,
+    33
+   ],
+   "atspi_char_at_caret_window": [
+    494,
+    248,
+    12,
+    27
+   ],
+   "popup_screen": [
+    734,
+    422,
+    1027,
+    450,
+    1455
+   ],
+   "popup_minus_caret_px": [
+    0,
+    6
+   ],
+   "popup_minus_entry_bottom_px": 3,
+   "composition_events": [
+    "compositionupdate",
+    "compositionupdate",
+    "compositionupdate",
+    "compositionupdate"
+   ],
+   "value_after_cancel": "modal field"
+  },
+  "sinput": {
+   "caret_before": 3,
+   "fcitx5_state": "2",
+   "value_during_composition": "scaniled",
+   "caret_during_composition": 5,
+   "atspi_entry_window": [
+    442,
+    339,
+    312,
+    37
+   ],
+   "atspi_char_at_caret_window": [
+    508,
+    344,
+    12,
+    28
+   ],
+   "popup_screen": [
+    748,
+    520,
+    1041,
+    547,
+    1414
+   ],
+   "popup_minus_caret_px": [
+    0,
+    7
+   ],
+   "popup_minus_entry_bottom_px": 3,
+   "composition_events": [
+    "compositionupdate",
+    "compositionupdate",
+    "compositionupdate",
+    "compositionupdate"
+   ],
+   "value_after_cancel": "scaled"
+  }
+ }
+}
