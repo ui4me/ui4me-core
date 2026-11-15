@@ -51,15 +51,23 @@
     "T6"
    ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending",
+    "linux": "T1 at half engine stack (16 MiB); host-level nested kwin: depth 40 @1 MiB ulimit, fieldset/table 250 pass (baseline abort)",
+    "windows": "Windows Server 2022 interactive RDP, release host b2a31a4: see docs/stabilization/evidence/lead/windows-integration-b2a31a4.md: PE reserve 32 MiB; depth 40/250 div and 250 fieldset pass; T1 passes natively",
     "required": "both"
    },
-   "status": "IN_PROGRESS",
-   "commits": [],
-   "remaining_risk": "",
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "96c549e",
+    "554b58d",
+    "5cb8e90"
+   ],
+   "remaining_risk": "inline-block/buttons/multicol exponential layout excluded from T1 until F-14 (ws H). File dialogs/DnD/UIA off the main thread need a native smoke.",
    "owner_decision": false,
-   "notes": ""
+   "notes": "",
+   "tests": [
+    "crates/ui4me-renderer/tests/stack_depth.rs (T1)",
+    "fuzz_gate::harness_depth_chains"
+   ]
   },
   {
    "id": "F-02",
@@ -94,10 +102,10 @@
    ],
    "verification": {
     "linux": "Linux windowed (nested kwin): burst2 N=20 3/3, N=100 3/3 pass (baseline 1/3, 0/3); T2 passes, fails on baseline",
-    "windows": "pending",
+    "windows": "Windows Server 2022 interactive RDP, release host b2a31a4: see docs/stabilization/evidence/lead/windows-integration-b2a31a4.md: burst2 N=20 and N=100 PROBE_PASS 6/6, no host warnings (baseline: disconnect at 40/100); host tests incl. T2 pass natively",
     "required": "both"
    },
-   "status": "IN_PROGRESS",
+   "status": "FIXED_VERIFIED",
    "commits": [
     "c90062f",
     "78df633",
@@ -107,7 +115,7 @@
    ],
    "remaining_risk": "Reader >8 MiB behind is still disconnected by design; Windows pipe quota unchanged.",
    "owner_decision": false,
-   "notes": "Lead found a second silent drop: renderer per-turn event queue capped at 1,024 (backend saw exactly 1,024 events per switch at N=100). Fixed in a664fb8 (16,384 + counted refusals + host warning). Windows run pending.",
+   "notes": "Lead found a second silent drop: renderer per-turn event queue capped at 1,024 (backend saw exactly 1,024 events per switch at N=100). Fixed in a664fb8 (16,384 + counted refusals + host warning). Windows run pending. PowerShell 5.1 burst pending (after ws E).",
    "tests": [
     "transport::t2_burst_to_a_slow_reading_peer_is_delivered_in_order_without_disconnect",
     "peer_that_stops_reading_is_refused_at_the_byte_cap",
@@ -144,15 +152,22 @@
     "T6"
    ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending",
+    "linux": "svg_depth tests; svgdepth 700 and 2,000 clip-path chain refused cleanly windowed (baseline abort)",
+    "windows": "Windows Server 2022 interactive RDP, release host b2a31a4: see docs/stabilization/evidence/lead/windows-integration-b2a31a4.md: svgdepth 500/700 pass; svg_depth passes natively",
     "required": "both"
    },
-   "status": "IN_PROGRESS",
-   "commits": [],
-   "remaining_risk": "",
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "c8b9832",
+    "8806f21"
+   ],
+   "remaining_risk": "Conservative model may reject unusual valid SVGs (reference hop = one level; cycles rejected).",
    "owner_decision": false,
-   "notes": ""
+   "notes": "",
+   "tests": [
+    "crates/ui4me-assets/tests/svg_depth.rs",
+    "fuzz_resources::harness_svg_depth"
+   ]
   },
   {
    "id": "F-04",
@@ -215,15 +230,23 @@
     "T6"
    ],
    "verification": {
-    "linux": "pending",
+    "linux": "6 unit tests (fail on baseline)",
     "windows": "pending",
-    "required": "both"
+    "required": "linux"
    },
-   "status": "IN_PROGRESS",
-   "commits": [],
-   "remaining_risk": "",
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "7587eb3"
+   ],
+   "remaining_risk": "set_text under an element at depth 256 now refused (small behaviour change, documented).",
    "owner_decision": false,
-   "notes": ""
+   "notes": "",
+   "tests": [
+    "move_element_rejects_depth_over_limit",
+    "move_chains_cannot_exceed_the_limit",
+    "insert_html_counts_insertion_depth",
+    "a_rejected_move_rolls_back_its_batch"
+   ]
   },
   {
    "id": "F-07",
@@ -1219,17 +1242,19 @@
    "reproduction": "`python3 adv_run.py fast_reader_single_command_burst ADV_N=250 ADV_READ_DELAY=0.002`; `python3 adv_run.py flood_no_read`; coordinator `exp/main/burst2.py`.",
    "root_cause": "(1) unconditional emission of every DOM event; (2) depth-based (not stall-based) disconnect policy; (3) no separation between droppable/coalescable events and reliable traffic; (4) small effective kernel buffering.",
    "correction": "1. Reliable lane vs event lane in `transport.rs`. Replace the single `SyncSender<Vec<u8>>` per connection with a `Mutex<Outbound>{ reliable: VecDeque, events: VecDeque/IndexMap, bytes }` + `Condvar`. Reliable = responses, host→backend requests (`window.before_close`, `app.before_quit`), and lifecycle notifications (`app.shutdown`, `window.event` `closed`/`close_requested`/`focused`, `request.cance",
-   "status": "IN_PROGRESS",
+   "status": "FIXED_VERIFIED",
    "commits": [
     "c90062f",
     "78df633",
     "8c8cab3",
     "eae0ad9"
    ],
-   "tests": [],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1422,17 +1447,19 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "build `[len|body]` in one `Vec` (the body is already serialized in `reply`; reserve 4 bytes up front) or batch all queued frames up to ~64 KiB per write. Test: count writes with a mock stream.",
-   "status": "IN_PROGRESS",
+   "status": "FIXED_VERIFIED",
    "commits": [
     "c90062f",
     "78df633",
     "8c8cab3",
     "eae0ad9"
    ],
-   "tests": [],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1655,12 +1682,17 @@
    "reproduction": "`target/debug/render-audit-harness deep 40 1024` (crash), `deep 35 1024` (ok), `deep 252 8192` (ok).",
    "root_cause": "deep recursion with ~20 KiB frames per DOM level, plus the MSVC default 1 MiB main-thread reserve; fuzzing runs cases on an 8 MiB worker thread (`fuzz_gate.rs:268`) so it cannot see this.",
    "correction": "(1) Immediate: in `crates/ui4me-host/build.rs`, for `target_env = \"msvc\"` emit `cargo:rustc-link-arg-bins=/STACK:16777216` (16 MiB reserve; commit stays small) — depth 252 needed < 8 MiB here, so 16 MiB gives ~2× headroom. (2) Shrink frames: pass `&BoxStyle`/`Arc<BoxStyle>` (the style maps already hold `Arc<BoxStyle>`), move large temporaries into `Box`, or convert `Builder::element` recursion to ",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "96c549e",
+    "554b58d"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1679,12 +1711,16 @@
    "reproduction": "`NOFIRST=1 target/debug/render-audit-harness movedeep 3 200 8192` → depth ~603 accepted, cold render on an 8 MiB thread aborts with stack overflow. With an initial render before the moves the incremental box build (iterative take-over) survived, so the crash needs a full box build: first render, `fo",
    "root_cause": "",
    "correction": "track depth incrementally — check `depth(target) + subtree_height(moved)` in `MoveElement` and `depth(insertion parent) + fragment height` in `InsertHtml` (compute the insertion parent's depth by walking ancestors, O(depth)); add tests `move_element_rejects_depth_over_limit`, `insert_html_counts_insertion_depth`. Independently fix RENDER-02 so the limit is survivable.",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "7587eb3"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -1841,15 +1877,19 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "nightly CI job running each harness for a fixed seed and 120 s in release, worker stack 1 MiB; add generators for deep nesting (≥ 256 via move/insert chains), huge tables (`<td>` × 10⁴, `colspan=1000`), 10⁵ siblings, extreme numeric CSS combined with `calc()` NaN paths. **Complexity**: S. **Confidence**: High.",
-   "status": "IN_PROGRESS",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "8806f21"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Fuzz workers on half production stack + depth/SVG generators; nightly scheduled by ws F."
   },
   {
    "id": "RENDER-11",
@@ -3162,12 +3202,17 @@
    "reproduction": "`gen_cases.py` -> `div40.html` (`ulimit -s 1024`), `fieldset252.html` (default). Both rc 134, `thread 'main' has overflowed its stack`, `fatal runtime error: stack overflow, aborting` (SIGABRT). Also reproduced live: the same layout runs on the GUI thread via `host/native.rs::draw` (`render_into`), ",
    "root_cause": "`MAX_DEPTH = 256` was chosen for the parser/DOM, not for the recursive layout builder's per-element stack cost, and it is not scaled to the 1 MiB Windows main-thread stack. The builder recurses on the native call stack.",
    "correction": "(a) set the host main thread (and the winit/event-loop thread on Windows) to an explicit large stack via `std::thread::Builder::stack_size` the way the fuzz worker already does (`fuzz_gate.rs:267` uses 8 MiB) — `main.rs` currently calls `execute()` straight on the default main stack; the Windows PE reserve must also be raised (linker `/STACK` or a spawned worker). (b) Lower `MAX_DEPTH` to a value ",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "96c549e",
+    "554b58d"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -3186,12 +3231,16 @@
    "reproduction": "`gen_cases.py` -> `g700_file.html` (SVG file under the asset root), `g700_data.html` (10.6 KB `data:` URL in an `<img>`; also reproduced via CSS `background-image`), `clip2000.html` (2000 chained `clip-path`, a different unbounded usvg recursion). All rc 134, `thread 'ui4me-assets-N' has overflowed ",
    "root_cause": "the pre-scan enforces an element *count* and a 4-deep cap on specific constructs but not on arbitrary element nesting, and usvg/resvg recurse on the native stack; the asset workers use the default (small on Windows) stack.",
    "correction": "in `svg/prescan.rs`, reject documents whose maximum element nesting exceeds a safe bound (roxmltree already walks the tree, so track depth) before handing bytes to usvg; pick the bound against the worker stack size. Independently, give the asset workers an explicit large `stack_size` at spawn in `worker.rs` (as the fuzz worker does). Test: feed `g<N>.svg` and `clip<N>.svg` at the bound through the",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "c8b9832"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -3306,12 +3355,17 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "",
-   "status": "OPEN",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "554b58d",
+    "c8b9832"
+   ],
+   "tests": [
+    "see consolidated"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "see consolidated",
+    "windows": "see consolidated"
    },
    "remaining_risk": "",
    "notes": ""
@@ -3867,8 +3921,8 @@
    "kind": "gate",
    "title": "Documented limits render without abort on production stacks",
    "baseline": "FAILING",
-   "status": "FAILING",
-   "evidence": "",
+   "status": "MET (pending inline-block, F-14)",
+   "evidence": "T1 Linux+Windows; Windows windowed depth 250 div/fieldset, SVG 700",
    "notes": ""
   },
   {
@@ -4110,10 +4164,10 @@
   {
    "id": "T1",
    "kind": "test",
-   "status": "OPEN",
-   "location": "",
-   "ci": "",
-   "notes": ""
+   "status": "FIXED_VERIFIED",
+   "location": "crates/ui4me-renderer/tests/stack_depth.rs, crates/ui4me-assets/tests/svg_depth.rs",
+   "ci": "cargo test (default); release in nightly",
+   "notes": "Native Windows pass. inline-block pending F-14."
   },
   {
    "id": "T2",
@@ -4150,10 +4204,10 @@
   {
    "id": "T6",
    "kind": "test",
-   "status": "OPEN",
-   "location": "",
-   "ci": "",
-   "notes": ""
+   "status": "IN_PROGRESS",
+   "location": "fuzz_gate.rs, fuzz_resources.rs (#[ignore])",
+   "ci": "nightly (ws F)",
+   "notes": "Small-stack workers, depth/SVG generators; filter-cost generator pending ws H."
   },
   {
    "id": "T7",
