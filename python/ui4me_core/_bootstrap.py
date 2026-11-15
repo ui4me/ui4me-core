@@ -62,6 +62,12 @@ def claim_start() -> None:
     _started = True
 
 
+def release_start() -> None:
+    """A start that failed (StartupError, ...) does not count: allow a retry."""
+    global _started
+    _started = False
+
+
 def managed() -> bool:
     """True when this process is a backend started by the native host."""
     endpoint, token = os.environ.get(ENDPOINT), os.environ.get(TOKEN)
@@ -202,11 +208,12 @@ def _write(stream: IO[str] | None, text: str) -> None:
     if stream is None:
         return
     try:
-        stream.write(text + "\n")
-    except UnicodeEncodeError:
-        encoding = getattr(stream, "encoding", None) or "ascii"
-        stream.write(text.encode(encoding, "backslashreplace").decode(encoding) + "\n")
-    except (OSError, ValueError):
+        try:
+            stream.write(text + "\n")
+        except UnicodeEncodeError:
+            encoding = getattr(stream, "encoding", None) or "ascii"
+            stream.write(text.encode(encoding, "backslashreplace").decode(encoding) + "\n")
+    except (OSError, ValueError, LookupError):
         return
     try:
         stream.flush()
@@ -346,7 +353,13 @@ def run_host(command: list[str], *, env: dict[str, str], shutdown_timeout_ms: in
         assert process.stderr is not None
         try:
             for line in process.stderr:
-                relay_line(line, verbose=verbose, stdout=sys.stdout, stderr=sys.stderr)
+                try:
+                    relay_line(line, verbose=verbose, stdout=sys.stdout, stderr=sys.stderr)
+                except Exception:
+                    # The terminal is gone (or rejects the text): discard the
+                    # line but keep reading, since an undrained pipe blocks the
+                    # host once its buffer (~64 KiB) is full (binding review #9).
+                    pass
         except (OSError, ValueError):
             pass
 
@@ -366,7 +379,6 @@ def run_host(command: list[str], *, env: dict[str, str], shutdown_timeout_ms: in
                     state["deadline"] = time.monotonic() + 5
                 elif deadline is not None and state["forced"] and time.monotonic() > deadline:
                     process.kill()
-        relay_thread.join(timeout=5)
         signum = state["signal"]
         if signum is None:
             return _exit_status(status)
@@ -386,8 +398,12 @@ def run_host(command: list[str], *, env: dict[str, str], shutdown_timeout_ms: in
         if process.poll() is None:
             process.kill()
             process.wait()
+        # The relay ends at EOF, which a descendant that inherited the pipe
+        # can postpone indefinitely. Closing the buffered reader would block
+        # on the lock the (daemon) relay thread holds while it reads, so then
+        # leave both alone; exit is bounded by this join (binding review #5).
         relay_thread.join(timeout=5)
-        if process.stderr is not None:
+        if process.stderr is not None and not relay_thread.is_alive():
             process.stderr.close()
 
 

@@ -92,6 +92,28 @@ class RoleTests(unittest.TestCase):
                 Application.start(name="Second")
         launch.assert_not_called()
 
+    def test_start_can_be_retried_after_a_startup_error(self):
+        """binding review #6: a failed start must not count as the one start."""
+        self.addCleanup(setattr, _bootstrap, "_started", False)
+        with mock.patch.dict(os.environ, CLEAN, clear=True), \
+                mock.patch.object(_bootstrap, "launch",
+                                  side_effect=[StartupError("no host yet"), 0]) as launch:
+            with self.assertRaisesRegex(StartupError, "no host yet"):
+                Application.start(name="Retry")
+            with self.assertRaises(SystemExit) as finished:
+                Application.start(name="Retry")
+        self.assertEqual(finished.exception.code, 0)
+        self.assertEqual(launch.call_count, 2)
+        with mock.patch.dict(os.environ, {**CLEAN, "UI4ME_ENDPOINT": "e", "UI4ME_TOKEN": "t"}, clear=True), \
+                mock.patch.object(Application, "from_environment",
+                                  side_effect=[StartupError("connect failed"), "app"]):
+            _bootstrap._started = False
+            with self.assertRaisesRegex(StartupError, "connect failed"):
+                Application.start(name="Retry")
+            self.assertEqual(Application.start(name="Retry"), "app")
+            with self.assertRaisesRegex(StartupError, "already called"):
+                Application.start(name="Retry")
+
     @unittest.skipUnless(os.name == "posix", "a negative (killed by signal) status exists only on POSIX")
     def test_host_killed_by_a_signal_maps_to_the_shell_status(self):
         with mock.patch("sys.stderr") as stderr:
@@ -255,6 +277,75 @@ class RelayTests(unittest.TestCase):
         self.assertEqual(self.relay(b"ui4me-host: Invalid application manifest\n"),
                          ("", "ui4me-host: Invalid application manifest\n"))
         self.assertEqual(self.relay(b"\xff not utf-8\n"), ("", "\ufffd not utf-8\n"))
+
+
+class GoneTerminal:
+    """A console that went away (SIGHUP, closed window): every write fails.
+    A legacy code page also rejects non-ASCII text before that."""
+    encoding = "ascii"
+
+    def __init__(self):
+        self.attempts = 0
+
+    def write(self, text):
+        self.attempts += 1
+        text.encode("ascii")  # UnicodeEncodeError for non-ASCII, as a cp437 console does
+        raise OSError(5, "Input/output error")
+
+    def flush(self):
+        raise OSError(5, "Input/output error")
+
+
+@unittest.skipUnless(os.name == "posix", "POSIX shell fixtures")
+class RelayDrainTests(unittest.TestCase):
+    """The relay keeps the host's stderr drained and never bounds exit on it."""
+
+    def run_host_in_thread(self, command, timeout):
+        import threading
+        result = {}
+
+        def run():
+            result["status"] = _bootstrap.run_host(command, env=dict(os.environ))
+        thread = threading.Thread(target=run, daemon=True)
+        started = time.monotonic()
+        thread.start()
+        thread.join(timeout)
+        return result, time.monotonic() - started
+
+    def test_host_output_is_still_drained_after_the_terminal_is_gone(self):
+        """binding review #9: a failed relay write must not stop the reading,
+        or the host blocks once the ~64 KiB pipe buffer is full."""
+        host = textwrap.dedent('''\
+            import signal, sys
+            signal.alarm(20)  # never outlive a failed test
+            for n in range(4000):
+                sys.stderr.write("backend says P\u0159\u00edli\u0161 %d " % n + "x" * 60 + "\\n")
+            sys.stderr.flush()
+            ''')
+        terminal = GoneTerminal()
+        with mock.patch("sys.stderr", terminal), mock.patch("sys.stdout", terminal):
+            result, elapsed = self.run_host_in_thread([sys.executable, "-c", host], timeout=15)
+        self.assertEqual(result.get("status"), 0, f"host blocked on a full stderr pipe ({elapsed:.1f} s)")
+        self.assertGreater(terminal.attempts, 0)
+
+    def test_a_descendant_holding_the_pipe_does_not_delay_exit(self):
+        """binding review #5: closing the relayed pipe blocked on the relay
+        thread until every process holding the pipe had exited."""
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(folder, ignore_errors=True))
+        pid_file = folder / "pid"
+        script = f"sleep 20 & echo $! > '{pid_file}'; exit 0"
+
+        def stop_descendant():
+            try:
+                os.kill(int(pid_file.read_text()), 9)
+            except (OSError, ValueError):
+                pass
+        self.addCleanup(stop_descendant)
+        with mock.patch("sys.stderr"):
+            result, elapsed = self.run_host_in_thread(["sh", "-c", script], timeout=25)
+        self.assertEqual(result.get("status"), 0)
+        self.assertLess(elapsed, 8.0, "run_host waited for a descendant that inherited the pipe")
 
 
 @unittest.skipUnless(built_host(), "build the host first: cargo build -p ui4me-host")

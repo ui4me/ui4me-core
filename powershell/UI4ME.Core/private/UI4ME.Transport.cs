@@ -427,8 +427,12 @@ namespace UI4ME {
         // other notifications are discarded on the reader thread and never
         // occupy one of the MaximumQueuedMessages slots.
         private bool filtering;
-        private readonly Dictionary<string, HashSet<string>> documentInterest = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);  // types: case-insensitive like the module's -eq
-        private readonly HashSet<string> notificationInterest = new HashSet<string>(StringComparer.Ordinal);
+        // Keys are host-issued document IDs (exact); event types are
+        // case-insensitive like the module's -eq.
+        private readonly Dictionary<string, HashSet<string>> documentInterest = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        // Methods: case-insensitive like the module's Notifications hashtable
+        // (Register-UI4MENotification -Method 'Window.Event'; binding review #8).
+        private readonly HashSet<string> notificationInterest = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         // Bookkeeping applied on the reader thread as control messages arrive.
         private readonly HashSet<string> closedWindows = new HashSet<string>(StringComparer.Ordinal);
         private readonly HashSet<string> failedDocuments = new HashSet<string>(StringComparer.Ordinal);

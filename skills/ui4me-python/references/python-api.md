@@ -97,7 +97,7 @@ Consequences for your code:
 - **Arguments.** The backend is started with the same command line, so `python app.py --debug` gives the backend the same `sys.argv`, and `argparse` works in both roles.
 - The backend has no standard input, so `input()` cannot be used. `print()` output still reaches your terminal through the launcher.
 - **Lifetime.** Ctrl+C (and Ctrl+Break on Windows), SIGTERM or SIGHUP do not end the launcher while the host runs: the launcher forwards the signal to the host (POSIX; on Windows the host receives the console event itself) and waits for it, then exits with the host's status (130 for Ctrl+C, 143 for SIGTERM). A host that shuts down in order on these signals sends `app.shutdown`, so `run()` returns and `on_shutdown` callbacks run; a 1.0.1 host simply stops. A host that has not exited within the shutdown timeout plus five seconds, or a second Ctrl+C, is terminated. If the launcher itself is killed, the host is stopped too (Linux: parent-death signal; Windows: a kill-on-close job object). If the host itself is ended by a signal, the launcher prints `ui4me-host was terminated by SIGKILL ...` and exits with the shell convention 128 + signal number (137 for SIGKILL).
-- **Once per process.** Call `Application.start()` once; a second call in the same process raises `StartupError` instead of starting another host.
+- **Once per process.** Call `Application.start()` once; a second call in the same process raises `StartupError` instead of starting another host. A call that failed with `StartupError` (for example, no host found) does not count, so it can be retried.
 - **Errors.** If an exception escapes a `with Application.start(...)` block in the backend, its traceback is printed before the connection closes, so it is not lost when the host stops the failed backend.
 - Inside a backend that was started from a manifest (`ui4me-host run --app`), `Application.start()` simply connects, so the same script works both ways.
 
@@ -565,7 +565,7 @@ A result that would exceed the message limit is an error, never silently truncat
 | `ui4me-host --version` | Host version. |
 | `ui4me-skill install\|status\|uninstall [--agents all\|claude,codex,...] [--scope user\|project] [--project PATH] [--dry-run] [--force]` | Install the bundled `ui4me-python` coding-agent skill. See [agent skills](https://github.com/ui4me/ui4me-core/blob/main/docs/guides/agent-skills.md). |
 
-`ui4me_core.host_binary()` returns the path of the native host that `start()` and `ui4me-host` use (`UI4ME_HOST_BINARY` if set, otherwise the packaged binary, otherwise the first native `ui4me-host` executable on `PATH`; the package's own `ui4me-host` console script is skipped, so a source checkout or editable install without a built host fails with `FileNotFoundError` instead of running that script in a loop).
+`ui4me_core.host_binary()` returns the path of the native host that `start()` and `ui4me-host` use (`UI4ME_HOST_BINARY` if set, otherwise the packaged binary, otherwise the first `ui4me-host` executable on `PATH` that is not a Python console script: a native binary or a shell wrapper such as a distribution's or Nix's `#!/bin/sh` `exec` script is used, while the package's own `ui4me-host` console script (any script run by a Python interpreter) is skipped, so a source checkout or editable install without a built host fails with `FileNotFoundError` instead of running that script in a loop).
 
 ## Parity with the PowerShell API
 

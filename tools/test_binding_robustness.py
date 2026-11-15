@@ -426,6 +426,67 @@ class FacadeContractTests(unittest.TestCase):
         self.assertTrue(wait_for(lambda: seen == ["closed"]))
         self.assertNotIn("w1", peer.app._closing)
 
+    def test_closed_event_racing_a_host_closed_error_is_still_host_stale(self):
+        """binding review #3: the reader thread pops the window (closed event)
+        between the caller's lookup and its removal; never a KeyError."""
+        peer = Peer(self)
+        window = peer.window("w1", "d1")
+        app = peer.app
+
+        class RacingWindows(dict):
+            fired = False
+
+            def _closed_arrives(self):
+                if not self.fired:
+                    self.fired = True
+                    app._window_event_received({"window_id": "w1", "type": "closed"})
+
+            def get(self, key, default=None):
+                value = dict.get(self, key, default)
+                self._closed_arrives()
+                return value
+
+            def pop(self, key, *default):
+                self._closed_arrives()
+                return dict.pop(self, key, *default)
+
+        app._windows = RacingWindows(app._windows)
+        peer.answers["window.set"] = {"error": {"code": -32004, "message": "Window is closing"}}
+        with self.assertRaises(HostStaleError):
+            window.set(title="x")
+        self.assertTrue(app._windows.fired)
+        self.assertTrue(window.closed)
+        self.assertNotIn("w1", app._windows)
+        self.assertIs(app._closing.get("w1"), window)
+
+    def test_ready_survives_a_closed_event_while_it_scans_windows(self):
+        """binding review #4: ready() iterated app._windows while the reader
+        thread can pop it (RuntimeError: dictionary changed size)."""
+        peer = Peer(self)
+        peer.answers["app.ready"] = {}
+        app = peer.app
+        abandoned = Window(app, "w0")
+        app._windows["w0"] = abandoned
+        app._abandoned.append(abandoned)
+
+        class ClosingWhileScanned(Window):
+            """Reading .closed delivers another window's closed event."""
+
+            @property
+            def closed(self):
+                app._window_event_received({"window_id": "w2", "type": "closed"})
+                return True
+
+            @closed.setter
+            def closed(self, value):
+                pass
+
+        app._windows["w1"] = ClosingWhileScanned(app, "w1")
+        app._windows["w2"] = Window(app, "w2")
+        app.ready()
+        self.assertTrue(app._ready)
+        self.assertNotIn("w2", app._windows)
+
     def test_other_rpc_errors_are_unchanged(self):
         peer = Peer(self)
         window = peer.window("w1", "d1")

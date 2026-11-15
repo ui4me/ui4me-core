@@ -34,13 +34,20 @@ def host_binary() -> Path:
 
 
 def _is_native_host(path: Path) -> bool:
-    """True for a native executable, False for a script or a pip/uv
-    console-script launcher (a small .exe with a zip archive appended)."""
+    """False for a Python console-script launcher, True for anything else
+    that can run the host.
+
+    POSIX: any executable (ELF, Mach-O, or a distro/Nix ``#!/bin/sh exec ...``
+    wrapper) except a script run by a Python interpreter (including the
+    ``#!/bin/sh`` trampoline pip/uv write for long interpreter paths), one
+    that runs ``ui4me_core.launcher``, or the script running now (BIND-04).
+    Windows: a PE without a zip archive appended (pip/uv launchers are PEs).
+    """
     try:
         with path.open("rb") as file:
-            magic = file.read(4)
             if os.name != "nt":
-                return magic == b"\x7fELF"
+                return not _is_python_script(file.read(_SCRIPT_HEAD), path)
+            magic = file.read(4)
             if magic[:2] != b"MZ":
                 return False
             size = file.seek(0, os.SEEK_END)
@@ -48,6 +55,31 @@ def _is_native_host(path: Path) -> bool:
             return b"PK\x05\x06" not in file.read()
     except OSError:
         return False
+
+
+_SCRIPT_HEAD = 4096
+_PYTHON_NAMES = (b"python", b"pypy")
+
+
+def _is_python_script(head: bytes, path: Path) -> bool:
+    if b"ui4me_core.launcher" in head:
+        return True
+    try:
+        if sys.argv and sys.argv[0] and os.path.samefile(path, sys.argv[0]):
+            return True
+    except OSError:
+        pass
+    if not head.startswith(b"#!"):
+        return False  # A native executable.
+    lines = head.split(b"\n")
+    words = lines[0][2:].split()
+    if words and os.path.basename(words[0]) == b"env":
+        words = [word for word in words[1:] if not word.startswith(b"-") and b"=" not in word]
+    if words and os.path.basename(words[0]).startswith(_PYTHON_NAMES):
+        return True
+    # pip/uv for an interpreter path that is long or contains spaces:
+    # "#!/bin/sh", then "'''exec' "/path/to/python" "$0" "$@"".
+    return len(lines) > 1 and lines[1].startswith(b"'''exec' ")
 
 
 def main() -> int:

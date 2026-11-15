@@ -1590,24 +1590,77 @@ function Get-UI4MEScriptArguments {
     return ,@()
 }
 
+function Test-UI4MEProcessRunsScript {
+    # True when this pwsh/powershell.exe process was started to run exactly
+    # this script and nothing else (pwsh -File app.ps1, -f, any -File prefix,
+    # pwsh app.ps1), so ending the whole process is ending the script. False
+    # for an open prompt, -Command "& ./app.ps1", -NoExit, or a script that
+    # another script called (pwsh -File menu.ps1 running & ./app.ps1).
+    param([string]$ScriptPath, [string[]]$CommandLine = [Environment]::GetCommandLineArgs(),
+        [string]$Directory = [Environment]::CurrentDirectory, [bool]$Core = ($PSVersionTable.PSEdition -eq 'Core'),
+        [bool]$Windows = $script:UI4MEIsWindows)
+    $comparison = if ($Windows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+    $prefix = if ($Windows) { '^(--|-|/)' } else { '^(--|-)' }
+    # Options before the script that take a separate value (skipped, so a value is never the script).
+    $valued = @('ex', 'ep', 'exe', 'exec', 'executionpolicy', 'wd', 'workingdirectory', 'w', 'win', 'windowstyle',
+        'if', 'inp', 'inputformat', 'o', 'of', 'out', 'outputformat', 'psconsolefile', 'version',
+        'config', 'configurationname', 'configurationfile', 'custompipename', 'settings', 'settingsfile')
+    $file = $null
+    for ($i = 1; $i -lt $CommandLine.Count; $i++) {
+        $token = [string]$CommandLine[$i]
+        if ($token -notmatch ($prefix + '([A-Za-z]+)(:.*)?$')) {
+            # pwsh's first positional argument is -File; Windows PowerShell's is -Command.
+            if ($Core -and $token.EndsWith('.ps1', [StringComparison]::OrdinalIgnoreCase)) { $file = $token }
+            break
+        }
+        $option = $Matches[2].ToLowerInvariant()
+        $inline = [bool]$Matches[3]
+        if ('file'.StartsWith($option)) {
+            if ($i + 1 -lt $CommandLine.Count) { $file = [string]$CommandLine[$i + 1] }
+            break
+        }
+        # -NoExit keeps the prompt open; -Command/-EncodedCommand/-CommandWithArgs run a command.
+        if ($option.Length -ge 3 -and 'noexit'.StartsWith($option)) { return $false }
+        if (@('c', 'e', 'ec', 'cwa') -contains $option -or ($option.Length -ge 2 -and 'command'.StartsWith($option)) -or
+                ($option.Length -ge 8 -and 'commandwithargs'.StartsWith($option)) -or
+                ($option.Length -ge 3 -and 'encodedcommand'.StartsWith($option))) {
+            return $false
+        }
+        if (-not $inline -and $valued -contains $option) { $i++ }
+    }
+    if (-not $file) { return $false }
+    try {
+        $full = [IO.Path]::GetFullPath([IO.Path]::Combine($Directory, $file))
+        $target = [IO.Path]::GetFullPath($ScriptPath)
+    } catch { return $false }
+    return [string]::Equals($full, $target, $comparison)
+}
+
 function Get-UI4MEEntryScript {
-    # The script this PowerShell process runs (pwsh -File app.ps1), not the
-    # file that happens to contain the Start-UI4MEScript call (a dot-sourced
-    # helper or a module function). Falls back to the outermost .ps1 on the
-    # call stack (a script started from a prompt), then to the caller.
+    # The app script that called Start-UI4MEScript. Walking outward from the
+    # caller, frames of functions (from a dot-sourced helper, a module, or the
+    # script itself), script blocks and dot-sourced files are passed over; the
+    # first .ps1 invoked as a script (-File, &, ./app.ps1) is the app
+    # (BIND-PS-06). Scripts further out (pwsh -File menu.ps1 running
+    # & ./app.ps1) are never chosen: they are not the app (binding review #2).
+    # Without such a frame: the innermost dot-sourced .ps1 (. ./app.ps1 at a
+    # prompt), then the caller's file.
     param([string]$Caller)
-    $comparison = if ($script:UI4MEIsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
-    $scripts = New-Object 'System.Collections.Generic.List[string]'
+    $module = $ExecutionContext.SessionState.Module
+    $dotted = $null
     foreach ($frame in @(Get-PSCallStack)) {
-        if ($frame.ScriptName -and [IO.Path]::GetExtension($frame.ScriptName) -ieq '.ps1') { $scripts.Add($frame.ScriptName) }
+        $info = $frame.InvocationInfo
+        $command = if ($null -ne $info) { $info.MyCommand } else { $null }
+        if ($null -ne $command -and $null -ne $module -and $command.Module -eq $module) { continue }  # this module
+        if ($command -isnot [Management.Automation.ExternalScriptInfo]) { continue }
+        if (-not $frame.ScriptName -or [IO.Path]::GetExtension($frame.ScriptName) -ne '.ps1') { continue }
+        if ($info.InvocationName -eq '.') {
+            if ($null -eq $dotted) { $dotted = $frame.ScriptName }
+            continue
+        }
+        return $frame.ScriptName
     }
-    $all = [Environment]::GetCommandLineArgs()
-    for ($i = 1; $i -lt $all.Count; $i++) {
-        if (-not $all[$i].EndsWith('.ps1', [StringComparison]::OrdinalIgnoreCase)) { continue }
-        try { $full = [IO.Path]::GetFullPath([IO.Path]::Combine([Environment]::CurrentDirectory, $all[$i])) } catch { continue }
-        foreach ($candidate in $scripts) { if ([string]::Equals($candidate, $full, $comparison)) { return $candidate } }
-    }
-    if ($scripts.Count -gt 0) { return $scripts[$scripts.Count - 1] }
+    if ($null -ne $dotted) { return $dotted }
     return $Caller
 }
 
@@ -1651,9 +1704,10 @@ function Start-UI4MEScript {
     Arguments for the backend run. By default, the arguments that followed the script on the
     pwsh/powershell.exe command line are reused.
     .PARAMETER ScriptPath
-    The .ps1 file the host runs again as the backend. Default: the script this PowerShell process
-    was started with (pwsh -File app.ps1), even when Start-UI4MEScript is called from a dot-sourced
-    helper or a module function; otherwise the outermost .ps1 on the call stack.
+    The .ps1 file the host runs again as the backend. Default: the script that calls
+    Start-UI4MEScript (app.ps1 in pwsh -File app.ps1, ./app.ps1 or & ./app.ps1), also when the call
+    is in a function of a dot-sourced helper or a module: the nearest .ps1 on the call stack that
+    was run as a script. A script that ran app.ps1 (menu.ps1 running & ./app.ps1) is not used.
     .EXAMPLE
     $app = Start-UI4MEScript -Name 'Hello UI4ME'
     #>
@@ -1737,6 +1791,7 @@ function Start-UI4MEScript {
     $consoleGuard = $false
     $forcedCode = $null
     $previousMarker = $env:UI4ME_DIRECT_START
+    $ownsProcess = Test-UI4MEProcessRunsScript -ScriptPath $ScriptPath
     try {
         $manifest = Join-Path $folder 'app.toml'
         [IO.File]::WriteAllText($manifest, ($lines -join "`n"), (New-Object Text.UTF8Encoding($false)))
@@ -1805,16 +1860,25 @@ function Start-UI4MEScript {
             $runner.Dispose()
         }
         Remove-Item -LiteralPath $folder -Recurse -Force -ErrorAction SilentlyContinue
-        if ($interrupted) {
+        if ($interrupted -and $ownsProcess) {
             # PowerShell would end a stopped script with status 0.
+            [Console]::Out.Flush(); [Console]::Error.Flush()
             [Environment]::Exit($code)
         }
+        # Otherwise (an open prompt, a calling script) the stop simply
+        # continues: the host has shut down and the prompt or caller remains.
     }
-    # Not `exit $code`: a terminal Ctrl+C reaches the host and this process
-    # together, and a pipeline stop arriving while `exit` runs ends PowerShell
-    # with status 0. This process exists only to run the host.
     [Console]::Out.Flush(); [Console]::Error.Flush()
-    [Environment]::Exit($code)
+    if ($ownsProcess) {
+        # Not `exit $code`: a terminal Ctrl+C reaches the host and this process
+        # together, and a pipeline stop arriving while `exit` runs ends PowerShell
+        # with status 0. This process was started only to run this script.
+        [Environment]::Exit($code)
+    }
+    # Started from an open prompt or called by another script (& ./app.ps1):
+    # end only this script, with the host's status in $LASTEXITCODE, and leave
+    # that PowerShell session running (binding review #1).
+    exit $code
 }
 
 function New-UI4MEProject {

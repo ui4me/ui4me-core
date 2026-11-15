@@ -100,7 +100,8 @@ class Application:
         of the same app to the running one; ``"multiple"`` allows several.
         Already inside a host-launched backend (``ui4me-host run --app``),
         the options are validated and the call simply connects. Call it once
-        per process: a second call raises ``StartupError``.
+        per process: a second call raises ``StartupError`` (a call that failed
+        with ``StartupError`` does not count and can be retried).
         """
         from . import _bootstrap
 
@@ -108,14 +109,20 @@ class Application:
                                     startup_timeout_ms=startup_timeout_ms,
                                     shutdown_timeout_ms=shutdown_timeout_ms, max_windows=max_windows)
         _bootstrap.claim_start()
-        if _bootstrap.managed():
-            app = cls.from_environment()
-            _bootstrap.forget_host_environment()
-            return app
-        raise SystemExit(_bootstrap.launch(
-            name=name, app_id=app_id, version=version, icon=icon, instance=instance,
-            startup_timeout_ms=startup_timeout_ms, shutdown_timeout_ms=shutdown_timeout_ms,
-            max_windows=max_windows))
+        try:
+            if _bootstrap.managed():
+                app = cls.from_environment()
+                _bootstrap.forget_host_environment()
+                return app
+            status = _bootstrap.launch(
+                name=name, app_id=app_id, version=version, icon=icon, instance=instance,
+                startup_timeout_ms=startup_timeout_ms, shutdown_timeout_ms=shutdown_timeout_ms,
+                max_windows=max_windows)
+        except BaseException:
+            # Only a start that succeeded counts as the one start (binding review #6).
+            _bootstrap.release_start()
+            raise
+        raise SystemExit(status)
 
     @classmethod
     def from_environment(cls) -> Application:
@@ -201,7 +208,7 @@ class Application:
                 # A first load failed before readiness and the window was never
                 # reused; close it now that closing no longer cancels startup.
                 with self._lock:
-                    others = any(w is not window and not w.closed for w in self._windows.values())
+                    others = any(w is not window and not w.closed for w in list(self._windows.values()))
                 if others and not window.closed and window.document is None:
                     try:
                         window.request_close()
@@ -531,9 +538,13 @@ class Window:
                 raise
             with self.app._lock:
                 self.closed = True
-                if self.app._windows.get(self.id) is self:
-                    del self.app._windows[self.id]
+                # The reader thread pops _windows without this lock when the
+                # closed event arrives, so remove atomically (binding review #3).
+                removed = self.app._windows.pop(self.id, None)
+                if removed is self:
                     self.app._closing[self.id] = self  # Its closed event finishes the cleanup.
+                elif removed is not None:  # Never drop another window's entry.
+                    self.app._windows.setdefault(self.id, removed)
                 if self.document is not None:
                     self.document._retired = True
             raise HostStaleError(error.code, error.message, error.data) from None
