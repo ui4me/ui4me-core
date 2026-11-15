@@ -80,8 +80,8 @@ pub(crate) fn font_properties<'a>(
     env.note_face_use(spec, None);
     let names: Vec<FontFamilyName<'a>> = env
         .resolve_families(&spec.families)
-        .into_iter()
-        .map(|n| FontFamilyName::Named(Cow::Owned(n)))
+        .iter()
+        .map(|n| FontFamilyName::Named(Cow::Owned(n.clone())))
         .collect();
     let style = match spec.style {
         FontStyleSpec::Normal => parley::FontStyle::Normal,

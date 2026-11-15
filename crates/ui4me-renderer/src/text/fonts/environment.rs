@@ -161,6 +161,9 @@ pub struct FontEnvironment {
     system_ids: std::collections::HashMap<u64, u64>,
     /// Layout passes begun (`next_pass`), the clock of `system_blobs`.
     pass: u64,
+    /// `resolve_families` results by computed family list (RENDER-06); emptied when the face table
+    /// changes (`set_faces`), the only input of the resolution that changes after construction.
+    family_memo: FamilyMemo,
     /// Registered family names, registration order, de-duplicated.
     families: Vec<String>,
     blobs: Vec<FontBlob>,
@@ -184,6 +187,22 @@ pub struct FontEnvironment {
     /// System mode was requested but the platform collection could not be loaded (for example
     /// `libfontconfig` is missing): only registered fonts and the last-resort font are used.
     system_unavailable: bool,
+}
+
+/// Resolved family lists by computed `font-family` list. Shaping asks for the same few lists for every
+/// span of every paragraph; in system mode a generic expands to the platform's whole fallback order
+/// (165 families with fontconfig here), so resolving it each time dominated cold shaping (RENDER-06).
+/// A clone of the environment starts with an empty memo.
+#[derive(Default)]
+struct FamilyMemo(std::sync::Mutex<std::collections::HashMap<Vec<FamilyName>, Arc<[String]>>>);
+
+/// Distinct family lists memoised at most (a document uses a handful; the memo is emptied past it).
+const FAMILY_MEMO_LIMIT: usize = 512;
+
+impl Clone for FamilyMemo {
+    fn clone(&self) -> Self {
+        FamilyMemo::default()
+    }
 }
 
 /// Internal family name under which the last-resort bytes are registered, so that they never
@@ -228,7 +247,7 @@ impl FontEnvironment {
                     shared: false,
                     system_fonts: true,
                 });
-                let generics = system_generics(&mut c);
+                let generics = system_generics(&mut c, SYSTEM_GENERIC_LIMIT);
                 (c, generics)
             });
             match loaded {
@@ -380,6 +399,7 @@ impl FontEnvironment {
             system_blobs: Default::default(),
             system_ids: Default::default(),
             pass: 0,
+            family_memo: FamilyMemo::default(),
             families,
             blobs,
             generic_map: sources.generic_map.clone(),
@@ -559,7 +579,27 @@ impl FontEnvironment {
     /// in order), named families as given, then the pinned fallback list (default: registered
     /// families). Duplicates are removed, first occurrence wins. Unknown names stay in the list
     /// and are skipped by matching (not an error).
-    pub fn resolve_families(&self, families: &[FamilyName]) -> Vec<String> {
+    /// Memoised per family list (see `FamilyMemo`); the result is shared.
+    pub fn resolve_families(&self, families: &[FamilyName]) -> Arc<[String]> {
+        let mut memo = self.family_memo.0.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(hit) = memo.get(families) {
+            return hit.clone();
+        }
+        let resolved: Arc<[String]> = self.resolve_families_uncached(families).into();
+        if memo.len() >= FAMILY_MEMO_LIMIT {
+            memo.clear();
+        }
+        memo.insert(families.to_vec(), resolved.clone());
+        resolved
+    }
+
+    /// Replace the document's declared-face table (the memoised family lists depend on it).
+    pub(crate) fn set_faces(&mut self, faces: FaceTable) {
+        self.faces = Arc::new(faces);
+        self.family_memo = FamilyMemo::default();
+    }
+
+    fn resolve_families_uncached(&self, families: &[FamilyName]) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         let mut seen = BTreeSet::new();
         // A name the document declares with `@font-face` stands for the collection families of its
@@ -766,10 +806,21 @@ pub fn system_family_exists(name: &str) -> bool {
     guard.as_mut().is_some_and(|c| c.family_id(name).is_some())
 }
 
+/// Families of the platform's expansion of a generic that `resolve_families` keeps (RENDER-06).
+/// fontconfig maps `sans-serif` to its whole fallback order (~160 families here: the preferred faces,
+/// then one family per script); resolving and handing Parley that list for every span dominated cold
+/// shaping. The head holds the preferred families and the symbol fonts (`system-ui` puts 14 per-script
+/// UI faces first and Symbola at 21); text none of the kept families covers falls to Fontique's
+/// per-script fallback, which asks the platform for that script's font. On the reference machine 32
+/// select the same font as the full list for every generic and script probed
+/// (`truncated_generic_expansion_selects_the_same_fonts`); 16 did not for emoji in `system-ui`, 4 not
+/// for emoji and symbols in any generic.
+const SYSTEM_GENERIC_LIMIT: usize = 32;
+
 /// The platform collection's mapping of each CSS generic family to family names (fontconfig's
 /// default `serif` / `sans-serif` / `monospace`, DirectWrite's equivalents), loaded eagerly so
 /// `resolve_families` stays a read-only query.
-fn system_generics(collection: &mut Collection) -> Vec<(GenericFamily, Vec<String>)> {
+fn system_generics(collection: &mut Collection, limit: usize) -> Vec<(GenericFamily, Vec<String>)> {
     GenericFamily::ALL
         .iter()
         .map(|g| {
@@ -778,6 +829,7 @@ fn system_generics(collection: &mut Collection) -> Vec<(GenericFamily, Vec<Strin
                     let ids: Vec<_> = collection.generic_families(fq).collect();
                     ids.into_iter()
                         .filter_map(|id| collection.family_name(id).map(str::to_string))
+                        .take(limit)
                         .collect()
                 }
                 None => Vec::new(),
@@ -925,7 +977,7 @@ impl TextServices {
     /// still shadow installed families and the faces to load are known. Drops the shaped-paragraph
     /// cache and the metrics memo, whose entries were made under the old table.
     pub fn set_declared_faces(&mut self, faces: &[ui4me_assets::fonts::FaceView]) {
-        self.env.faces = Arc::new(FaceTable::build(faces));
+        self.env.set_faces(FaceTable::build(faces));
         self.shaped_cache = Default::default();
         self.content_cache.clear();
         self.deco_font_cache.clear();
@@ -1162,5 +1214,135 @@ mod font_identity_tests {
         assert_eq!(x, system_font_identity(b"font one"));
         assert_ne!(x, system_font_identity(b"font two"));
         assert_ne!(x & SYSTEM_TAG, 0);
+    }
+}
+
+#[cfg(test)]
+mod family_resolution_tests {
+    //! RENDER-06: memoised family resolution and the truncated system generic expansion.
+    use super::*;
+    use crate::text::paragraph::source::{LineHeightSpec, ParagraphSource, TextStyle};
+    use ui4me_assets::fonts::{FontMode, FontRegistry};
+    use ui4me_engine_types::ids::{DocumentId, Slots};
+    use ui4me_engine_types::text_metrics::FontSpec;
+
+    fn services() -> TextServices {
+        TextServices::new(&FontRegistry::new(FontMode::System).font_sources()).unwrap()
+    }
+
+    #[test]
+    fn resolve_families_is_memoised_per_list_and_reset_with_the_face_table() {
+        let mut ts = services();
+        let list = [
+            FamilyName::Named("Nope".into()),
+            FamilyName::Generic(GenericFamily::SansSerif),
+        ];
+        let a = ts.env.resolve_families(&list);
+        let b = ts.env.resolve_families(&list);
+        assert!(
+            Arc::ptr_eq(&a, &b),
+            "the second resolution was not memoised"
+        );
+        assert_eq!(*a, *ts.env.resolve_families_uncached(&list));
+        let other = ts.env.resolve_families(&list[1..]);
+        assert!(!Arc::ptr_eq(&a, &other));
+        ts.set_declared_faces(&[]);
+        let c = ts.env.resolve_families(&list);
+        assert!(
+            !Arc::ptr_eq(&a, &c),
+            "the memo survived a face-table change"
+        );
+        assert_eq!(*a, *c);
+    }
+
+    /// Text in many scripts, shaped with each generic, selects the same fonts with the truncated
+    /// platform expansion as with the full one (whatever the platform's fonts are).
+    #[test]
+    fn truncated_generic_expansion_selects_the_same_fonts() {
+        let mut truncated = services();
+        if !truncated.env.system_fonts() {
+            eprintln!("skipped: no platform font collection");
+            return;
+        }
+        let mut full = services();
+        full.env.system_generics = system_generics(&mut full.env.fcx.collection, usize::MAX);
+        full.env.family_memo = FamilyMemo::default();
+        let doc = DocumentId::from_raw(Slots::new().alloc());
+        let samples = [
+            "Latin Hello",
+            "Ελληνικά",
+            "Кириллица",
+            "שלום עולם",
+            "مرحبا بالعالم",
+            "नमस्ते दुनिया",
+            "สวัสดีชาวโลก",
+            "日本語のテキスト",
+            "中文文本",
+            "한국어 텍스트",
+            "😀🎉",
+            "∑∫√≈ ★☆ ♠♣",
+            "ქართული",
+            "Հայերեն",
+            "தமிழ்",
+            "বাংলা",
+            "ગુજરાતી",
+            "ລາວ",
+            "ⴰⵣⵓⵍ",
+            "€ ₹ ₿ № ℃",
+            "→ ⇒ ↔ ⌘ ⌥",
+            "ሰላም",
+            "ខ្មែរ",
+            "မြန်မာ",
+            "සිංහල",
+            "తెలుగు",
+            "ಕನ್ನಡ",
+            "മലയാളം",
+        ];
+        let fonts = |ts: &mut TextServices, src: &ParagraphSource| -> Vec<(Vec<u8>, u32)> {
+            let shaped = ts.shape_uncached(src);
+            let mut layout = shaped.layout.clone();
+            layout.break_all_lines(None);
+            let mut out = Vec::new();
+            for line in layout.lines() {
+                for item in line.items() {
+                    let parley::PositionedLayoutItem::GlyphRun(gr) = item else {
+                        continue;
+                    };
+                    let f = gr.run().font();
+                    let bytes = shaped
+                        .blobs
+                        .for_parley(f.data.id())
+                        .map(|b| b.bytes[..b.bytes.len().min(4096)].to_vec())
+                        .unwrap_or_default();
+                    out.push((bytes, f.index));
+                }
+            }
+            out
+        };
+        let mut differ = Vec::new();
+        for generic in GenericFamily::ALL {
+            for weight in [400.0, 700.0] {
+                for text in samples {
+                    let style = TextStyle {
+                        font: FontSpec {
+                            families: vec![FamilyName::Generic(*generic)].into(),
+                            weight,
+                            ..FontSpec::default()
+                        },
+                        font_size: 14.0,
+                        line_height: LineHeightSpec::Normal,
+                    };
+                    let mut src = ParagraphSource::new(doc, style.clone());
+                    src.push(text, &style, 1);
+                    if fonts(&mut truncated, &src) != fonts(&mut full, &src) {
+                        differ.push(format!("{generic:?} {weight} {text:?}"));
+                    }
+                }
+            }
+        }
+        assert!(
+            differ.is_empty(),
+            "the truncated expansion selected other fonts for: {differ:?}"
+        );
     }
 }
