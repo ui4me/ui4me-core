@@ -75,7 +75,7 @@ def validate_wheel(path: Path) -> dict:
         ):
             if needed not in entries:
                 raise ValueError(f'Wheel is missing the coding skill or developer CLI: {needed}')
-        for needed in ('ui4me_core/application.py', 'ui4me_core/client.py',
+        for needed in ('ui4me_core/py.typed', 'ui4me_core/application.py', 'ui4me_core/client.py',
                        'ui4me_core/live_bitmap.py', 'ui4me_core/launcher.py', 'ui4me_core/_bootstrap.py'):
             if needed not in entries:
                 raise ValueError(f'Missing module {needed}')
