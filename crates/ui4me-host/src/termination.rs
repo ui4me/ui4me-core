@@ -78,7 +78,7 @@ pub fn watchdog_action(
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Request {
-    /// For logs: `SIGTERM`, `CTRL_C_EVENT`, `WM_QUERYENDSESSION`, …
+    /// For logs: `SIGTERM`, `CTRL_C_EVENT`, `WM_ENDSESSION`, …
     pub source: &'static str,
     /// The host's exit status after an orderly shutdown caused by this request.
     pub exit_code: i32,
@@ -223,6 +223,48 @@ impl Termination {
     }
 }
 
+/// `WM_QUERYENDSESSION` (the values of the Win32 constants, so the mapping is testable on
+/// every OS; `platform::windows` asserts they match).
+pub const WM_QUERYENDSESSION: u32 = 0x0011;
+/// `WM_ENDSESSION`.
+pub const WM_ENDSESSION: u32 = 0x0016;
+
+/// How the hidden session window answers a session-end message (F-25 review #5).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SessionEndAction {
+    /// Answer `TRUE` ("this application may end") and start nothing yet.
+    AllowEnd,
+    /// The session ends: record the request, hold the process until the host finished, and
+    /// answer 0.
+    Terminate(Request),
+    /// The session end was cancelled: nothing to do; answer 0.
+    Cancelled,
+}
+
+impl SessionEndAction {
+    /// The window procedure's result.
+    pub fn result(&self) -> isize {
+        match self {
+            Self::AllowEnd => 1,
+            Self::Terminate(_) | Self::Cancelled => 0,
+        }
+    }
+}
+
+/// The action for a window message, or `None` for any other message (default handling).
+pub fn session_end_action(message: u32, wparam: usize) -> Option<SessionEndAction> {
+    match message {
+        // Only a question: another application or the Restart Manager may still veto the end.
+        WM_QUERYENDSESSION => Some(SessionEndAction::AllowEnd),
+        WM_ENDSESSION if wparam != 0 => Some(SessionEndAction::Terminate(Request {
+            source: "WM_ENDSESSION",
+            exit_code: 0,
+        })),
+        WM_ENDSESSION => Some(SessionEndAction::Cancelled),
+        _ => None,
+    }
+}
+
 /// Signals [`Termination::finished`] when dropped. A run holds one for its whole duration so
 /// every exit path (normal return, error, unwinding panic) releases the waiting watchers, and
 /// only after the event loop has returned and destroyed its windows (F-25 review #4).
@@ -353,6 +395,28 @@ mod tests {
         termination.finished();
         thread.join().unwrap();
         assert_eq!(exits.load(Ordering::SeqCst), 0);
+    }
+
+    /// F-25 review #5: `WM_QUERYENDSESSION` is only a question (another application or the
+    /// Restart Manager may still veto the logoff): it is answered "may end" without starting the
+    /// shutdown. Only `WM_ENDSESSION` with `wParam != 0` (the session really ends) does.
+    #[test]
+    fn only_a_confirmed_session_end_starts_the_shutdown() {
+        use SessionEndAction::*;
+        assert_eq!(session_end_action(WM_QUERYENDSESSION, 0), Some(AllowEnd));
+        assert_eq!(session_end_action(WM_QUERYENDSESSION, 1), Some(AllowEnd));
+        assert_eq!(session_end_action(WM_ENDSESSION, 0), Some(Cancelled));
+        assert_eq!(
+            session_end_action(WM_ENDSESSION, 1),
+            Some(Terminate(Request {
+                source: "WM_ENDSESSION",
+                exit_code: 0,
+            }))
+        );
+        assert_eq!(session_end_action(0x0010 /* WM_CLOSE */, 1), None);
+        assert_eq!(AllowEnd.result(), 1);
+        assert_eq!(Cancelled.result(), 0);
+        assert_eq!(session_end_action(WM_ENDSESSION, 1).unwrap().result(), 0);
     }
 
     #[test]

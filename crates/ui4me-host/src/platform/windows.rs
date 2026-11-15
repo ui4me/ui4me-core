@@ -688,36 +688,32 @@ unsafe extern "system" fn session_procedure(
     w: WPARAM,
     l: LPARAM,
 ) -> LRESULT {
+    use crate::termination::{session_end_action, SessionEndAction};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         DefWindowProcW, WM_ENDSESSION, WM_QUERYENDSESSION,
     };
-    match message {
-        WM_QUERYENDSESSION => {
+    const _: () = assert!(WM_QUERYENDSESSION == crate::termination::WM_QUERYENDSESSION);
+    const _: () = assert!(WM_ENDSESSION == crate::termination::WM_ENDSESSION);
+    let Some(action) = session_end_action(message, w) else {
+        return unsafe { DefWindowProcW(hwnd, message, w, l) };
+    };
+    match &action {
+        // F-25 review #5: only a question. Another application (or a Restart Manager query) may
+        // still veto the logoff, so nothing is shut down until WM_ENDSESSION confirms it.
+        SessionEndAction::AllowEnd => {
+            tracing::info!(event = "WM_QUERYENDSESSION", "session end queried; allowed");
+        }
+        SessionEndAction::Terminate(request) => {
             if let Some(termination) = termination_target().get() {
-                tracing::warn!(event = "WM_QUERYENDSESSION", "session end requested");
-                termination.request(crate::termination::Request {
-                    source: "WM_QUERYENDSESSION",
-                    exit_code: 0,
-                });
+                tracing::warn!(event = request.source, "session end requested");
+                termination.request(request.clone());
+                // The process may be terminated as soon as this returns.
+                termination.wait_finished(SESSION_END_WAIT);
             }
-            // Allow the session to end; the orderly shutdown has started.
-            1
         }
-        WM_ENDSESSION => {
-            if w != 0 {
-                if let Some(termination) = termination_target().get() {
-                    // The process may be terminated as soon as this returns.
-                    termination.request(crate::termination::Request {
-                        source: "WM_ENDSESSION",
-                        exit_code: 0,
-                    });
-                    termination.wait_finished(SESSION_END_WAIT);
-                }
-            }
-            0
-        }
-        _ => unsafe { DefWindowProcW(hwnd, message, w, l) },
+        SessionEndAction::Cancelled => {}
     }
+    action.result()
 }
 
 /// A hidden top-level window on its own thread: only top-level windows receive
@@ -776,7 +772,7 @@ fn watch_session_end() -> Result<()> {
 }
 
 /// HOST-07: console control events (Ctrl+C, Ctrl+Break, console close, logoff, shutdown) and
-/// the session end (`WM_QUERYENDSESSION`/`WM_ENDSESSION`) start an orderly shutdown instead of
+/// the confirmed session end (`WM_ENDSESSION`) start an orderly shutdown instead of
 /// ending the process at once. Installed once per process, together with the termination
 /// watchdog ([`crate::termination::Termination::watch`]), which ends the process when the engine
 /// thread does not finish the shutdown.
