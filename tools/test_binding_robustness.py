@@ -426,6 +426,39 @@ class FacadeContractTests(unittest.TestCase):
         self.assertTrue(wait_for(lambda: seen == ["closed"]))
         self.assertNotIn("w1", peer.app._closing)
 
+    def test_closed_event_racing_a_host_closed_error_is_still_host_stale(self):
+        """binding review #3: the reader thread pops the window (closed event)
+        between the caller's lookup and its removal; never a KeyError."""
+        peer = Peer(self)
+        window = peer.window("w1", "d1")
+        app = peer.app
+
+        class RacingWindows(dict):
+            fired = False
+
+            def _closed_arrives(self):
+                if not self.fired:
+                    self.fired = True
+                    app._window_event_received({"window_id": "w1", "type": "closed"})
+
+            def get(self, key, default=None):
+                value = dict.get(self, key, default)
+                self._closed_arrives()
+                return value
+
+            def pop(self, key, *default):
+                self._closed_arrives()
+                return dict.pop(self, key, *default)
+
+        app._windows = RacingWindows(app._windows)
+        peer.answers["window.set"] = {"error": {"code": -32004, "message": "Window is closing"}}
+        with self.assertRaises(HostStaleError):
+            window.set(title="x")
+        self.assertTrue(app._windows.fired)
+        self.assertTrue(window.closed)
+        self.assertNotIn("w1", app._windows)
+        self.assertIs(app._closing.get("w1"), window)
+
     def test_other_rpc_errors_are_unchanged(self):
         peer = Peer(self)
         window = peer.window("w1", "d1")

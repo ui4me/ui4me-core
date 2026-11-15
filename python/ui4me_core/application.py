@@ -531,9 +531,13 @@ class Window:
                 raise
             with self.app._lock:
                 self.closed = True
-                if self.app._windows.get(self.id) is self:
-                    del self.app._windows[self.id]
+                # The reader thread pops _windows without this lock when the
+                # closed event arrives, so remove atomically (binding review #3).
+                removed = self.app._windows.pop(self.id, None)
+                if removed is self:
                     self.app._closing[self.id] = self  # Its closed event finishes the cleanup.
+                elif removed is not None:  # Never drop another window's entry.
+                    self.app._windows.setdefault(self.id, removed)
                 if self.document is not None:
                     self.document._retired = True
             raise HostStaleError(error.code, error.message, error.data) from None
