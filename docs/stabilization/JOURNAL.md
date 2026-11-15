@@ -35,3 +35,18 @@ Newest entries last. Each entry: what changed, why, how it was verified, commits
   The renderer's per-turn event queue (`MAX_EVENTS = 1024`) refused later events silently, including
   `link_activated`. Fixed in `a664fb8` (16,384 per turn — R3 asks for 10,000 — refusals counted and logged by the
   host). Test `document::event_queue_tests` fails with the old cap.
+
+## 2026-11-15 — Adversarial review fixes, final verification, scope narrowed
+
+- **Scope:** the owner narrowed the work to core-library correctness (host, renderer, document and assets crates,
+  in-repo bindings). The SDK and the remaining non-core items are deferred. The 60-second burst soak (R3) was not run.
+- **Review fixes merged:**
+  - Host: `ed7e474`, review #1–#5. #6 and #7 are deferred.
+  - Bindings: `a8550a0`, review #1–#9.
+  - Renderer and assets: `f7f0ab8`, review #1–#5 and #7. #6 is deferred.
+- **Fuzz on the integration head** found two `Document::paginate` hangs. Both are also present in baseline 1e49a6a.
+  They are fixed in `082a27b`. All 7 harnesses pass with 0 findings.
+- **Harness defect:** a stale `target/release` host shadowed the freshly built debug host in the Python tests. Fixed
+  in `dcd89a7`.
+- **Final verification:** Linux verify and Windows suites green at `f7f0ab8`
+  (`evidence/lead/final-f7f0ab8/`). Gates re-assessed; see `RELEASE-READINESS.md`.

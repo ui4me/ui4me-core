@@ -159,14 +159,18 @@
    "status": "FIXED_VERIFIED",
    "commits": [
     "c8b9832",
-    "8806f21"
+    "8806f21",
+    "0836c0c",
+    "b420e8b"
    ],
-   "remaining_risk": "Conservative model may reject unusual valid SVGs (reference hop = one level; cycles rejected).",
+   "remaining_risk": "A pattern that references itself through an explicit fill is still refused although usvg rewrites it to none. Other cycles follow usvg 0.49 semantics.",
    "owner_decision": false,
-   "notes": "",
+   "notes": "Adversarial review: pre-scan refused valid self-referencing SVGs usvg resolves (#1, fixed 0836c0c); paint inherited through use was counted once instead of per instantiated shape (#7, fixed b420e8b).",
    "tests": [
     "crates/ui4me-assets/tests/svg_depth.rs",
-    "fuzz_resources::harness_svg_depth"
+    "fuzz_resources::harness_svg_depth",
+    "svg_depth::self_references_usvg_resolves_are_accepted",
+    "svg_depth::paint_inherited_through_use_is_counted_per_instantiated_shape"
    ]
   },
   {
@@ -242,16 +246,20 @@
    },
    "status": "FIXED_VERIFIED",
    "commits": [
-    "7587eb3"
+    "7587eb3",
+    "8b7c343",
+    "225ad5c"
    ],
    "remaining_risk": "set_text under an element at depth 256 now refused (small behaviour change, documented).",
    "owner_decision": false,
-   "notes": "",
+   "notes": "Adversarial review: capped fragment parse stopped one node early (#2, 8b7c343); comments were not counted toward the node stop (#3, 225ad5c).",
    "tests": [
     "move_element_rejects_depth_over_limit",
     "move_chains_cannot_exceed_the_limit",
     "insert_html_counts_insertion_depth",
-    "a_rejected_move_rolls_back_its_batch"
+    "a_rejected_move_rolls_back_its_batch",
+    "parser_corpus::capped_and_uncapped_parses_agree_at_the_node_limit",
+    "parse::sink::tests::comments_count_toward_the_node_stop"
    ]
   },
   {
@@ -330,7 +338,7 @@
     "c4ba3ad",
     "0d1f6d0"
    ],
-   "remaining_risk": "Focus reveal inside a position:fixed scroll container not exercised natively.",
+   "remaining_risk": "Focus reveal inside a position:fixed scroll container not exercised natively. Deferred (renderer review #6): scroll_into_view under a scaled or rotated scroll container overshoots (2x at scale(2)) or scrolls the wrong axis.",
    "owner_decision": false,
    "notes": "",
    "tests": [
@@ -591,17 +599,19 @@
     "268de65",
     "c526a94",
     "ecf3504",
-    "ec4a764"
+    "ec4a764",
+    "082a27b"
    ],
    "remaining_risk": "Layout still O(atomic depth x subtree) in places (~53 ms at 250 deep); final-layout reuse relies on all layout runs going through cache_store (new invariant). SVG budget is per raster, not per frame. CSS filter estimate assumes scale 1 (HiDPI cost x scale^2). Parse just under the cap up to the node limit ~0.27 s.",
    "owner_decision": false,
-   "notes": "",
+   "notes": "Fuzz on the integration head found two paginate hangs (html case 247, dom seed 10625043487253215932), both present in baseline 1e49a6a: content_from recursed twice per child and all pages were built before the 2000-page limit. Fixed in 082a27b: 82 ms and 0.29 s; all 7 fuzz harnesses 2000 cases, --test-threads=1, 0 findings.",
    "tests": [
     "crates/ui4me-renderer/tests/content_stalls.rs",
     "crates/ui4me-assets/tests/svg_filter_cost.rs",
     "fuzz_resources::harness_svg_filters (T6)",
     "chunked_parsing_builds_the_same_tree (html5lib corpus)",
-    "stack_depth inline-block/button (T1)"
+    "stack_depth inline-block/button (T1)",
+    "document::paged_tests::paginating_huge_or_deep_flows_is_bounded"
    ]
   },
   {
@@ -803,14 +813,18 @@
    "commits": [
     "efee6a2",
     "a25f757",
-    "658d8f7"
+    "658d8f7",
+    "a7fecec",
+    "191c3c9"
    ],
    "remaining_risk": "Docs examples now test event code (KeyS); apps that match event key for shortcuts still fail on non-Latin layouts, as in browsers.",
    "owner_decision": false,
-   "notes": "",
+   "notes": "Adversarial review: AltGr characters matched prevent_default shortcut rules by physical key (#4, a7fecec); the click common ancestor only had to be focusable, so a drag inside a dialog clicked it (#5, 191c3c9; now needs activation behaviour).",
    "tests": [
     "keyboard::shortcut_key tests",
-    "click common-ancestor tests"
+    "click common-ancestor tests",
+    "interact_tests::prevent_default_shortcut_rules_ignore_altgr_characters",
+    "interact_tests::a_drag_between_children_of_a_focusable_container_produces_no_click"
    ]
   },
   {
@@ -1144,9 +1158,9 @@
     "92a7ea1",
     "334ede8"
    ],
-   "remaining_risk": "WM_ENDSESSION (logoff/shutdown) not exercised natively; KillMode=mixed and HOST-12 SID check deferred (G). Ctrl+C typed in a real console not exercised (CTRL_BREAK via API only).",
+   "remaining_risk": "WM_ENDSESSION (logoff/shutdown) not exercised natively; KillMode=mixed and HOST-12 SID check deferred (G). Ctrl+C typed in a real console not exercised (CTRL_BREAK via API only). Deferred (host review #6, #7): named-pipe server recreate after a failed instance; Win32 posted-message starvation under a message flood.",
    "owner_decision": false,
-   "notes": "Remaining: direct-start launcher dies on console Ctrl+Break (handed to ws E, BIND-10); WM_ENDSESSION unverified natively; HOST-12 SID check deferred; KillMode=mixed deferred.",
+   "notes": "Remaining: WM_ENDSESSION unverified natively; HOST-12 SID check deferred; KillMode=mixed deferred.",
    "tests": [
     "AcceptLoopTests",
     "TerminationSignalTests",
@@ -3868,7 +3882,7 @@
    "reproduction": "`gh release download v1.0.1 --pattern '*.whl'`, then hash `ui4me_core/_bin/ui4me-host*` inside each wheel and compare with `qualification-1.0.1.json`.",
    "root_cause": "The process qualifies local candidates, and then CI rebuilds them for publication.",
    "correction": "Switch to promote-not-rebuild, as PSGallery already does:",
-   "status": "IN_PROGRESS",
+   "status": "BLOCKED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3876,7 +3890,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Blocked with F-11: the fix is in the workflows and needs a GitHub Actions run (first push of the integration branch; publishing not authorized)."
   },
   {
    "id": "RELEASE-04",
@@ -3892,7 +3906,7 @@
    "reproduction": "`gh run list` (row 43512337180) and `git ls-remote --tags origin`.",
    "root_cause": "",
    "correction": "1. In `build-and-check`, resolve `TAG_SHA=$(git ls-remote origin \"refs/tags/v$VERSION^{}\" …)`, falling back to the lightweight ref, and `test \"$(git rev-parse HEAD)\" = \"$TAG_SHA\"`. Or check out `ref: v${{ inputs.version }}` explicitly instead of `main`.",
-   "status": "IN_PROGRESS",
+   "status": "BLOCKED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -3900,7 +3914,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Blocked with F-11: the fix is in the workflows and needs a GitHub Actions run (first push of the integration branch; publishing not authorized)."
   },
   {
    "id": "RELEASE-05",
@@ -3968,15 +3982,24 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "1. Make `Cargo.toml [workspace.package].version` the single source.",
-   "status": "IN_PROGRESS",
-   "commits": [],
-   "tests": [],
+   "status": "FIXED_VERIFIED",
+   "commits": [
+    "d24fbe0",
+    "805e59e",
+    "bba9e6d",
+    "76a094b"
+   ],
+   "tests": [
+    "tools/test_version_source.py",
+    "tools/test_release_metadata.py"
+   ],
    "verification": {
-    "linux": "pending",
-    "windows": "pending"
+    "linux": "PASS (verify 7/7)",
+    "windows": "PASS (Pester and Python suites read the version source)",
+    "required": "linux"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Fixed with F-21: tools/release/version.py and bump_version.py; the 1.0.2 bump touched no workflow."
   },
   {
    "id": "RELEASE-08",
@@ -3992,7 +4015,7 @@
    "reproduction": "",
    "root_cause": "",
    "correction": "1. Add a cheap Linux matrix job: build the host once, then `uv run --python {3.10,3.11,3.13,3.14} python -m unittest tools/test_bootstrap.py tools/test_application.py tools/test_reference_client.py` with `UI4ME_HOST_BINARY=target/debug/ui4me-host`.",
-   "status": "IN_PROGRESS",
+   "status": "BLOCKED",
    "commits": [],
    "tests": [],
    "verification": {
@@ -4000,7 +4023,7 @@
     "windows": "pending"
    },
    "remaining_risk": "",
-   "notes": ""
+   "notes": "Blocked with F-22: the fix is in the workflows and needs a GitHub Actions run (first push of the integration branch; publishing not authorized)."
   },
   {
    "id": "RELEASE-09",
@@ -4298,8 +4321,8 @@
    "kind": "gate",
    "title": "No open Critical or High runtime defect",
    "baseline": "FAILING",
-   "status": "FAILING",
-   "evidence": "",
+   "status": "MET",
+   "evidence": "No Critical or High runtime finding is open. Remaining runtime items are Medium or Low and deferred (RENDER-07, INTERACT-08, BIND-05, ...).",
    "notes": ""
   },
   {
@@ -4307,17 +4330,17 @@
    "kind": "gate",
    "title": "Documented limits render without abort on production stacks",
    "baseline": "FAILING",
-   "status": "MET (pending inline-block, F-14)",
+   "status": "MET",
    "evidence": "T1 Linux+Windows; Windows windowed depth 250 div/fieldset, SVG 700",
-   "notes": ""
+   "notes": "F-01/F-03/F-06/F-14: stack_depth 8/8 and svg_depth on Linux and Windows release builds; RC qualification depth 250, svgdepth 700."
   },
   {
    "id": "R3",
    "kind": "gate",
    "title": "10,000-event bursts / 2,000 events/s for 60 s: no disconnect, no dropped control notification",
    "baseline": "FAILING",
-   "status": "FAILING",
-   "evidence": "",
+   "status": "PARTIAL",
+   "evidence": "Bursts 100 controls x 6 rounds: droppedControl 0, no disconnect on Linux and Windows (Python, PS 5.1, PS 7). The 10,000-event / 2,000 events/s for 60 s soak was not run (deferred).",
    "notes": ""
   },
   {
@@ -4325,9 +4348,9 @@
    "kind": "gate",
    "title": "Memory: counting-allocator soak <1 MiB; 30-min windowed soak <5 MiB/5%",
    "baseline": "FAILING",
-   "status": "PARTIAL: R4a MET; R4b (30-min windowed soak) not automated",
+   "status": "PARTIAL",
    "evidence": "font_identity_soak; 900 s windowed Linux flat; Windows flat",
-   "notes": ""
+   "notes": "R4a met. Windowed replay of issue #2 for 15 min: 44-55 MiB (1.0.1: 58 to 296 MiB). A 30-min automated windowed soak is not in CI."
   },
   {
    "id": "R5",
@@ -4336,15 +4359,15 @@
    "baseline": "FAILING",
    "status": "PARTIAL",
    "evidence": "R5(c) headless 19 ms; F-16a append 55 ms; pathological inputs pending ws H",
-   "notes": ""
+   "notes": "content_stalls 13/13 on both OS; most pathological cases <0.3 s or refused. 4,000 inputs in one paragraph still take 0.95 s; RENDER-07 deferred."
   },
   {
    "id": "R6",
    "kind": "gate",
    "title": "Keyboard reachability/operability; focus scrolled into view",
    "baseline": "FAILING",
-   "status": "FAILING",
-   "evidence": "",
+   "status": "MET",
+   "evidence": "F-08, F-17, F-17b verified with real input on Windows and Linux (evidence/lead/windows-native-interaction.md).",
    "notes": ""
   },
   {
@@ -4352,8 +4375,8 @@
    "kind": "gate",
    "title": "Geometry consistency across caret/selection/IME/AT/get_rect vs hit testing",
    "baseline": "FAILING",
-   "status": "FAILING",
-   "evidence": "",
+   "status": "MET",
+   "evidence": "F-07 geometry tests incl. proptest. Deferred: scroll-into-view under scale/rotate (renderer review #6).",
    "notes": ""
   },
   {
@@ -4361,8 +4384,8 @@
    "kind": "gate",
    "title": "AT contract checks automated + manual Orca/NVDA checklist",
    "baseline": "UNVERIFIED",
-   "status": "UNVERIFIED",
-   "evidence": "",
+   "status": "PARTIAL",
+   "evidence": "UIA and AT-SPI tree checks automated; Orca checked manually on linuxDEV. NVDA/Narrator not checked.",
    "notes": ""
   },
   {
@@ -4370,17 +4393,17 @@
    "kind": "gate",
    "title": "Backend crash/freeze/veto, signals, session end handled as documented",
    "baseline": "PARTIAL",
-   "status": "PARTIAL (improved)",
+   "status": "PARTIAL",
    "evidence": "SIGTERM/SIGINT/SIGHUP deliver app.shutdown (Linux); Windows Ctrl+Break delivers app.shutdown, launcher still dies; session end unverified",
-   "notes": ""
+   "notes": "F-25 plus host review fixes: signals, console events, watchdog, veto paths tested. WM_ENDSESSION not exercised natively."
   },
   {
    "id": "R10",
    "kind": "gate",
    "title": "Bindings never die silently on user-code errors",
    "baseline": "FAILING",
-   "status": "FAILING",
-   "evidence": "",
+   "status": "MET",
+   "evidence": "F-13, F-28 and the 9 bindings review fixes; Python 3.10/3.13 and Pester 5.1/7.4 on Windows.",
    "notes": ""
   },
   {
@@ -4388,8 +4411,8 @@
    "kind": "gate",
    "title": "Release commit has green required CI on every OS, enforced by publish workflow",
    "baseline": "FAILING",
-   "status": "FAILING",
-   "evidence": "",
+   "status": "BLOCKED",
+   "evidence": "Required checks and ci_gate implemented (F-09/F-10); needs GitHub Actions runs and branch protection.",
    "notes": ""
   },
   {
@@ -4397,8 +4420,8 @@
    "kind": "gate",
    "title": "Ordinary changes can be green; lint always runs",
    "baseline": "FAILING",
-   "status": "FAILING",
-   "evidence": "",
+   "status": "BLOCKED",
+   "evidence": "CI fixed for ordinary changes (F-09); first GitHub run pending.",
    "notes": ""
   },
   {
@@ -4406,8 +4429,8 @@
    "kind": "gate",
    "title": "Publish requires green CI for the SHA plus manual dispatch",
    "baseline": "PARTIAL",
-   "status": "PARTIAL",
-   "evidence": "",
+   "status": "MET",
+   "evidence": "Publish workflows refuse a SHA without green required checks (tools/release/ci_gate.py, test_ci_gate.py).",
    "notes": ""
   },
   {
@@ -4415,8 +4438,8 @@
    "kind": "gate",
    "title": "Published artifacts are exactly the qualified artifacts",
    "baseline": "MET Linux / FAILING Windows",
-   "status": "MET Linux / FAILING Windows",
-   "evidence": "",
+   "status": "PARTIAL",
+   "evidence": "Workflow can publish the qualified Windows wheel; the verifier checks stack reserve and release build. Needs a CI-built wheel (F-11).",
    "notes": ""
   },
   {
@@ -4424,8 +4447,8 @@
    "kind": "gate",
    "title": "Every package version traceable to its tag",
    "baseline": "MET PyPI / FAILING PSGallery 1.0.0",
-   "status": "MET PyPI / FAILING PSGallery 1.0.0",
-   "evidence": "",
+   "status": "PARTIAL",
+   "evidence": "Workflows tie both packages to the tag. PSGallery 1.0.0 history cannot be changed.",
    "notes": ""
   },
   {
@@ -4433,8 +4456,8 @@
    "kind": "gate",
    "title": "Every claimed runtime tested in CI against the real host",
    "baseline": "FAILING",
-   "status": "FAILING",
-   "evidence": "",
+   "status": "BLOCKED",
+   "evidence": "Python 3.10-3.14 and real-host Pester (Linux, Windows, PS 5.1) configured in CI; run locally and on winDEV, not on GitHub (F-22).",
    "notes": ""
   },
   {
@@ -4442,8 +4465,8 @@
    "kind": "gate",
    "title": "Every documented install mode works",
    "baseline": "FAILING",
-   "status": "FAILING",
-   "evidence": "",
+   "status": "PARTIAL",
+   "evidence": "AllUsers on Linux fixed (F-19); clean-wheel and AllUsers CI jobs not yet run on GitHub.",
    "notes": ""
   },
   {
@@ -4451,8 +4474,8 @@
    "kind": "gate",
    "title": "Dependency advisories and licences checked in CI",
    "baseline": "FAILING",
-   "status": "FAILING",
-   "evidence": "",
+   "status": "BLOCKED",
+   "evidence": "cargo deny configured in CI (F-23); first GitHub run pending.",
    "notes": ""
   },
   {
@@ -4460,8 +4483,8 @@
    "kind": "gate",
    "title": "Workflows hardened (SHA-pinned, no template injection)",
    "baseline": "FAILING",
-   "status": "FAILING",
-   "evidence": "",
+   "status": "MET",
+   "evidence": "Actions SHA-pinned, no template injection (F-23, tools/test_workflows.py).",
    "notes": ""
   },
   {
@@ -4470,7 +4493,7 @@
    "title": "Provenance: PyPI attestations, build provenance, SBOM",
    "baseline": "PARTIAL",
    "status": "PARTIAL",
-   "evidence": "",
+   "evidence": "Attestations, SBOM and provenance steps in the publish workflows; exercised only at the next release.",
    "notes": ""
   },
   {
@@ -4478,8 +4501,8 @@
    "kind": "gate",
    "title": "Version single-sourced; a release does not edit CI",
    "baseline": "FAILING",
-   "status": "FAILING",
-   "evidence": "",
+   "status": "MET",
+   "evidence": "F-21: single version source; the 1.0.2 bump edited no workflow.",
    "notes": ""
   },
   {
@@ -4487,8 +4510,8 @@
    "kind": "gate",
    "title": "Changelog, release notes, compatibility/deprecation policy, SECURITY.md, yank procedure",
    "baseline": "FAILING",
-   "status": "FAILING",
-   "evidence": "",
+   "status": "MET",
+   "evidence": "CHANGELOG.md, docs/release/RELEASE_NOTES_1.0.2.md, versioning policy, SECURITY.md (F-24).",
    "notes": ""
   },
   {
@@ -4496,8 +4519,8 @@
    "kind": "gate",
    "title": "Public metadata links resolve",
    "baseline": "FAILING",
-   "status": "FAILING",
-   "evidence": "",
+   "status": "MET",
+   "evidence": "Repository is public since 2026-11-12; F-20 not reproduced.",
    "notes": ""
   },
   {
@@ -4598,18 +4621,18 @@
   {
    "id": "T7",
    "kind": "test",
-   "status": "IN_PROGRESS",
+   "status": "BLOCKED",
    "location": "tools/test_ci_signal.py, test_workflows.py",
    "ci": "",
-   "notes": ""
+   "notes": "Local tests pass; the CI part needs a GitHub Actions run (not run in this stabilization)."
   },
   {
    "id": "T8",
    "kind": "test",
-   "status": "IN_PROGRESS",
+   "status": "BLOCKED",
    "location": "tools/test_ci_gate.py",
    "ci": "",
-   "notes": ""
+   "notes": "Local tests pass; the CI part needs a GitHub Actions run (not run in this stabilization)."
   },
   {
    "id": "T9",
@@ -4630,18 +4653,18 @@
   {
    "id": "T11",
    "kind": "test",
-   "status": "IN_PROGRESS",
+   "status": "BLOCKED",
    "location": "ci.yml python matrix 3.10-3.14 + Pester (unrun on GitHub)",
    "ci": "",
-   "notes": ""
+   "notes": "Local tests pass; the CI part needs a GitHub Actions run (not run in this stabilization)."
   },
   {
    "id": "T12",
    "kind": "test",
-   "status": "IN_PROGRESS",
+   "status": "BLOCKED",
    "location": "ci.yml clean-wheel + allusers jobs, verify-published.yml",
    "ci": "",
-   "notes": ""
+   "notes": "Local tests pass; the CI part needs a GitHub Actions run (not run in this stabilization)."
   },
   {
    "id": "T13",
@@ -4654,10 +4677,10 @@
   {
    "id": "T14",
    "kind": "test",
-   "status": "IN_PROGRESS",
+   "status": "BLOCKED",
    "location": "tools/windowed_smoke.py + nightly",
    "ci": "",
-   "notes": "tools/windowed_smoke.py 4/4 on the live KDE Wayland session (linuxDEV) and under nested kwin --virtual; nightly job not yet run on GitHub"
+   "notes": "tools/windowed_smoke.py 4/4 on the live KDE Wayland session (linuxDEV) and under nested kwin --virtual; nightly job not yet run on GitHub Local tests pass; the CI part needs a GitHub Actions run (not run in this stabilization)."
   },
   {
    "id": "T15",

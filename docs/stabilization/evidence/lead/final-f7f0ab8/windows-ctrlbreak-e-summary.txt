@@ -1,0 +1,4 @@
+CASE python: ready=True exit=130 (0x00000082) after=0.14s timeout=False stdout=['READY', 'SHUTDOWN-HOOK', 'RUN-RETURNED']
+CASE ps51: ready=True exit=130 (0x00000082) after=2.41s timeout=False stdout=['READY', 'UNTIL-SHUTDOWN-RETURNED']
+CASE pwsh: ready=True exit=130 (0x00000082) after=0.21s timeout=False stdout=['READY', 'UNTIL-SHUTDOWN-RETURNED']
+DONE

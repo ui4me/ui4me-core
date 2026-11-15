@@ -1,0 +1,20 @@
+=== build host
+    Finished `release` profile [optimized] target(s) in 2m 23s
+=== pe stack
+magic=0x20b SizeOfStackReserve=33554432 (32.00 MiB) commit=4096
+=== host tests
+test result: ok. 118 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.03s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 2.23s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+=== stack_depth
+test result: ok. 8 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 1.97s
+=== content_stalls
+test result: ok. 13 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.51s
+=== svg_filter_cost
+test result: ok. 5 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 5.58s
+=== svg_depth
+test result: ok. 13 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 4.14s
+=== renderer lib
+test result: ok. 558 passed; 0 failed; 10 ignored; 0 measured; 0 filtered out; finished in 10.60s
+=== done

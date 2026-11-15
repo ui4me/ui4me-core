@@ -1,0 +1,14 @@
+py313 exit=0
+py310 exit=0
+BIND04 host True
+BIND04 shim F:\agent-workspaces\ui4me-core\audit-ac27d3dd\venv\Scripts\python.exe True
+BIND04 shim F:\agent-workspaces\ui4me-core\audit-ac27d3dd\venv\Scripts\pythonw.exe True
+BIND04 shim F:\agent-workspaces\ui4me-core\audit-ac27d3dd\venv\Scripts\ui4me-host.exe False
+BIND04 shim F:\agent-workspaces\ui4me-core\audit-ac27d3dd\venv\Scripts\ui4me-new.exe False
+BIND04 shim F:\agent-workspaces\ui4me-core\audit-ac27d3dd\venv\Scripts\ui4me-skill.exe False
+BIND04 shim F:\agent-workspaces\ui4me-core\audit-ac27d3dd\venv\Scripts\ui4me.exe False
+burst ps51 exit=0
+burst pwsh7 exit=0
+burst ps51-slow exit=0
+burst pwsh7-slow exit=0
+DONE
