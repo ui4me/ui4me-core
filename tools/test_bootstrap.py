@@ -279,6 +279,42 @@ class RelayTests(unittest.TestCase):
         self.assertEqual(self.relay(b"\xff not utf-8\n"), ("", "\ufffd not utf-8\n"))
 
 
+@unittest.skipUnless(os.name == "posix", "POSIX shell fixtures")
+class RelayDrainTests(unittest.TestCase):
+    """The relay keeps the host's stderr drained and never bounds exit on it."""
+
+    def run_host_in_thread(self, command, timeout):
+        import threading
+        result = {}
+
+        def run():
+            result["status"] = _bootstrap.run_host(command, env=dict(os.environ))
+        thread = threading.Thread(target=run, daemon=True)
+        started = time.monotonic()
+        thread.start()
+        thread.join(timeout)
+        return result, time.monotonic() - started
+
+    def test_a_descendant_holding_the_pipe_does_not_delay_exit(self):
+        """binding review #5: closing the relayed pipe blocked on the relay
+        thread until every process holding the pipe had exited."""
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(folder, ignore_errors=True))
+        pid_file = folder / "pid"
+        script = f"sleep 20 & echo $! > '{pid_file}'; exit 0"
+
+        def stop_descendant():
+            try:
+                os.kill(int(pid_file.read_text()), 9)
+            except (OSError, ValueError):
+                pass
+        self.addCleanup(stop_descendant)
+        with mock.patch("sys.stderr"):
+            result, elapsed = self.run_host_in_thread(["sh", "-c", script], timeout=25)
+        self.assertEqual(result.get("status"), 0)
+        self.assertLess(elapsed, 8.0, "run_host waited for a descendant that inherited the pipe")
+
+
 @unittest.skipUnless(built_host(), "build the host first: cargo build -p ui4me-host")
 class DirectStartIntegrationTests(unittest.TestCase):
     """Real scripts, real host (headless test mode), real IPC."""

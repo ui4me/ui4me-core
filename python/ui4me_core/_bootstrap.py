@@ -372,7 +372,6 @@ def run_host(command: list[str], *, env: dict[str, str], shutdown_timeout_ms: in
                     state["deadline"] = time.monotonic() + 5
                 elif deadline is not None and state["forced"] and time.monotonic() > deadline:
                     process.kill()
-        relay_thread.join(timeout=5)
         signum = state["signal"]
         if signum is None:
             return _exit_status(status)
@@ -392,8 +391,12 @@ def run_host(command: list[str], *, env: dict[str, str], shutdown_timeout_ms: in
         if process.poll() is None:
             process.kill()
             process.wait()
+        # The relay ends at EOF, which a descendant that inherited the pipe
+        # can postpone indefinitely. Closing the buffered reader would block
+        # on the lock the (daemon) relay thread holds while it reads, so then
+        # leave both alone; exit is bounded by this join (binding review #5).
         relay_thread.join(timeout=5)
-        if process.stderr is not None:
+        if process.stderr is not None and not relay_thread.is_alive():
             process.stderr.close()
 
 
