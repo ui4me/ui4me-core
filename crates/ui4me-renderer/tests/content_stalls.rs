@@ -446,3 +446,41 @@ fn deep_unclosed_blocks_are_refused_quickly() {
     );
 }
 
+// ---- HOST-06 (F-14): one paragraph of many inline form controls is laid out in linear time.
+
+/// Load + first layout of `n` inline `<input>`s in one paragraph of a warm document.
+fn inline_inputs(n: usize) -> Duration {
+    let markup: String = (0..n)
+        .map(|i| format!("<input name=f{i} value=v{i}>"))
+        .collect();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .stack_size(ui4me_renderer::ENGINE_STACK_BYTES)
+        .spawn(move || {
+            let mut d = warm_document();
+            let t0 = Instant::now();
+            d.replace_children_html("host", &format!("<form>{markup}</form>"))
+                .unwrap();
+            d.render(400, 400, 1.0).unwrap();
+            let _ = tx.send(t0.elapsed());
+        })
+        .unwrap();
+    // The broken path took ~17 s for 4,000 inputs; anything slower than a minute fails anyway.
+    rx.recv_timeout(Duration::from_secs(60))
+        .unwrap_or(Duration::MAX)
+}
+
+#[test]
+fn many_inline_inputs_lay_out_in_linear_time() {
+    // The line breaker measured every candidate line end with a fresh sum over the line: cubic in
+    // the paragraph (4,000 inputs: 17 s). Each input costs its own shaping, so the bound is on
+    // the growth: four times the inputs may cost at most eight times the time (it was ~37 times).
+    let (small, large) = if cfg!(debug_assertions) {
+        (150, 600)
+    } else {
+        (1000, 4000)
+    };
+    let a = inline_inputs(small);
+    let b = inline_inputs(large);
+    assert!(b < a * 8, "{small} inputs {a:?}, {large} inputs {b:?}");
+}
