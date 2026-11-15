@@ -5,8 +5,9 @@
 //! [`Request`] here and wake the engine thread; the host controller turns the first request into
 //! an orderly shutdown (`app.shutdown` with a short deadline) on its own thread, and a second one
 //! into a force quit. A watcher that must not return before the application has finished (the
-//! Windows session end) waits for [`Termination::finished`], which the host signals when it
-//! stops. Signal handlers are process-wide, so a host installs them once per process; tests use
+//! Windows session end) waits for [`Termination::finished`], which is signalled (through
+//! [`FinishOnDrop`] in `main`) only after the host run has returned, its windows are destroyed
+//! and its logs are flushed. Signal handlers are process-wide, so a host installs them once per process; tests use
 //! their own [`Termination`] values.
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::Duration;
@@ -85,6 +86,23 @@ impl Termination {
             .wait_timeout_while(state, timeout, |s| !s.finished)
             .unwrap_or_else(|e| e.into_inner());
         state.finished
+    }
+}
+
+/// Signals [`Termination::finished`] when dropped. A run holds one for its whole duration so
+/// every exit path (normal return, error, unwinding panic) releases the waiting watchers, and
+/// only after the event loop has returned and destroyed its windows (F-25 review #4).
+pub struct FinishOnDrop(Arc<Termination>);
+
+impl FinishOnDrop {
+    pub fn new(termination: Arc<Termination>) -> Self {
+        Self(termination)
+    }
+}
+
+impl Drop for FinishOnDrop {
+    fn drop(&mut self) {
+        self.0.finished();
     }
 }
 

@@ -303,11 +303,8 @@ pub fn run(config: AppConfig, headless: bool) -> Result<i32> {
         let wake: Wake = Arc::new(move || proxy.wake_up());
         let mut host = Host::new(config, false, false, instance, wake, result.clone())?;
         host.watch_termination(termination.clone());
-        let outcome = event_loop.run_app(host);
-        termination.finished();
-        outcome?;
+        event_loop.run_app(host)?;
     }
-    termination.finished();
     Ok(result.load(Ordering::Relaxed))
 }
 
@@ -468,10 +465,8 @@ pub fn run_probe() -> Result<i32> {
         result.clone(),
     )?;
     let termination = crate::termination::Termination::global();
-    host.watch_termination(termination.clone());
-    let outcome = event_loop.run_app(host);
-    termination.finished();
-    outcome?;
+    host.watch_termination(termination);
+    event_loop.run_app(host)?;
     Ok(result.load(Ordering::Relaxed))
 }
 
@@ -1479,9 +1474,9 @@ impl Host {
         if let Some(server) = &mut self.server {
             server.close();
         }
-        if let Some(termination) = &self.termination {
-            termination.finished();
-        }
+        // Not `termination.finished()` here: a Windows session-end watcher returns on it and the
+        // process may be ended at once, before the windows are destroyed (clipboard flush) and
+        // the final logs are written. `main` signals it once `run`/`run_probe` returned.
         self.cancel_native_jobs("Host stopped");
         self.native_ids.clear();
         self.windows.clear();
@@ -1902,6 +1897,31 @@ mod tests {
         host.termination_started = Some(Instant::now() - crate::termination::REPEAT_GRACE);
         host.terminate(request);
         assert!(host.force_quit, "a later second request forces the quit");
+    }
+
+    /// F-25 review #4: stopping the controller does not release the watchers that hold the
+    /// process for a Windows session end (`termination.finished()`): windows are destroyed and
+    /// `run_app` returns only after `stop()`. The release happens when `main`'s
+    /// [`crate::termination::FinishOnDrop`] guard is dropped, after the run returned.
+    #[test]
+    fn stopping_the_host_does_not_signal_termination_finished() {
+        let mut host = controller(true);
+        let termination = Arc::new(crate::termination::Termination::default());
+        host.termination = Some(termination.clone());
+        let guard = crate::termination::FinishOnDrop::new(termination.clone());
+        termination.request(crate::termination::Request {
+            source: "CTRL_CLOSE_EVENT",
+            exit_code: 0,
+        });
+        host.pump(None);
+        assert_eq!(host.lifecycle.phase(), Phase::Stopped);
+        assert!(
+            !termination.wait_finished(Duration::ZERO),
+            "finished() before the event loop returned"
+        );
+        drop(host);
+        drop(guard);
+        assert!(termination.wait_finished(Duration::ZERO));
     }
 
     /// F-25 review #1: the first termination request while an allowed quit is already running

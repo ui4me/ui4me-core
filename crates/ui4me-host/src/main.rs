@@ -82,6 +82,11 @@ fn prepare() -> Command {
 
 /// Everything after argument parsing, on the engine thread.
 fn execute(command: Command) -> Result<i32> {
+    // HOST-07 / F-25 review #4: watchers that hold the process for a Windows console close or
+    // session end are released only when this guard drops: after the host, its windows and the
+    // event loop are gone and after the log guard below has flushed, on every exit path.
+    let _finished =
+        ui4me_host::termination::FinishOnDrop::new(ui4me_host::termination::Termination::global());
     let _logging = ui4me_host::logging::init()?;
     if matches!(command, Command::Doctor) {
         println!("{}", serde_json::to_string_pretty(&host::doctor())?);
