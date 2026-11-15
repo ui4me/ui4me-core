@@ -331,6 +331,13 @@ pub(crate) fn focus_update(
                     None,
                 );
             }
+            // HTML focusing steps: scroll the new focus into view ("nearest"), unless a pointer press
+            // moved focus (the pressed element is already visible; browsers do not scroll on click
+            // focus). A focus/focusin listener may have moved focus on: only the element still
+            // focused is revealed. Before the editing hook, so the IME area it reports is current.
+            if source != FocusSource::Pointer && rt(host, |ix| ix.focused_element(doc)) == Some(n) {
+                let _ = host.reveal_focused(doc, n);
+            }
             let _ = crate::interaction::editing::on_focus(
                 host,
                 doc,

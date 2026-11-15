@@ -253,6 +253,14 @@ pub trait DispatchHost {
     fn file_input_activated(&mut self, doc: DocumentId, input: NodeId) {
         let _ = (doc, input);
     }
+    /// The focusing steps moved focus to `node` by keyboard, script or an assistive technology
+    /// (not a pointer press): scroll it into view (CSSOM View `block: nearest, inline: nearest`,
+    /// instant), innermost scroll container first, stopping at the nearest `position: fixed`
+    /// ancestor. Called with no engine borrow held. Default: nothing scrolls.
+    fn reveal_focused(&mut self, doc: DocumentId, node: NodeId) -> Result<(), Status> {
+        let _ = (doc, node);
+        Ok(())
+    }
     /// A hyperlink's activation behaviour ran (an uncanceled click). Default: nothing.
     fn link_activated(&mut self, doc: DocumentId, link: NodeId) {
         let _ = (doc, link);

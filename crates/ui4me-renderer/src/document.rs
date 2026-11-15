@@ -2283,6 +2283,11 @@ impl DispatchHost for Document {
             self.file_requests.push(input);
         }
     }
+    fn reveal_focused(&mut self, _id: DocumentId, node: NodeId) -> std::result::Result<(), Status> {
+        // A failure to scroll never fails the focus move.
+        let _ = self.scroll_node_into_view(node, "nearest", "nearest", "instant");
+        Ok(())
+    }
     fn link_activated(&mut self, _id: DocumentId, link: NodeId) {
         // Reported after the dispatch as `link_activated` (0.6 F0608); the host decides.
         let d = self.pipeline.document();
@@ -2965,6 +2970,8 @@ pub mod file_input;
 mod focus_pointer_tests;
 #[cfg(test)]
 mod framework_fixtures_tests;
+#[cfg(test)]
+mod interact_tests;
 #[cfg(test)]
 mod layout_conformance_tests;
 #[cfg(test)]
