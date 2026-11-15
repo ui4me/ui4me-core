@@ -1,5 +1,31 @@
 //! A bounded, full-duplex local transport. Native operations are implemented in
 //! platform modules; messages and framing are identical on Linux and Windows.
+//!
+//! # Limits and what they bound
+//!
+//! * **Outbound (host to peer): bytes only.** Each connection has one FIFO
+//!   queue of encoded frames, bounded by [`MAX_OUTBOUND_BYTES`] (frame header
+//!   plus body, counted until the frame has been handed to the OS). There is
+//!   deliberately **no message-count limit**: the GUI thread can emit thousands
+//!   of small `document.event` notifications in one turn (a colour-scheme
+//!   switch over many transitioned controls), far faster than any reader, and a
+//!   count limit turned that normal burst into a disconnect (F-02 / HOST-01).
+//!   A peer is disconnected only when it stops reading: either the byte budget
+//!   is exhausted ([`Server::reply`] fails and the host disconnects), or one
+//!   frame cannot be written within [`WRITE_DEADLINE`].
+//! * **Nothing outbound is ever dropped or reordered.** Responses, host-to-peer
+//!   requests, lifecycle/control notifications (`app.shutdown`, `window.event`
+//!   `closed`, `request.cancelled`, `document.error`, ...) and ordinary DOM
+//!   events share the one queue in the order the host produced them. A
+//!   lifecycle notification behind a DOM-event burst is delayed, never lost.
+//!   Separate lanes, sequence numbers and loss markers are intentionally not
+//!   implemented while nothing is dropped (audit 07-roadmap 1.2/3.1, 08).
+//! * **Inbound (peer to host): bytes and messages.** All connections share one
+//!   queue to the GUI thread of at most [`MAX_EVENTS`] events and
+//!   [`MAX_INBOUND_BYTES`]. When it is full, reader threads stop reading
+//!   (backpressure through the socket/pipe); a peer is never disconnected for
+//!   it. The 128-pending-request limit is a protocol rule (`protocol.rs`), not
+//!   a transport queue.
 use crate::platform::{NativeListener, NativeStream};
 use crate::protocol::{read_frame, write_frame, MAX_FRAME_BYTES};
 use anyhow::{bail, Context, Result};
@@ -7,16 +33,23 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
+use std::sync::mpsc::{self, Receiver, Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 const MAX_CONNECTIONS: usize = 8;
+/// Inbound message limit (shared queue to the GUI thread; backpressure).
 const MAX_EVENTS: usize = 256;
-const MAX_OUTBOUND_MESSAGES: usize = 128;
+/// Per-connection outbound byte budget; the only outbound limit. At the
+/// measured 360-600 B per DOM event this holds roughly 14k-23k events. The
+/// channel adds a small per-frame bookkeeping overhead on top of this figure.
 const MAX_OUTBOUND_BYTES: usize = 8 * 1024 * 1024;
+/// Inbound byte limit (shared queue to the GUI thread; backpressure).
 const MAX_INBOUND_BYTES: usize = 8 * 1024 * 1024;
+/// A single frame that the peer does not accept within this time ends the
+/// connection: the peer has stopped reading.
+const WRITE_DEADLINE: Duration = Duration::from_secs(10);
 
 #[derive(Debug)]
 pub enum TransportEvent {
@@ -63,7 +96,8 @@ impl Incoming {
 }
 
 struct Connection {
-    outgoing: SyncSender<Vec<u8>>,
+    /// Unbounded on purpose: `queued_bytes` is the bound (see module docs).
+    outgoing: Sender<Vec<u8>>,
     queued_bytes: Arc<AtomicUsize>,
     control: NativeStream,
     stopped: Arc<AtomicBool>,
@@ -192,9 +226,13 @@ impl Server {
     }
 
     /// Queue without waiting for the client to read. The GUI can call this.
+    ///
+    /// Fails only when the frame is too large, the connection is closed or
+    /// closing, or the connection's outbound byte budget is exhausted (the
+    /// peer has stopped reading). The number of queued messages never matters.
     pub fn reply(&self, connection: u64, value: Value) -> Result<()> {
-        let bytes = serde_json::to_vec(&value)?;
-        if bytes.len() > MAX_FRAME_BYTES {
+        let frame = serde_json::to_vec(&value)?;
+        if frame.len() > MAX_FRAME_BYTES {
             bail!("outgoing frame exceeds limit");
         }
         let map = self
@@ -206,17 +244,18 @@ impl Server {
         if peer.stopped.load(Ordering::Acquire) {
             bail!("connection is closing");
         }
-        let length = bytes.len() + 4;
+        let length = frame.len() + 4;
         let previous = peer.queued_bytes.fetch_add(length, Ordering::AcqRel);
         if previous + length > MAX_OUTBOUND_BYTES {
             peer.queued_bytes.fetch_sub(length, Ordering::AcqRel);
-            bail!("connection outgoing byte limit exceeded");
+            bail!(
+                "connection outgoing byte limit exceeded ({previous} bytes unsent; \
+                 the peer is not reading)"
+            );
         }
-        if let Err(error) = peer.outgoing.try_send(bytes) {
+        if peer.outgoing.send(frame).is_err() {
             peer.queued_bytes.fetch_sub(length, Ordering::AcqRel);
-            return Err(anyhow::anyhow!(
-                "connection outgoing queue unavailable: {error}"
-            ));
+            bail!("connection writer has stopped");
         }
         Ok(())
     }
@@ -270,7 +309,9 @@ fn attach(shared: &Arc<Shared>, mut reader: NativeStream) -> Result<()> {
     let id = shared.next_id.fetch_add(1, Ordering::Relaxed);
     let stopped = Arc::new(AtomicBool::new(false));
     let queued_bytes = Arc::new(AtomicUsize::new(0));
-    let (sender, receiver) = mpsc::sync_channel::<Vec<u8>>(MAX_OUTBOUND_MESSAGES);
+    // Bounded by `queued_bytes` in `Server::reply`, not by a slot count. A
+    // large bounded `sync_channel` would preallocate its slots.
+    let (sender, receiver) = mpsc::channel::<Vec<u8>>();
     {
         let mut peers = shared.connections.lock().unwrap_or_else(|e| e.into_inner());
         if peers.len() + shared.pending_terminals.load(Ordering::Acquire) >= MAX_CONNECTIONS {
@@ -299,13 +340,13 @@ fn attach(shared: &Arc<Shared>, mut reader: NativeStream) -> Result<()> {
         .spawn(move || {
             while !write_state.stop.load(Ordering::Acquire) && !write_stop.load(Ordering::Acquire) {
                 match receiver.recv_timeout(Duration::from_millis(100)) {
-                    Ok(bytes) => {
+                    Ok(frame) => {
                         let result = writer
-                            .set_timeout(Some(Duration::from_secs(10)))
-                            .and_then(|_| writer.write_all(&(bytes.len() as u32).to_be_bytes()))
-                            .and_then(|_| writer.write_all(&bytes))
+                            .set_timeout(Some(WRITE_DEADLINE))
+                            .and_then(|_| writer.write_all(&(frame.len() as u32).to_be_bytes()))
+                            .and_then(|_| writer.write_all(&frame))
                             .and_then(|_| writer.flush());
-                        queued_bytes.fetch_sub(bytes.len() + 4, Ordering::AcqRel);
+                        queued_bytes.fetch_sub(frame.len() + 4, Ordering::AcqRel);
                         if let Err(error) = result {
                             end_connection(&write_state, id, &format!("write: {error}"));
                             break;
@@ -631,6 +672,230 @@ mod tests {
         }
         writer.join().unwrap();
         assert_eq!(server.shared.inbound_bytes.load(Ordering::Acquire), 0);
+        server.close();
+    }
+
+    /// A document.event of realistic size (~400 bytes, like the transition
+    /// events a colour-scheme switch emits; BIND-19 measured 360-600 B).
+    fn burst_event(seq: usize) -> Value {
+        const TYPES: [&str; 3] = ["transitionrun", "transitionstart", "transitionend"];
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "document.event",
+            "params": {
+                "document_id": "doc-1",
+                "type": TYPES[seq % TYPES.len()],
+                "seq": seq,
+                "target": {"id": format!("button-{}", seq % 100), "tag": "button", "classes": ["control", "primary"]},
+                "detail": {"propertyName": "background-color", "elapsedTime": 0.0, "pseudoElement": ""},
+                "padding": "x".repeat(160),
+            }
+        })
+    }
+
+    fn connected_client(server: &Server) -> (NativeStream, u64) {
+        let client = NativeStream::connect(&server.endpoint, Duration::from_secs(5)).unwrap();
+        match server
+            .incoming
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+        {
+            TransportEvent::Connected(id) => (client, id),
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    /// T2 (F-02 / HOST-01, issue #1): a healthy backend that reads at a fixed
+    /// rate of about one frame per millisecond must survive a burst that the
+    /// GUI thread produces in one turn: 10,000 DOM events with responses and
+    /// lifecycle notifications interleaved. No message may be refused, dropped
+    /// or reordered, and the connection must stay up.
+    #[test]
+    fn t2_burst_to_a_slow_reading_peer_is_delivered_in_order_without_disconnect() {
+        const EVENTS: usize = 10_000;
+        let app = format!("org.ui4me.transport.t2.{}", std::process::id());
+        let lock = crate::platform::InstanceLock::acquire(&app).unwrap();
+        let mut server = Server::bind(&app, &lock.instance_key, Arc::new(|| {})).unwrap();
+        let (mut client, connection) = connected_client(&server);
+
+        // Build the burst: every 50th message is a response, every 500th a
+        // lifecycle notification (the kinds PR #3 would have dropped).
+        let mut burst = Vec::new();
+        for event in 0..EVENTS {
+            let seq = burst.len();
+            burst.push(burst_event(seq));
+            if event % 50 == 49 {
+                let seq = burst.len();
+                burst.push(serde_json::json!({
+                    "jsonrpc": "2.0", "id": format!("r{seq}"), "result": {"seq": seq}
+                }));
+            }
+            if event % 500 == 499 {
+                let seq = burst.len();
+                burst.push(serde_json::json!({
+                    "jsonrpc": "2.0", "method": "window.event",
+                    "params": {"window_id": "w1", "type": "focused", "data": {"seq": seq}}
+                }));
+            }
+        }
+        let seq = burst.len();
+        burst.push(serde_json::json!({
+            "jsonrpc": "2.0", "method": "app.shutdown",
+            "params": {"deadline_ms": 5000, "seq": seq}
+        }));
+        let total = burst.len();
+        let wire_bytes: usize = burst
+            .iter()
+            .map(|value| serde_json::to_vec(value).unwrap().len() + 4)
+            .sum();
+
+        let reader = thread::spawn(
+            move || -> std::result::Result<(Vec<Value>, NativeStream), String> {
+                client
+                    .set_timeout(Some(Duration::from_secs(60)))
+                    .map_err(|e| e.to_string())?;
+                let mut frames = Vec::with_capacity(total);
+                let mut start: Option<Instant> = None;
+                while frames.len() < total {
+                    // Fixed-rate consumer: frame n is read no earlier than n ms
+                    // after the first frame arrived.
+                    if let Some(start) = start {
+                        let due = start + Duration::from_millis(frames.len() as u64);
+                        if let Some(wait) = due.checked_duration_since(Instant::now()) {
+                            thread::sleep(wait);
+                        }
+                    }
+                    match read_frame(&mut client) {
+                        Ok(Some(value)) => {
+                            start.get_or_insert_with(Instant::now);
+                            frames.push(value);
+                        }
+                        Ok(None) => {
+                            return Err(format!("host closed after {} frames", frames.len()))
+                        }
+                        Err(error) => {
+                            return Err(format!(
+                                "read failed after {} frames: {error}",
+                                frames.len()
+                            ))
+                        }
+                    }
+                }
+                // Return the stream: dropping it here would close the connection.
+                Ok((frames, client))
+            },
+        );
+
+        let produced = Instant::now();
+        for (index, value) in burst.iter().enumerate() {
+            if let Err(error) = server.reply(connection, value.clone()) {
+                panic!("message {index} of {total} was refused: {error:#}");
+            }
+        }
+        let burst_time = produced.elapsed();
+        let peak_queued = server
+            .shared
+            .connections
+            .lock()
+            .unwrap()
+            .get(&connection)
+            .map(|peer| peer.queued_bytes.load(Ordering::Acquire))
+            .unwrap_or(0);
+        let (frames, _client) = reader.join().unwrap().expect("reader failed");
+        assert_eq!(frames.len(), total);
+        for (index, (received, sent)) in frames.iter().zip(&burst).enumerate() {
+            assert_eq!(received, sent, "frame {index} out of order or altered");
+        }
+        assert!(
+            server.is_connected(connection),
+            "healthy peer was disconnected"
+        );
+        for event in server.incoming.try_iter() {
+            assert!(
+                !matches!(event, TransportEvent::Disconnected(id, _) if id == connection),
+                "unexpected {event:?}"
+            );
+        }
+        eprintln!(
+            "T2: {total} frames, {wire_bytes} wire bytes, burst enqueued in {burst_time:?}, \
+             {peak_queued} bytes queued after the burst"
+        );
+        server.close();
+    }
+
+    /// A peer that stops reading must still be disconnected; with the message
+    /// count cap gone, the 8 MiB byte budget is what refuses further output.
+    #[test]
+    fn peer_that_stops_reading_is_refused_at_the_byte_cap() {
+        let app = format!("org.ui4me.transport.bytecap.{}", std::process::id());
+        let lock = crate::platform::InstanceLock::acquire(&app).unwrap();
+        let mut server = Server::bind(&app, &lock.instance_key, Arc::new(|| {})).unwrap();
+        let (_client, connection) = connected_client(&server);
+        let value = burst_event(0);
+        let frame = serde_json::to_vec(&value).unwrap().len() + 4;
+        let mut accepted = 0;
+        let error = loop {
+            match server.reply(connection, value.clone()) {
+                Ok(()) => accepted += 1,
+                Err(error) => break error,
+            }
+            assert!(accepted * frame < 64 * 1024 * 1024, "no outbound limit");
+        };
+        assert!(
+            format!("{error:#}").contains("byte limit"),
+            "refused by something other than the byte cap after {accepted}: {error:#}"
+        );
+        // Everything up to the budget is accepted (frames already handed to
+        // the kernel no longer count), and the kernel holds well under 8 MiB.
+        assert!(
+            accepted * frame >= MAX_OUTBOUND_BYTES - frame,
+            "accepted {accepted}"
+        );
+        assert!(
+            accepted * frame <= 2 * MAX_OUTBOUND_BYTES,
+            "accepted {accepted}"
+        );
+        // The host reacts to the refusal by disconnecting; that is prompt.
+        server.disconnect(connection);
+        assert!(!server.is_connected(connection));
+        loop {
+            if let TransportEvent::Disconnected(id, _) = server
+                .incoming
+                .recv_timeout(Duration::from_secs(5))
+                .unwrap()
+            {
+                assert_eq!(id, connection);
+                break;
+            }
+        }
+        server.close();
+    }
+
+    /// A peer that stops reading with less than the byte budget outstanding is
+    /// disconnected by the writer's per-frame deadline (10 s), not kept forever.
+    #[test]
+    fn peer_that_stops_reading_is_disconnected_by_the_write_deadline() {
+        let app = format!("org.ui4me.transport.deadline.{}", std::process::id());
+        let lock = crate::platform::InstanceLock::acquire(&app).unwrap();
+        let mut server = Server::bind(&app, &lock.instance_key, Arc::new(|| {})).unwrap();
+        let (_client, connection) = connected_client(&server);
+        // 2 MiB exceeds any kernel/pipe buffer, far below the 8 MiB budget.
+        let value =
+            serde_json::json!({"jsonrpc":"2.0","method":"x","params":{"p":"x".repeat(64 * 1024)}});
+        for _ in 0..32 {
+            server.reply(connection, value.clone()).unwrap();
+        }
+        let start = Instant::now();
+        let reason = loop {
+            match server.incoming.recv_timeout(Duration::from_secs(20)) {
+                Ok(TransportEvent::Disconnected(id, reason)) if id == connection => break reason,
+                Ok(_) => continue,
+                Err(error) => panic!("stalled peer was never disconnected: {error}"),
+            }
+        };
+        assert!(reason.starts_with("write"), "{reason}");
+        assert!(start.elapsed() < Duration::from_secs(15));
+        assert!(!server.is_connected(connection));
         server.close();
     }
 }
