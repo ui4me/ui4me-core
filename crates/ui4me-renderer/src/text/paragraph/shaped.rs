@@ -104,6 +104,12 @@ impl TextServices {
         shaped
     }
 
+    /// The layout reuses `shaped` this pass without shaping (a carried-over inline container): keep its
+    /// content-cache entry alive ([`ContentCache::touch`]).
+    pub(crate) fn touch_shaped(&mut self, shaped: &Arc<ShapedParagraph>) {
+        self.content_cache.touch(shaped);
+    }
+
     pub fn shaped_cache_len(&self) -> usize {
         self.shaped_cache.len()
     }
@@ -231,6 +237,21 @@ impl ContentCache {
             .find(|e| e.font_epoch == font_epoch && same_content(&e.raw, source))?;
         e.last_used = pass;
         Some(e.shaped.clone())
+    }
+
+    /// Mark the entry holding `shaped` as used in this pass (F-16a). A paragraph the layout reuses
+    /// without asking the cache (an inline container carried over from the previous pass) must not age
+    /// out of it: the next pass that builds the container again would shape it again. A paragraph the
+    /// cache does not hold is ignored.
+    pub(crate) fn touch(&mut self, shaped: &Arc<ShapedParagraph>) {
+        let pass = self.pass;
+        if let Some(e) = self
+            .map
+            .get_mut(&content_hash(&shaped.source))
+            .and_then(|v| v.iter_mut().find(|e| Arc::ptr_eq(&e.shaped, shaped)))
+        {
+            e.last_used = pass;
+        }
     }
 
     pub(crate) fn insert(

@@ -397,11 +397,19 @@ impl HostTree {
         // An inline root copied from the previous tree with its parent (same ids, same subtree) takes the
         // previous pass's container without its results (015 PERF-1): construction reads the subtree and the
         // parent's line clamp only.
-        let ifc = b.is_inline_root().then(|| {
-            self.ifc_seeds
-                .remove(&id)
-                .unwrap_or_else(|| InlineContainer::new(boxes, id, text))
-        });
+        let ifc = b
+            .is_inline_root()
+            .then(|| match self.ifc_seeds.remove(&id) {
+                Some(seed) => {
+                    // Reused without shaping: keep its paragraphs in the content cache (F-16a), or they age
+                    // out and the next rebuild of this container shapes them again.
+                    for shaped in seed.shaped_paragraphs() {
+                        text.touch_shaped(shaped);
+                    }
+                    seed
+                }
+                None => InlineContainer::new(boxes, id, text),
+            });
         IFC_NS.with(|c| c.set(c.get() + t_ifc.elapsed().as_nanos() as u64));
         let leaf = match &b.kind {
             BoxKind::Replaced(r) => {

@@ -769,6 +769,15 @@ impl InlineContainer {
         Some(c)
     }
 
+    /// The shaped paragraphs this container holds (its text and, for `::first-line`, the first line's).
+    pub(crate) fn shaped_paragraphs(&self) -> impl Iterator<Item = &Arc<ShapedParagraph>> {
+        self.shaped.iter().chain(
+            self.first_line
+                .as_ref()
+                .and_then(|f| f.first_shaped.as_ref()),
+        )
+    }
+
     pub(crate) fn adopt_results(&mut self, other: &InlineContainer) {
         self.final_outcome = other.final_outcome.clone();
         self.oof_static = other.oof_static.clone();

@@ -951,6 +951,7 @@ impl TextServices {
         source: &ParagraphSource,
         face_styles: Option<&[FaceRangeStyle]>,
     ) -> Arc<ShapedParagraph> {
+        self.paragraphs_shaped += 1;
         // Limits are checked before any Parley call (FR-092, FR-096): Parley asserts on more than
         // u16::MAX styles.
         let limited = super::limits::apply_limits(source);

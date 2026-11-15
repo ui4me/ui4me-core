@@ -814,6 +814,8 @@ pub struct TextServices {
     pub(crate) content_cache: crate::text::paragraph::shaped::ContentCache,
     /// Count of diagnostics `shape_uncached` raised (a result produced while it moved is not cached).
     pub(crate) shape_diag_events: u64,
+    /// Work counter (T13): paragraphs actually shaped (cache misses), since creation.
+    pub(crate) paragraphs_shaped: u64,
     /// Subpixel glyph positioning: Windows at every scale, Linux above device scale 1.
     /// Set by layout from the viewport scale (`paragraph/snap.rs`).
     pub(crate) subpixel: bool,
@@ -865,6 +867,7 @@ impl TextServices {
             shaped_cache: Default::default(),
             content_cache: Default::default(),
             shape_diag_events: 0,
+            paragraphs_shaped: 0,
             subpixel: cfg!(target_os = "windows"),
             epochs: Default::default(),
             deco_font_cache: Default::default(),
@@ -941,6 +944,12 @@ impl TextServices {
                 .collect(),
             Err(_) => Vec::new(),
         }
+    }
+
+    /// Paragraphs shaped since creation (cache misses: each is a full Parley shaping run). A work
+    /// counter for tests and profiling (T13).
+    pub fn paragraphs_shaped(&self) -> u64 {
+        self.paragraphs_shaped
     }
 
     pub fn environment(&self) -> &FontEnvironment {
