@@ -27,6 +27,8 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unicodedata
 from typing import IO
 
@@ -299,58 +301,92 @@ def spawn_host(command: list[str], *, env: dict[str, str]) -> tuple[subprocess.P
     return process, job
 
 
-class _Interrupted(Exception):
-    def __init__(self, signum: int):
-        super().__init__(signum)
-        self.signum = signum
+_STATUS_CONTROL_C_EXIT = 0xC000013A  # Windows: ended by a console Ctrl+C/Ctrl+Break
 
 
-def run_host(command: list[str], *, env: dict[str, str]) -> int:
-    """Run the host, relay its output, and return its exit status. Ctrl+C,
-    SIGTERM or SIGHUP stop the host (and with it the backend) boundedly."""
+def run_host(command: list[str], *, env: dict[str, str], shutdown_timeout_ms: int = 5_000) -> int:
+    """Run the host, relay its output, and return its exit status.
+
+    Ctrl+C, Ctrl+Break (Windows), SIGTERM and SIGHUP do not end this launcher
+    while the host runs: the host performs an orderly shutdown (``app.shutdown``,
+    so ``on_shutdown`` callbacks run) and this launcher waits for it and exits
+    with its status (130 for Ctrl+C). On POSIX the signal is forwarded to the
+    host, which ignores an immediate repeat of a terminal Ctrl+C it already
+    received; a host that does not stop within the shutdown deadline plus five
+    seconds, or a second interruption, is terminated.
+    """
     process, _job = spawn_host(command, env=env)
     verbose = os.environ.get(VERBOSE, "").strip().lower() not in ("", "0", "false", "no")
-    previous = {}
+    state: dict = {"signal": None, "deadline": None, "forced": False}
 
     def interrupted(signum, _frame):
-        raise _Interrupted(signum)
+        if state["signal"] is None:
+            state["signal"] = signum
+            state["deadline"] = time.monotonic() + shutdown_timeout_ms / 1000 + 5
+            if os.name != "nt" and process.poll() is None:
+                # A signal sent to the launcher alone does not reach the host.
+                try:
+                    process.send_signal(signum)
+                except OSError:
+                    pass
+        elif process.poll() is None:
+            state["forced"] = True  # A second interruption: stop now.
+            process.kill()
 
-    for name in ("SIGTERM", "SIGHUP"):
+    previous = {}
+    for name in ("SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"):
         number = getattr(signal, name, None)
         if number is not None:
             try:
                 previous[number] = signal.signal(number, interrupted)
-            except (OSError, ValueError):
+            except (OSError, ValueError):  # Not the main thread, or unsupported.
                 pass
-    stopped = False
-    try:
+
+    def relay():
+        assert process.stderr is not None
         try:
-            assert process.stderr is not None
             for line in process.stderr:
                 relay_line(line, verbose=verbose, stdout=sys.stdout, stderr=sys.stderr)
-            return _exit_status(process.wait())
-        except (KeyboardInterrupt, _Interrupted) as interruption:
-            stopped = True
-            # A terminal Ctrl+C reaches the host too; a signal sent to the
-            # launcher alone does not. Either way, stop the host boundedly.
-            if process.poll() is None:
-                process.terminate()
+        except (OSError, ValueError):
+            pass
+
+    relay_thread = threading.Thread(target=relay, name="ui4me-host-output", daemon=True)
+    relay_thread.start()
+    try:
+        # Short waits keep the main thread responsive to signal handlers.
+        while True:
             try:
-                process.wait(timeout=10)
+                status = process.wait(timeout=0.1)
+                break
             except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
-            # The conventional shell status for a process ended by a signal.
-            return 128 + getattr(interruption, "signum", signal.SIGINT)
+                deadline = state["deadline"]
+                if deadline is not None and time.monotonic() > deadline and not state["forced"]:
+                    state["forced"] = True
+                    process.terminate()
+                    state["deadline"] = time.monotonic() + 5
+                elif deadline is not None and state["forced"] and time.monotonic() > deadline:
+                    process.kill()
+        relay_thread.join(timeout=5)
+        signum = state["signal"]
+        if signum is None:
+            return _exit_status(status)
+        if state["forced"]:
+            return 128 + int(signum)
+        if status < 0:
+            return 128 - status  # Ended by the (forwarded) signal: expected, no defect.
+        if status == _STATUS_CONTROL_C_EXIT:
+            return 130
+        return status
     finally:
         for number, handler in previous.items():
             try:
                 signal.signal(number, handler)
             except (OSError, ValueError):
                 pass
-        if process.poll() is None and not stopped:
+        if process.poll() is None:
             process.kill()
             process.wait()
+        relay_thread.join(timeout=5)
         if process.stderr is not None:
             process.stderr.close()
 
@@ -359,6 +395,9 @@ def _exit_status(status: int) -> int:
     """Map a POSIX "killed by signal N" status (-N) to the shell's 128 + N."""
     if status >= 0:
         return status
+    interrupts = {getattr(signal, n) for n in ("SIGINT", "SIGTERM", "SIGHUP") if hasattr(signal, n)}
+    if -status in interrupts:
+        return 128 - status  # A terminal Ctrl+C or a service stop, not a crash.
     try:
         name = signal.Signals(-status).name
     except ValueError:
@@ -431,7 +470,7 @@ def launch(*, name: str | None, app_id: str | None, version: str | None,
             # desktop (continuous integration). Never chosen implicitly.
             command.append("--headless")
         try:
-            return run_host(command, env=env)
+            return run_host(command, env=env, shutdown_timeout_ms=shutdown_timeout_ms)
         except OSError as error:
             raise StartupError(f"Cannot start the UI4ME native host {host}: {error}") from error
     finally:

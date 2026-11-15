@@ -110,8 +110,11 @@ Consequences:
   open prompt (`./app.ps1 -Name x`) passes none unless you give `-ArgumentList`.
 - The backend has no console input, so `Read-Host` cannot be used. Output still reaches your
   terminal through the launcher.
-- **Lifetime.** Ctrl+C in the launcher stops the host and exits with code 130 (a hard stop:
-  the backend gets no `app.shutdown`). If the launcher
+- **Lifetime.** After Ctrl+C the launcher waits for the host (on Linux it forwards the
+  interrupt to the host) and exits with the host's status, 130 for Ctrl+C. A host that shuts
+  down in order on Ctrl+C sends `app.shutdown`, so `Wait-UI4ME -UntilShutdown` returns in the
+  backend; a 1.0.1 host simply stops. A host still running after `-ShutdownTimeoutMilliseconds`
+  plus five seconds is stopped. If the launcher
   process dies, the host is stopped too (a kill-on-close job on Windows; `setpriv
   --pdeathsig` on Linux when `setpriv` is available).
 - **Errors.** An uncaught error in the backend ends it: PowerShell prints the error, the host

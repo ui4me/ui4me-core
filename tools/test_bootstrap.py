@@ -105,6 +105,62 @@ class RoleTests(unittest.TestCase):
             Application.from_environment()
 
 
+@unittest.skipUnless(os.name == "posix", "POSIX signals; Windows console events are verified on the lab VM")
+class LauncherInterruptTests(unittest.TestCase):
+    """The launcher waits for the host's own orderly shutdown on Ctrl+C/SIGTERM."""
+
+    HOST = textwrap.dedent('''\
+        import signal, sys, time
+        def stop(signum, frame):
+            time.sleep(0.4)          # an orderly shutdown takes a moment
+            sys.stderr.write("host shut down\\n"); sys.stderr.flush()
+            sys.exit(128 + signum)
+        signal.signal(signal.SIGINT, stop)
+        signal.signal(signal.SIGTERM, stop)
+        sys.stderr.write("host ready\\n"); sys.stderr.flush()
+        time.sleep(30)
+        ''')
+
+    def interrupt_after_ready(self, host_code, signum, **options):
+        import signal, threading
+        command = [sys.executable, "-c", host_code]
+        result = {}
+
+        def run():
+            with mock.patch("sys.stderr") as stderr:
+                result["status"] = _bootstrap.run_host(command, env=dict(os.environ), **options)
+            result["stderr"] = "".join(str(c) for c in stderr.mock_calls)
+        # run_host installs signal handlers, so it must run in the main thread;
+        # a helper thread sends the signal to this process once the host is up.
+        def send():
+            time.sleep(1.0)
+            os.kill(os.getpid(), signum)
+        threading.Thread(target=send, daemon=True).start()
+        started = time.monotonic()
+        run()
+        return result, time.monotonic() - started
+
+    def test_interrupt_waits_for_the_host_and_returns_its_status(self):
+        import signal
+        result, elapsed = self.interrupt_after_ready(self.HOST, signal.SIGINT)
+        self.assertEqual(result["status"], 130)
+        self.assertIn("host shut down", result["stderr"])  # the host finished its shutdown
+        self.assertNotIn("terminated by", result["stderr"])
+        self.assertLess(elapsed, 10)
+
+    def test_sigterm_is_forwarded(self):
+        import signal
+        result, _ = self.interrupt_after_ready(self.HOST, signal.SIGTERM)
+        self.assertEqual(result["status"], 143)
+
+    def test_a_host_that_ignores_the_interrupt_is_stopped_after_the_deadline(self):
+        import signal
+        stubborn = "import signal, time\nsignal.signal(signal.SIGINT, signal.SIG_IGN)\ntime.sleep(60)\n"
+        result, elapsed = self.interrupt_after_ready(stubborn, signal.SIGINT, shutdown_timeout_ms=100)
+        self.assertEqual(result["status"], 130)
+        self.assertLess(elapsed, 15)
+
+
 class ManifestTests(unittest.TestCase):
     def test_default_identity_is_valid_stable_and_distinct(self):
         first = _bootstrap.default_app_id("script:/home/a/app.py", "app")
@@ -376,6 +432,34 @@ class DirectStartIntegrationTests(unittest.TestCase):
             ''')
         self.assertEqual(result.returncode, 137, result.stderr.decode())
         self.assertIn("terminated by SIGKILL", result.stderr.decode())
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "POSIX signals")
+    def test_sigint_to_the_launcher_alone_ends_the_app_with_130(self):
+        import signal
+        temporary = tempfile.TemporaryDirectory(prefix="ui4me direct ")
+        self.addCleanup(temporary.cleanup)
+        script = Path(temporary.name) / "app.py"
+        script.write_text(textwrap.dedent('''
+            from ui4me_core import Application
+            app = Application.start(name="interrupted", instance="multiple")
+            app.open_html("<p>x</p>")
+            app.ready()
+            print("READY", flush=True)
+            app.run()
+            '''), encoding="utf-8")
+        env = checkout_environment(CLEAN)
+        env.update({"UI4ME_TEST_MODE": "1", "UI4ME_HOST_BINARY": built_host()})
+        process = subprocess.Popen([sys.executable, str(script)], cwd=temporary.name, env=env,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            self.assertEqual(process.stdout.readline().strip(), "READY")
+            process.send_signal(signal.SIGINT)  # the launcher only, not its process group
+            _, err = process.communicate(timeout=30)
+        finally:
+            if process.poll() is None:
+                process.kill()
+        self.assertEqual(process.returncode, 130, err)
+        self.assertNotIn("terminated by", err)
 
     def test_temporary_manifest_is_removed(self):
         self.assertEqual(self.run_app().returncode, 0)

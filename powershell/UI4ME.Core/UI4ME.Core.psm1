@@ -1753,7 +1753,7 @@ function Start-UI4MEScript {
         } finally {
             $env:UI4ME_DIRECT_START = $previousMarker
         }
-        # Short waits keep Ctrl+C responsive; the finally block stops the host.
+        # Short waits keep Ctrl+C responsive; the finally block handles it.
         while (-not $runner.WaitForExit(200)) { }
         $code = $runner.ExitCode
         $finished = $true
@@ -1761,18 +1761,40 @@ function Start-UI4MEScript {
         $failed = $true
         throw
     } finally {
+        $interrupted = -not $finished -and -not $failed
+        if ($interrupted) {
+            # Neither completed nor failed: the pipeline was stopped (Ctrl+C).
+            # The host shuts the app down in order (app.shutdown) on Ctrl+C:
+            # wait for it and exit with its status instead of killing it.
+            $code = 130
+            if ($null -ne $runner -and -not $runner.HasExited) {
+                if (-not $script:UI4MEIsWindows) {
+                    # A signal sent to this launcher alone does not reach the host;
+                    # a host that already got the terminal's Ctrl+C ignores the repeat.
+                    & /bin/sh -c 'kill -INT "$1" 2>/dev/null' ui4me-interrupt ([string]$runner.Id)
+                }
+                if ($runner.WaitForExit($ShutdownTimeoutMilliseconds + 5000)) {
+                    $code = $runner.ExitCode
+                    # Windows STATUS_CONTROL_C_EXIT (a host without its own Ctrl+C handling).
+                    if ($code -eq -1073741510) { $code = 130 }
+                }
+            }
+        }
         if ($null -ne $runner) {
             if (-not $runner.HasExited) { $runner.Stop() }
             $runner.Dispose()
         }
         Remove-Item -LiteralPath $folder -Recurse -Force -ErrorAction SilentlyContinue
-        if (-not $finished -and -not $failed) {
-            # Neither completed nor failed: the pipeline was stopped (Ctrl+C).
-            # PowerShell would end with status 0; use the shell convention.
-            [Environment]::Exit(130)
+        if ($interrupted) {
+            # PowerShell would end a stopped script with status 0.
+            [Environment]::Exit($code)
         }
     }
-    exit $code
+    # Not `exit $code`: a terminal Ctrl+C reaches the host and this process
+    # together, and a pipeline stop arriving while `exit` runs ends PowerShell
+    # with status 0. This process exists only to run the host.
+    [Console]::Out.Flush(); [Console]::Error.Flush()
+    [Environment]::Exit($code)
 }
 
 function New-UI4MEProject {
