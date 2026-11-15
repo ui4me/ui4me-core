@@ -1,8 +1,12 @@
 """Generated reference manifests carry the product version."""
+import sys
 import tomllib
 import unittest
 
 import run_example
+
+sys.path.insert(0, str(run_example.ROOT / "tools" / "release"))
+import version as versioning  # noqa: E402
 
 
 class ManifestVersionTests(unittest.TestCase):
@@ -11,7 +15,7 @@ class ManifestVersionTests(unittest.TestCase):
             expected = tomllib.load(stream)["workspace"]["package"]["version"]
         app = tomllib.loads(run_example.manifest([]))["app"]
         self.assertEqual(app["version"], expected)
-        self.assertEqual(expected, "1.0.1")
+        self.assertEqual(expected, versioning.source_version())
 
     def test_explicit_version_is_kept(self):
         app = tomllib.loads(run_example.manifest([], app_version="2.3.4"))["app"]
