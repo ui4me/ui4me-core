@@ -1,0 +1,69 @@
+# cargo-deny policy (F-23 / RELEASE-09, gate P8). CI runs
+#   cargo deny --locked check bans licenses sources      (every push/PR: deterministic)
+#   cargo deny --locked check advisories                 (nightly: the RustSec database changes daily)
+# Local: `cargo deny --locked check`.
+
+[graph]
+# Only the platforms we build and ship. Android/Apple/Web crates that appear in
+# the lock file through winit's optional backends are never compiled.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+]
+all-features = false
+
+[advisories]
+# Vulnerabilities and yanked crates fail. Unmaintained advisories fail unless
+# listed below with a written reason and a follow-up.
+yanked = "deny"
+unmaintained = "all"
+ignore = [
+    # ttf-parser is unmaintained; it reaches the host through fontdue, a
+    # direct ui4me-host dependency (crates/ui4me-host/Cargo.toml) used for the
+    # last-resort glyph path. No known vulnerability. Follow-up: replace
+    # fontdue with the skrifa/parley stack that is already in the tree
+    # (roadmap 6.5). Revisit at every minor release.
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser via fontdue: unmaintained, no vulnerability; replacement with skrifa tracked in roadmap 6.5" },
+    # zvariant, zbus_names and zvariant_derive (the zbus 5 wire crates) are
+    # flagged unmaintained; they come in through zbus/atspi/ashpd for AT-SPI
+    # accessibility and desktop portals on Linux. No known vulnerability, no
+    # maintained drop-in; upgrade when zbus publishes the successor crates.
+    { id = "RUSTSEC-2026-0370", reason = "zvariant via zbus/atspi/ashpd: unmaintained, no vulnerability; follow zbus upgrade" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names via zbus/atspi/ashpd: unmaintained, no vulnerability; follow zbus upgrade" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive via zbus/atspi/ashpd: unmaintained, no vulnerability; follow zbus upgrade" },
+]
+
+[licenses]
+# Every license here is compatible with shipping the statically linked host
+# under the project's MIT AND OFL-1.1 terms; MPL-2.0 (Stylo and its
+# dependencies) requires source availability, which the sdist provides
+# (patches/stylo, patches/licenses/MPL-2.0.txt; gate P14).
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MPL-2.0",
+    "OFL-1.1",
+    "Unicode-3.0",
+    "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+# Duplicate versions are reported, not fatal: several come from upstream
+# crates we do not control (winit, Stylo, zbus).
+multiple-versions = "warn"
+wildcards = "deny"
+# The vendored Stylo, Taffy, winit and softbuffer trees are path dependencies.
+allow-wildcard-paths = true
+
+[sources]
+# Only crates.io. The patched upstreams are vendored as path dependencies
+# (patches/, third_party/), so no git source is allowed.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
