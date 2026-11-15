@@ -92,6 +92,7 @@ class RoleTests(unittest.TestCase):
                 Application.start(name="Second")
         launch.assert_not_called()
 
+    @unittest.skipUnless(os.name == "posix", "a negative (killed by signal) status exists only on POSIX")
     def test_host_killed_by_a_signal_maps_to_the_shell_status(self):
         with mock.patch("sys.stderr") as stderr:
             self.assertEqual(_bootstrap._exit_status(-9), 137)

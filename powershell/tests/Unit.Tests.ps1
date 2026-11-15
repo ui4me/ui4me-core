@@ -1,4 +1,8 @@
 ﻿# Module, codec, generator and skill-installer tests (no host required). Pester 5+.
+BeforeDiscovery {
+    # -Skip is evaluated during discovery, before BeforeAll; 5.1-safe (no $IsWindows there).
+    $script:DiscoveryIsWindows = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
+}
 BeforeAll {
     . (Join-Path $PSScriptRoot 'TestHelpers.ps1')
     Import-Module $script:ModuleManifest -Force -ErrorAction Stop
@@ -172,9 +176,27 @@ Describe 'Install-UI4MESkill' {
     }
 }
 
+Describe 'Launcher console interrupt guard' {
+    It 'installs and removes a Ctrl+C/Ctrl+Break handler on Windows only' {
+        $installed = [UI4ME.ConsoleInterrupt]::Install()
+        try {
+            if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+                $installed | Should -BeTrue
+                [UI4ME.ConsoleInterrupt]::Installed | Should -BeTrue
+                [UI4ME.ConsoleInterrupt]::Install() | Should -BeTrue   # idempotent
+            } else {
+                $installed | Should -BeFalse
+                [UI4ME.ConsoleInterrupt]::Installed | Should -BeFalse
+            }
+            [UI4ME.ConsoleInterrupt]::Count | Should -Be 0
+        } finally { [UI4ME.ConsoleInterrupt]::Uninstall() }
+        [UI4ME.ConsoleInterrupt]::Installed | Should -BeFalse
+    }
+}
+
 Describe 'Get-UI4MEHostPath' {
     AfterEach { Remove-Item Env:UI4ME_HOST_BINARY -ErrorAction SilentlyContinue }
-    It 'runs a hash-verified private copy when the installed host cannot be made executable (BIND-PS-11)' -Skip:$script:TestIsWindows {
+    It 'runs a hash-verified private copy when the installed host cannot be made executable (BIND-PS-11)' -Skip:$script:DiscoveryIsWindows {
         $source = Join-Path $TestDrive 'installed-host'
         [IO.File]::WriteAllText($source, "#!/bin/sh`necho cached-host-ran`n")
         $saved = $env:XDG_CACHE_HOME
