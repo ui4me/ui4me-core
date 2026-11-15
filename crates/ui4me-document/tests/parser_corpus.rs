@@ -122,6 +122,13 @@ fn run_document(c: &Case) -> String {
 }
 
 fn run_fragment(c: &Case) -> Result<String, String> {
+    run_fragment_with(c, None)
+}
+
+fn run_fragment_with(
+    c: &Case,
+    limits: Option<ui4me_document::limits::DomLimits>,
+) -> Result<String, String> {
     let ctx = c.fragment.as_deref().unwrap();
     let (nsname, local) = match ctx.split_once(' ') {
         Some((n, l)) => (n, l),
@@ -133,6 +140,9 @@ fn run_fragment(c: &Case) -> Result<String, String> {
             generation: std::num::NonZeroU32::MIN,
         },
     ));
+    if let Some(l) = limits {
+        doc = doc.with_limits(l);
+    }
     let uri = match nsname {
         "svg" => "http://www.w3.org/2000/svg",
         "math" => "http://www.w3.org/1998/Math/MathML",
@@ -244,4 +254,152 @@ fn tree_construction_corpus_fragment_cases() {
         "fragment-case failures:\n{}",
         failures.join("\n=====\n")
     );
+}
+
+/// INPUTSEC-05: a parse with a depth cap is fed to html5ever in chunks so that it can stop early;
+/// every corpus case builds the same tree whatever the chunk size (tokenizer states, character
+/// references, CR LF and multi-byte characters split across chunks).
+#[test]
+fn chunked_parsing_builds_the_same_tree() {
+    use ui4me_document::limits::DomLimits;
+    let capped = DomLimits {
+        parse_depth: 1 << 40,
+        ..Default::default()
+    };
+    let id = |i| {
+        ui4me_engine_types::ids::DocumentId::from_raw(ui4me_engine_types::ids::RawId {
+            index: i,
+            generation: std::num::NonZeroU32::MIN,
+        })
+    };
+    let cases: Vec<Case> = load().into_iter().filter(|c| !c.script_on).collect();
+    let mut compared = 0;
+    for chunk in [1, 2, 3, 7, 61] {
+        ui4me_document::parse::set_parse_chunk_for_tests(chunk);
+        for c in &cases {
+            if c.fragment.is_some() {
+                let whole = run_fragment(c);
+                let chunked = run_fragment_with(c, Some(capped));
+                assert_eq!(
+                    whole, chunked,
+                    "{}#{} in chunks of {chunk}",
+                    c.file, c.index
+                );
+                compared += 1;
+                continue;
+            }
+            let whole = run_document(c);
+            let doc = Document::create(id(3), &c.data, "about:blank", capped).expect("parse");
+            let chunked = common::dump_children(&doc, doc.document_node());
+            assert_eq!(
+                whole, chunked,
+                "{}#{} in chunks of {chunk}",
+                c.file, c.index
+            );
+            compared += 1;
+        }
+    }
+    ui4me_document::parse::set_parse_chunk_for_tests(4096);
+    assert!(compared > 5000, "{compared}");
+}
+
+/// INPUTSEC-05: deeply nested unclosed blocks stop the parse at the depth cap instead of costing
+/// time quadratic in the input (40,000 nested `<div>` took 6.3 s before the node limit fired).
+#[test]
+fn a_parse_deeper_than_its_cap_stops_early() {
+    use ui4me_document::limits::DomLimits;
+    use ui4me_engine_types::codes_generated::Code;
+    let limits = DomLimits {
+        parse_depth: 512,
+        ..Default::default()
+    };
+    let id = ui4me_engine_types::ids::DocumentId::from_raw(ui4me_engine_types::ids::RawId {
+        index: 5,
+        generation: std::num::NonZeroU32::MIN,
+    });
+    let bound = if cfg!(debug_assertions) {
+        std::time::Duration::from_secs(2)
+    } else {
+        std::time::Duration::from_millis(100)
+    };
+    for html in [
+        format!("<!doctype html><body>{}x", "<div>".repeat(40_000)),
+        format!("<!doctype html><body>{}x", "<div><span>".repeat(20_000)),
+        format!("<!doctype html><table>{}", "<tr><td><table>".repeat(15_000)),
+        format!("<!doctype html><body><template>{}", "<div>".repeat(40_000)),
+    ] {
+        let t0 = std::time::Instant::now();
+        let e = Document::create(id, &html, "about:blank", limits).expect_err("too deep");
+        let t = t0.elapsed();
+        assert_eq!(e.code, Code::SizeLimit);
+        assert!(e.message.contains("dom.parse_depth"), "{}", e.message);
+        assert!(t < bound, "{t:?} for {}", &html[..60]);
+    }
+    // At the cap the document parses (the document node is depth 0, `html` 1, `body` 2).
+    let ok = format!("<!doctype html><body>{}", "<div>".repeat(510));
+    assert!(Document::create(id, &ok, "about:blank", limits).is_ok());
+    let over = format!("<!doctype html><body>{}", "<div>".repeat(511));
+    assert!(Document::create(id, &over, "about:blank", limits).is_err());
+    // A fragment parse is refused the same way and leaves the document as it was.
+    let mut d = Document::create(id, "<div id=a>keep</div>", "about:blank", limits).unwrap();
+    let a = d.element_by_id("a").unwrap();
+    let live = d.arena().live_count();
+    let before = d.serialize_document().unwrap();
+    let t0 = std::time::Instant::now();
+    let e = d
+        .set_inner_html(a, &"<div>".repeat(40_000))
+        .expect_err("too deep");
+    assert!(t0.elapsed() < bound);
+    assert_eq!(e.code, Code::SizeLimit);
+    assert_eq!(d.serialize_document().unwrap(), before);
+    assert_eq!(d.arena().live_count(), live, "the staged nodes are freed");
+}
+
+/// INPUTSEC-05: a capped parse also stops once it holds more nodes than the node limit, unless a
+/// `selectedcontent` element (whose contents are rebuilt after the parse) exists; either way the
+/// result is the `SIZE_LIMIT` the finished parse would have failed with.
+#[test]
+fn a_capped_parse_stops_at_the_node_limit() {
+    use ui4me_document::limits::DomLimits;
+    use ui4me_engine_types::codes_generated::Code;
+    let limits = DomLimits {
+        parse_depth: 512,
+        nodes: 1000,
+        ..Default::default()
+    };
+    let id = ui4me_engine_types::ids::DocumentId::from_raw(ui4me_engine_types::ids::RawId {
+        index: 6,
+        generation: std::num::NonZeroU32::MIN,
+    });
+    let deep_wide = format!(
+        "<!doctype html><body>{}{}",
+        "<div>".repeat(500),
+        "<div></div>".repeat(20_000)
+    );
+    let t0 = std::time::Instant::now();
+    let e = Document::create(id, &deep_wide, "about:blank", limits).expect_err("too many");
+    assert!(
+        t0.elapsed() < std::time::Duration::from_secs(1),
+        "{:?}",
+        t0.elapsed()
+    );
+    assert_eq!(e.code, Code::SizeLimit);
+    assert!(e.message.contains("dom.nodes"), "{}", e.message);
+    // Same outcome as an uncapped parse, and the same as before for a document within the limit.
+    let uncapped = DomLimits {
+        nodes: 1000,
+        ..Default::default()
+    };
+    let e2 = Document::create(id, &deep_wide, "about:blank", uncapped).expect_err("too many");
+    assert_eq!(e2.code, Code::SizeLimit);
+    let fits = format!("<!doctype html><body>{}", "<p>x</p>".repeat(300));
+    assert!(Document::create(id, &fits, "about:blank", limits).is_ok());
+    // With a `selectedcontent` element the stop is off; the finished parse decides.
+    let sc = format!(
+        "<!doctype html><select><button><selectedcontent>{}</selectedcontent></button><option>a</option></select>",
+        "<span>x</span>".repeat(600)
+    );
+    let capped = Document::create(id, &sc, "about:blank", limits).map(|_| ());
+    let whole = Document::create(id, &sc, "about:blank", uncapped).map(|_| ());
+    assert_eq!(capped.map_err(|e| e.code), whole.map_err(|e| e.code));
 }

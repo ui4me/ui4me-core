@@ -403,3 +403,46 @@ fn multi_pass_containers_between_atomics_lay_out_in_bounded_time() {
     let levels = if cfg!(debug_assertions) { 30 } else { 90 };
     assert_bounded_change("mixed chain", chain(&units, levels)).unwrap();
 }
+
+// ---- INPUTSEC-05: deeply nested unclosed blocks are refused without a quadratic parse.
+
+#[test]
+fn deep_unclosed_blocks_are_refused_quickly() {
+    for (what, html) in [
+        ("load", unclosed_divs(40_000)),
+        (
+            "load, inline",
+            format!("<!doctype html><body>{}x", "<span><div>".repeat(20_000)),
+        ),
+    ] {
+        let t0 = Instant::now();
+        let e = Document::parse_hosted(&html, None, 400, 400)
+            .err()
+            .unwrap_or_else(|| panic!("{what}: accepted"));
+        let t = t0.elapsed();
+        assert!(e.message.starts_with("SIZE_LIMIT"), "{what}: {}", e.message);
+        assert_eq!(e.code, 5);
+        assert!(t < budget(), "{what}: {t:?}");
+    }
+    // The same markup inserted into a document.
+    let r = bounded(|| {
+        let mut d = warm_document();
+        let t0 = Instant::now();
+        let e = d
+            .insert_html("host", "beforeend", &"<div>".repeat(40_000))
+            .expect_err("too deep");
+        (
+            t0.elapsed(),
+            e.message,
+            d.get_html(None, None, true).unwrap(),
+        )
+    });
+    let (_, (t, message, html)) = r.expect("no result");
+    assert!(message.starts_with("SIZE_LIMIT"), "{message}");
+    assert!(t < budget(), "insert: {t:?}");
+    assert!(
+        html.contains("<div id=\"host\">x</div>"),
+        "the document is unchanged: {html}"
+    );
+}
+

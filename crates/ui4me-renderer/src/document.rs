@@ -39,6 +39,12 @@ pub const MAX_PIXELS: usize = 16_777_216;
 const MAX_HTML: usize = 1024 * 1024;
 const MAX_NODES: usize = 65_536;
 const MAX_DEPTH: usize = 256;
+/// Deepest node a parse may create before it stops with `SIZE_LIMIT` (INPUTSEC-05): html5ever
+/// scans the open elements for most tags, so markup that keeps nesting costs time quadratic in its
+/// length. A tree deeper than [`MAX_DEPTH`] is refused after the parse anyway; twice the limit leaves
+/// room for the parser's error recovery (the adoption agency moves misnested content up), so no
+/// document within the limit is refused by this cap.
+const MAX_PARSE_DEPTH: usize = 2 * MAX_DEPTH;
 /// Events queued between two host drains (one GUI turn). Sized for the 10,000-event burst gate
 /// (R3) with headroom; the transport's 8 MiB per-connection byte cap is the real backpressure.
 /// An event refused here is counted (`dropped_event_count`) and reported by the host, never
@@ -304,6 +310,7 @@ impl Document {
             serialization_bytes: 4 * MAX_HTML as u64,
             batch_commands: 1024,
             batch_bytes: MAX_HTML as u64,
+            parse_depth: MAX_PARSE_DEPTH as u64,
         };
         let model = Model::create(id, html, url.as_str(), limits)?;
         validate_document(&model, None, None, hosted)?;

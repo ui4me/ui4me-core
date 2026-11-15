@@ -23,6 +23,7 @@ pub enum LimitName {
     SerializationBytes,
     BatchCommands,
     BatchBytes,
+    ParseDepth,
 }
 
 impl LimitName {
@@ -34,6 +35,7 @@ impl LimitName {
             LimitName::SerializationBytes => "dom.serialization_bytes",
             LimitName::BatchCommands => "dom.batch_commands",
             LimitName::BatchBytes => "dom.batch_bytes",
+            LimitName::ParseDepth => "dom.parse_depth",
         }
     }
 }
@@ -52,6 +54,12 @@ pub struct DomLimits {
     pub batch_commands: u64,
     /// Batch size in bytes (default 256 MiB).
     pub batch_bytes: u64,
+    /// Deepest node a parse may create (INPUTSEC-05; default and hard maximum: unlimited). The
+    /// document node, or the scratch root of a fragment parse, is depth 0; template contents sit
+    /// one level below their template. A parse that nests deeper stops early with `SIZE_LIMIT`
+    /// naming `dom.parse_depth` instead of running html5ever's per-tag scope scans, which are
+    /// linear in the open-element depth, over the rest of the input.
+    pub parse_depth: u64,
 }
 
 impl DomLimits {
@@ -61,6 +69,7 @@ impl DomLimits {
     pub const MAX_SERIALIZATION_BYTES: u64 = 2 * GIB;
     pub const MAX_BATCH_COMMANDS: u64 = 16_777_216;
     pub const MAX_BATCH_BYTES: u64 = GIB;
+    pub const MAX_PARSE_DEPTH: u64 = u64::MAX;
 
     /// Requested values clamped to the hard maxima (a zero request keeps the default).
     pub fn configured(req: DomLimits) -> DomLimits {
@@ -81,6 +90,7 @@ impl DomLimits {
                 Self::MAX_BATCH_COMMANDS,
             ),
             batch_bytes: pick(req.batch_bytes, d.batch_bytes, Self::MAX_BATCH_BYTES),
+            parse_depth: pick(req.parse_depth, d.parse_depth, Self::MAX_PARSE_DEPTH),
         }
     }
 
@@ -93,6 +103,7 @@ impl DomLimits {
             LimitName::SerializationBytes => self.serialization_bytes,
             LimitName::BatchCommands => self.batch_commands,
             LimitName::BatchBytes => self.batch_bytes,
+            LimitName::ParseDepth => self.parse_depth,
         };
         if value > max {
             Err(size_limit(which.name()))
@@ -111,6 +122,7 @@ impl Default for DomLimits {
             serialization_bytes: 256 * MIB,
             batch_commands: 1_048_576,
             batch_bytes: 256 * MIB,
+            parse_depth: u64::MAX,
         }
     }
 }
@@ -188,6 +200,7 @@ mod tests {
             serialization_bytes: u64::MAX,
             batch_commands: u64::MAX,
             batch_bytes: u64::MAX,
+            parse_depth: u64::MAX,
         };
         let c = DomLimits::configured(huge);
         assert_eq!(c.input_bytes, GIB);
@@ -202,6 +215,7 @@ mod tests {
             serialization_bytes: 0,
             batch_commands: 0,
             batch_bytes: 0,
+            parse_depth: 0,
         };
         assert_eq!(DomLimits::configured(zero), DomLimits::default());
         let small = DomLimits {
@@ -220,6 +234,7 @@ mod tests {
             serialization_bytes: 5,
             batch_commands: 5,
             batch_bytes: 5,
+            parse_depth: 5,
         };
         for w in [
             LimitName::InputBytes,
@@ -228,6 +243,7 @@ mod tests {
             LimitName::SerializationBytes,
             LimitName::BatchCommands,
             LimitName::BatchBytes,
+            LimitName::ParseDepth,
         ] {
             assert!(l.check(w, 5).is_ok());
             let e = l.check(w, 6).unwrap_err();

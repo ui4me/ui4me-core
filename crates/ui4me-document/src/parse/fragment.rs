@@ -16,7 +16,6 @@ use crate::node::NodeData;
 use crate::parse::{parse_opts, sink::ArenaSink};
 use html5ever::driver::parse_fragment_for_element;
 use html5ever::interface::QuirksMode;
-use html5ever::tendril::TendrilSink;
 use ui4me_engine_types::ids::NodeId;
 use ui4me_engine_types::status::Status;
 
@@ -202,9 +201,22 @@ impl Document {
         let nodes_before = self.arena.live_count();
         let mut arena = std::mem::replace(&mut self.arena, Arena::new());
         let scratch = arena.alloc(NodeData::DocumentFragment { template: None });
-        let sink = ArenaSink::with_root(arena, scratch);
-        let out =
-            parse_fragment_for_element(sink, parse_opts(quirks), context, false, form).one(html);
+        let sink = ArenaSink::with_root(arena, scratch)
+            .with_max_depth(self.limits.parse_depth)
+            .with_max_nodes(self.limits.nodes);
+        let parser = parse_fragment_for_element(sink, parse_opts(quirks), context, false, form);
+        let out = match super::feed(parser, html, self.limits.parse_depth != u64::MAX) {
+            Ok(out) => out,
+            Err((stop, arena)) => {
+                // INPUTSEC-05: the staged nodes all hang below the scratch root.
+                self.arena = arena;
+                self.arena.free_subtree(scratch);
+                return Err(size_limit(match stop {
+                    crate::parse::sink::Stop::TooDeep => LimitName::ParseDepth.name(),
+                    crate::parse::sink::Stop::TooManyNodes => LimitName::Nodes.name(),
+                }));
+            }
+        };
         self.arena = out.arena;
         // The tree builder appended its synthetic `html` root under the scratch root; the result is
         // that root's children.
