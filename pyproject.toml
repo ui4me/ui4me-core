@@ -15,7 +15,8 @@ license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "crates/ui4me-host/assets/
 authors = [{name="UI4ME Contributors"}]
 keywords = ["desktop", "gui", "html", "css", "native", "wayland", "windows", "linux", "rust"]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    # Beta until the stable-release gates pass (docs/release/versioning.md, audit 05-release-readiness).
+    "Development Status :: 4 - Beta",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
@@ -35,7 +36,7 @@ Homepage = "https://github.com/ui4me/ui4me-core"
 Documentation = "https://github.com/ui4me/ui4me-core/blob/main/docs/index.md"
 Source = "https://github.com/ui4me/ui4me-core"
 Issues = "https://github.com/ui4me/ui4me-core/issues"
-Changelog = "https://github.com/ui4me/ui4me-core/blob/main/docs/release/RELEASE_NOTES_1.0.1.md"
+Changelog = "https://github.com/ui4me/ui4me-core/blob/main/CHANGELOG.md"
 
 [project.scripts]
 ui4me-host = "ui4me_core.launcher:main"

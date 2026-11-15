@@ -37,6 +37,8 @@ Linux x86-64 (glibc 2.34+, Wayland desktop session) and Windows x64; Python 3.10
 
 Qualified on 2026-11-14 with release-candidate artifacts built from one sdist (full record: `tools/release/records/qualification-1.0.1.json`).
 
+> **Erratum (added 2026-11-15).** For Windows this sentence is not exact. The qualification record states that the natively qualified Windows wheel's host was prebuilt from Rust sources identical to the candidate commit rather than recompiled from the sdist, and the host in the published `win_amd64` wheel (SHA-256 `8d7eab92…`) is a different build from the qualified one (`4f9b4b47…`); the published Windows host received the CI installed-wheel smoke test only. The Linux host is identical to the qualified one (`be08dd88…`). Engineering audit finding F-11; from 1.0.2 the published Windows wheel is the qualified one ([qualification](qualification.md)).
+
 | | Linux (Debian 13, KDE Plasma 6, Wayland) | Windows Server 2022 x64 (interactive session) |
 | --- | --- | --- |
 | Source gates | fmt, Clippy with `-D warnings`, 1094 Rust tests, 120 Python tool tests, Pester 54/54, headless, renderer and failure-injection suites | host configuration tests including the new Windows test, Python tool tests, Pester 54/54 on PowerShell 7 and 54/54 on 5.1, headless, renderer and failure-injection suites |

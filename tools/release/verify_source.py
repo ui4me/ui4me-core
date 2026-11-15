@@ -19,7 +19,8 @@ REQUIRED = ['Cargo.lock', 'pyproject.toml', 'setup.py', 'MANIFEST.in', 'LICENSE'
             'python/ui4me_core/launcher.py', 'python/ui4me_core/live_bitmap.py',
             'examples/python/ui/live_bitmap.html', 'python/ui4me_core/_bootstrap.py',
             'tools/release/SOURCE_FILES.sha256', 'tools/release/version.py',
-            'tools/release/collect_licenses.py', 'tools/release/smoke_installed_wheel.py']
+            'tools/release/collect_licenses.py', 'tools/release/smoke_installed_wheel.py',
+            'CHANGELOG.md', 'SECURITY.md', 'docs/release/versioning.md']
 
 
 def main() -> int:
