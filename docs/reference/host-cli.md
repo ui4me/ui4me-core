@@ -62,7 +62,7 @@ Prints a JSON object with environment facts: `host_version`, `protocol_version`,
 
 ### Diagnostics output
 
-The host writes structured JSON log lines to **stderr**. Backend stdout/stderr lines are drained into bounded buffers (512 records of up to 4 KiB each) and re-emitted as log records with `"source":"backend"`. The default filter is `ui4me_host=info`; set `RUST_LOG` (for example `RUST_LOG=ui4me_host=debug`) to change it. The direct-start launchers turn these records back into plain output; `UI4ME_VERBOSE=1` also shows informational host records.
+The host writes structured JSON log lines to **stderr**. A panic on any host thread is also logged as an `error` record (`host thread panicked`, with `thread`, `location` and `panic`) before the standard panic message. Backend stdout/stderr lines are drained into bounded buffers (512 records of up to 4 KiB each) and re-emitted as log records with `"source":"backend"`. The default filter is `ui4me_host=info`; set `RUST_LOG` (for example `RUST_LOG=ui4me_host=debug`) to change it. The direct-start launchers turn these records back into plain output; `UI4ME_VERBOSE=1` also shows informational host records.
 
 ## The `app.toml` manifest
 

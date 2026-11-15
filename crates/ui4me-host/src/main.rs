@@ -148,6 +148,7 @@ fn execute(command: Command) -> Result<i32> {
 /// * Windows job objects, the single-instance lock, headless mode and `render`/`doctor` are
 ///   thread-agnostic and run here too, so every command has the same stack.
 fn main() {
+    ui4me_host::logging::install_panic_hook();
     let command = prepare();
     let engine = std::thread::Builder::new()
         .name("ui4me-engine".into())
