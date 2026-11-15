@@ -50,6 +50,7 @@ const MAX_INBOUND_BYTES: usize = 8 * 1024 * 1024;
 /// A single frame that the peer does not accept within this time ends the
 /// connection: the peer has stopped reading.
 const WRITE_DEADLINE: Duration = Duration::from_secs(10);
+const FRAME_HEADER_BYTES: usize = 4;
 
 #[derive(Debug)]
 pub enum TransportEvent {
@@ -97,6 +98,7 @@ impl Incoming {
 
 struct Connection {
     /// Unbounded on purpose: `queued_bytes` is the bound (see module docs).
+    /// Each entry is one complete frame, header included.
     outgoing: Sender<Vec<u8>>,
     queued_bytes: Arc<AtomicUsize>,
     control: NativeStream,
@@ -231,10 +233,7 @@ impl Server {
     /// closing, or the connection's outbound byte budget is exhausted (the
     /// peer has stopped reading). The number of queued messages never matters.
     pub fn reply(&self, connection: u64, value: Value) -> Result<()> {
-        let frame = serde_json::to_vec(&value)?;
-        if frame.len() > MAX_FRAME_BYTES {
-            bail!("outgoing frame exceeds limit");
-        }
+        let frame = encode_frame(&value)?;
         let map = self
             .shared
             .connections
@@ -244,7 +243,7 @@ impl Server {
         if peer.stopped.load(Ordering::Acquire) {
             bail!("connection is closing");
         }
-        let length = frame.len() + 4;
+        let length = frame.len();
         let previous = peer.queued_bytes.fetch_add(length, Ordering::AcqRel);
         if previous + length > MAX_OUTBOUND_BYTES {
             peer.queued_bytes.fetch_sub(length, Ordering::AcqRel);
@@ -343,10 +342,8 @@ fn attach(shared: &Arc<Shared>, mut reader: NativeStream) -> Result<()> {
                     Ok(frame) => {
                         let result = writer
                             .set_timeout(Some(WRITE_DEADLINE))
-                            .and_then(|_| writer.write_all(&(frame.len() as u32).to_be_bytes()))
-                            .and_then(|_| writer.write_all(&frame))
-                            .and_then(|_| writer.flush());
-                        queued_bytes.fetch_sub(frame.len() + 4, Ordering::AcqRel);
+                            .and_then(|_| write_encoded_frame(&mut writer, &frame));
+                        queued_bytes.fetch_sub(frame.len(), Ordering::AcqRel);
                         if let Err(error) = result {
                             end_connection(&write_state, id, &format!("write: {error}"));
                             break;
@@ -400,6 +397,32 @@ fn attach(shared: &Arc<Shared>, mut reader: NativeStream) -> Result<()> {
         return Err(error.into());
     }
     Ok(())
+}
+
+/// Encode one complete frame (four-byte big-endian body length, then the JSON
+/// body) into a single buffer, so the writer hands it to the OS in one call.
+/// The size is checked before anything reaches the wire.
+fn encode_frame(value: &Value) -> Result<Vec<u8>> {
+    let mut frame = Vec::with_capacity(512);
+    frame.extend_from_slice(&[0; FRAME_HEADER_BYTES]);
+    serde_json::to_writer(&mut frame, value)?;
+    let body = frame.len() - FRAME_HEADER_BYTES;
+    if body > MAX_FRAME_BYTES {
+        bail!("outgoing frame exceeds limit");
+    }
+    frame[..FRAME_HEADER_BYTES].copy_from_slice(&(body as u32).to_be_bytes());
+    Ok(frame)
+}
+
+/// Write an encoded frame with one write call (one `write(2)` on Linux, one
+/// `WriteFile` on Windows) when the OS accepts it whole. A separate header
+/// write cost one extra syscall and, on Linux, one extra socket-buffer
+/// allocation per frame, which roughly halved the frames the kernel could
+/// absorb (HOST-09). `write_all` continues a partial write from the first
+/// unwritten byte and retries `Interrupted`, so frames are never torn.
+fn write_encoded_frame<W: Write>(writer: &mut W, frame: &[u8]) -> io::Result<()> {
+    writer.write_all(frame)?;
+    writer.flush()
 }
 
 fn emit(shared: &Shared, event: TransportEvent) -> bool {
@@ -673,6 +696,87 @@ mod tests {
         writer.join().unwrap();
         assert_eq!(server.shared.inbound_bytes.load(Ordering::Acquire), 0);
         server.close();
+    }
+
+    /// Records each write call; accepts at most `chunk` bytes per call.
+    struct RecordingWriter {
+        calls: Vec<usize>,
+        wire: Vec<u8>,
+        chunk: usize,
+    }
+    impl Write for RecordingWriter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            let count = bytes.len().min(self.chunk);
+            self.calls.push(count);
+            self.wire.extend_from_slice(&bytes[..count]);
+            Ok(count)
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn decode_all(mut wire: &[u8]) -> Vec<Value> {
+        let mut values = Vec::new();
+        while let Some(value) = read_frame(&mut wire).unwrap() {
+            values.push(value);
+        }
+        values
+    }
+
+    /// HOST-09: each frame, header included, is one write call.
+    #[test]
+    fn each_frame_is_written_with_a_single_write_call() {
+        let values = [
+            burst_event(1),
+            serde_json::json!({"jsonrpc":"2.0","id":"a","result":{"ok":true}}),
+            serde_json::json!({"jsonrpc":"2.0","method":"app.shutdown","params":{"deadline_ms":5000}}),
+        ];
+        let mut writer = RecordingWriter {
+            calls: Vec::new(),
+            wire: Vec::new(),
+            chunk: usize::MAX,
+        };
+        let mut lengths = Vec::new();
+        for value in &values {
+            let frame = encode_frame(value).unwrap();
+            let body = serde_json::to_vec(value).unwrap();
+            assert_eq!(&frame[..4], &(body.len() as u32).to_be_bytes());
+            assert_eq!(&frame[4..], &body[..]);
+            lengths.push(frame.len());
+            write_encoded_frame(&mut writer, &frame).unwrap();
+        }
+        assert_eq!(writer.calls, lengths, "one write call per whole frame");
+        assert_eq!(decode_all(&writer.wire), values);
+    }
+
+    /// A short write continues from the first unwritten byte; the frame is
+    /// neither torn nor duplicated.
+    #[test]
+    fn partial_writes_complete_the_frame() {
+        let values = [burst_event(1), burst_event(2)];
+        let mut writer = RecordingWriter {
+            calls: Vec::new(),
+            wire: Vec::new(),
+            chunk: 7,
+        };
+        for value in &values {
+            write_encoded_frame(&mut writer, &encode_frame(value).unwrap()).unwrap();
+        }
+        assert!(writer.calls.len() > 2);
+        assert!(writer.calls.iter().all(|&count| count <= 7));
+        assert_eq!(decode_all(&writer.wire), values);
+    }
+
+    #[test]
+    fn oversized_outgoing_frame_is_rejected_before_queueing() {
+        let value = serde_json::json!({"p": "x".repeat(MAX_FRAME_BYTES)});
+        assert!(encode_frame(&value).is_err());
+        let fits = serde_json::json!({"p": "x".repeat(MAX_FRAME_BYTES - 16)});
+        assert_eq!(
+            encode_frame(&fits).unwrap().len(),
+            MAX_FRAME_BYTES - 16 + 12
+        );
     }
 
     /// A document.event of realistic size (~400 bytes, like the transition
