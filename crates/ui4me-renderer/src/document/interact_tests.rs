@@ -570,6 +570,56 @@ fn prevent_default_shortcut_rules_match_the_physical_key_on_a_non_latin_layout()
     assert_eq!(count(&ev, "copy", "i"), 1, "{:?}", types(&ev));
 }
 
+/// Renderer review #4: AltGr arrives as Ctrl+Alt on Windows. AltGr+A on a Polish layout types
+/// "ą" (code KeyA); it is not the Ctrl+A shortcut (the engine's own shortcuts require no Alt), so a
+/// rule for Ctrl+"a" with Alt unspecified must not report it default-prevented.
+#[test]
+fn prevent_default_shortcut_rules_ignore_altgr_characters() {
+    let mut d = doc("<!doctype html><input id=i value='x'>", 400, 300);
+    d.set_default_action(
+        DefaultActionRule {
+            element: "i".into(),
+            event: "keydown".into(),
+            key: Some("a".into()),
+            shift: None,
+            ctrl: Some(true),
+            alt: None,
+            meta: None,
+        },
+        true,
+    )
+    .unwrap();
+    d.focus("i").unwrap();
+    d.drain_events();
+    let altgr = |d: &mut Document, key: &str| {
+        d.handle_input(Input::Key {
+            key: key.into(),
+            code: "KeyA".into(),
+            pressed: true,
+            repeat: false,
+            shift: false,
+            ctrl: true,
+            alt: true,
+            meta: false,
+        })
+        .unwrap()
+    };
+    let prevented = |ev: &[Value]| {
+        ev.iter()
+            .any(|e| e["type"] == "keydown" && e["default_prevented"] == true)
+    };
+    let ev = altgr(&mut d, "ą");
+    assert!(
+        ev.iter().any(|e| e["type"] == "keydown"),
+        "{:?}",
+        types(&ev)
+    );
+    assert!(!prevented(&ev), "AltGr+ą is not Ctrl+A: {ev:?}");
+    // Ctrl+Alt+A itself still matches the rule (Alt is unspecified).
+    let ev = altgr(&mut d, "a");
+    assert!(prevented(&ev), "Ctrl+Alt+a matches: {ev:?}");
+}
+
 #[test]
 fn shortcut_key_maps_only_non_latin_letters_with_ctrl_or_meta() {
     use crate::interaction::frame::Modifiers;
@@ -589,6 +639,12 @@ fn shortcut_key_maps_only_non_latin_letters_with_ctrl_or_meta() {
     assert_eq!(shortcut_key("Enter", "Enter", ctrl), "Enter");
     assert_eq!(shortcut_key("ö", "Semicolon", ctrl), "ö");
     assert_eq!(shortcut_key("ö", "Digit1", ctrl), "ö");
+    let altgr = Modifiers {
+        ctrl: true,
+        alt: true,
+        ..Modifiers::default()
+    };
+    assert_eq!(shortcut_key("ą", "KeyA", altgr), "ą");
 }
 
 // ---------------------------------------------------------------------------------------------

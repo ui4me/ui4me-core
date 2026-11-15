@@ -25,14 +25,15 @@ use ui4me_engine_types::status::Status;
 /// layout produces no Latin letter for it (Cyrillic, Greek, Hebrew, Arabic, ...), when the letter
 /// of the physical key (`code` `KeyA`..`KeyZ`, the US position) stands in for it, as Chromium, GTK
 /// and Qt do. A Latin layout keeps its own letters (Dvorak `key` wins over `code`); named keys and
-/// keys without Ctrl/Meta are untouched.
+/// keys without Ctrl/Meta are untouched. So are keys with Alt: AltGr arrives as Ctrl+Alt on Windows,
+/// and AltGr+A typing "ą" is not Ctrl+A (no engine shortcut takes Alt; renderer review #4).
 pub(crate) fn shortcut_key<'a>(
     key: &'a str,
     code: &str,
     m: Modifiers,
 ) -> std::borrow::Cow<'a, str> {
     use std::borrow::Cow;
-    if !(m.ctrl || m.meta) {
+    if !(m.ctrl || m.meta) || m.alt {
         return Cow::Borrowed(key);
     }
     let mut chars = key.chars();
